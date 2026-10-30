@@ -49,11 +49,7 @@ const resetPasswordWithOtp = async (req, res, next) => {
   try {
     await authService.resetPasswordWithOtp(req.body);
 
-    return ApiResponse.success(
-      res,
-      null,
-      AUTH_MESSAGES.PASSWORD_RESET_SUCCESS,
-    );
+    return ApiResponse.success(res, null, AUTH_MESSAGES.PASSWORD_RESET_SUCCESS);
   } catch (error) {
     next(error);
   }
