@@ -4,14 +4,32 @@ const mocks = vi.hoisted(() => ({
   updateById: vi.fn(),
   updateRole: vi.fn(),
   updateStatus: vi.fn(),
+  getById: vi.fn(),
+  updatePasswordHash: vi.fn(),
+  createAuthUser: vi.fn(),
+  revokeRefreshTokenByUserId: vi.fn(),
+  hashPassword: vi.fn(),
+}));
+
+vi.mock("../../../src/modules/auth/auth.service.js", () => ({
+  default: {
+    createUser: mocks.createAuthUser,
+    revokeRefreshTokenByUserId: mocks.revokeRefreshTokenByUserId,
+  },
 }));
 
 vi.mock("../../../src/modules/user/user.service.js", () => ({
   default: {
+    getById: mocks.getById,
     updateById: mocks.updateById,
     updateRole: mocks.updateRole,
     updateStatus: mocks.updateStatus,
+    updatePasswordHash: mocks.updatePasswordHash,
   },
+}));
+
+vi.mock("../../../src/utils/password.js", () => ({
+  hashPassword: mocks.hashPassword,
 }));
 
 import { ADMIN_MESSAGES } from "../../../src/constants/messages.js";
@@ -21,6 +39,37 @@ import adminService from "../../../src/modules/admin/admin.service.js";
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.getById.mockResolvedValue({ _id: "user-1" });
+  mocks.hashPassword.mockResolvedValue("hashed-password");
+  mocks.updatePasswordHash.mockResolvedValue({ _id: "user-1" });
+});
+
+describe("adminService password operations", () => {
+  it("delegates user creation to auth service", async () => {
+    const userData = {
+      email: "user@example.com",
+      password: "plain-password",
+    };
+    mocks.createAuthUser.mockResolvedValue({ _id: "user-1" });
+
+    await expect(adminService.createUser(userData)).resolves.toEqual({
+      _id: "user-1",
+    });
+    expect(mocks.createAuthUser).toHaveBeenCalledWith(userData);
+  });
+
+  it("hashes the password and revokes target user refresh tokens", async () => {
+    await expect(
+      adminService.resetPassword("user-1", "new-password"),
+    ).resolves.toEqual({ _id: "user-1" });
+    expect(mocks.getById).toHaveBeenCalledWith("user-1");
+    expect(mocks.hashPassword).toHaveBeenCalledWith("new-password");
+    expect(mocks.updatePasswordHash).toHaveBeenCalledWith(
+      "user-1",
+      "hashed-password",
+    );
+    expect(mocks.revokeRefreshTokenByUserId).toHaveBeenCalledWith("user-1");
+  });
 });
 
 describe("adminService.updateUser", () => {

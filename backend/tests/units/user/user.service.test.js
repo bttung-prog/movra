@@ -12,9 +12,6 @@ const mocks = vi.hoisted(() => ({
   searchPaginated: vi.fn(),
   countSearch: vi.fn(),
   updateById: vi.fn(),
-  hashPassword: vi.fn(),
-  comparePassword: vi.fn(),
-  revokeRefreshTokenByUserId: vi.fn(),
   customerCreate: vi.fn(),
   driverCreate: vi.fn(),
   staffCreate: vi.fn(),
@@ -39,17 +36,6 @@ vi.mock("../../../src/modules/user/user.repository.js", () => ({
     searchPaginated: mocks.searchPaginated,
     countSearch: mocks.countSearch,
     updateById: mocks.updateById,
-  },
-}));
-
-vi.mock("../../../src/utils/password.js", () => ({
-  hashPassword: mocks.hashPassword,
-  comparePassword: mocks.comparePassword,
-}));
-
-vi.mock("../../../src/modules/auth/auth.service.js", () => ({
-  default: {
-    revokeRefreshTokenByUserId: mocks.revokeRefreshTokenByUserId,
   },
 }));
 
@@ -112,17 +98,14 @@ beforeEach(() => {
   mocks.searchPaginated.mockResolvedValue([user]);
   mocks.countSearch.mockResolvedValue(21);
   mocks.updateById.mockResolvedValue(user);
-  mocks.hashPassword.mockResolvedValue("new-hash");
-  mocks.comparePassword.mockResolvedValue(true);
-  mocks.revokeRefreshTokenByUserId.mockResolvedValue({});
 });
 
-describe("userService.create", () => {
+describe("userService.createWithHashedPassword", () => {
   it("requires role-specific profile data before creating staff accounts", async () => {
     await expect(
-      userService.create({
+      userService.createWithHashedPassword({
         email: "driver@example.com",
-        password: "password",
+        passwordHash: "hashed-password",
         phone: "0123456789",
         fullName: "Driver",
         role: ROLES.DRIVER,
@@ -133,9 +116,9 @@ describe("userService.create", () => {
     });
 
     await expect(
-      userService.create({
+      userService.createWithHashedPassword({
         email: "staff@example.com",
-        password: "password",
+        passwordHash: "hashed-password",
         phone: "0123456789",
         fullName: "Staff",
         role: ROLES.WAREHOUSE_STAFF,
@@ -146,9 +129,9 @@ describe("userService.create", () => {
     });
 
     await expect(
-      userService.create({
+      userService.createWithHashedPassword({
         email: "dispatcher@example.com",
-        password: "password",
+        passwordHash: "hashed-password",
         phone: "0123456789",
         fullName: "Dispatcher",
         role: ROLES.DISPATCHER,
@@ -164,9 +147,9 @@ describe("userService.create", () => {
   it("rejects duplicate normalized emails and phone numbers", async () => {
     mocks.findByEmail.mockResolvedValueOnce(user);
     await expect(
-      userService.create({
+      userService.createWithHashedPassword({
         email: " User@Example.com ",
-        password: "password",
+        passwordHash: "hashed-password",
         phone: "0123456789",
         fullName: "Test User",
       }),
@@ -178,9 +161,9 @@ describe("userService.create", () => {
 
     mocks.findByPhone.mockResolvedValueOnce(user);
     await expect(
-      userService.create({
+      userService.createWithHashedPassword({
         email: "new@example.com",
-        password: "password",
+        passwordHash: "hashed-password",
         phone: " 0123456789 ",
         fullName: "Test User",
       }),
@@ -194,9 +177,9 @@ describe("userService.create", () => {
 
   it("rejects incomplete account data", async () => {
     await expect(
-      userService.create({
+      userService.createWithHashedPassword({
         email: "user@example.com",
-        password: "",
+        passwordHash: "",
         phone: "0123456789",
         fullName: "Test User",
       }),
@@ -242,47 +225,31 @@ describe("userService.updateMe", () => {
   });
 });
 
-describe("userService.changePassword and resetPassword", () => {
-  it("rejects an incorrect current password without changing credentials", async () => {
-    mocks.comparePassword.mockResolvedValue(false);
-
-    await expect(
-      userService.changePassword(userId, "wrong-password", "new-password"),
-    ).rejects.toMatchObject({
-      statusCode: 401,
-      message: USER_MESSAGES.OLD_PASSWORD_INCORRECT,
+describe("userService authentication data access", () => {
+  it("retrieves a password hash by user ID", async () => {
+    await expect(userService.getPasswordHash(userId)).resolves.toEqual({
+      password: "stored-hash",
     });
 
-    expect(mocks.updateById).not.toHaveBeenCalled();
-    expect(mocks.revokeRefreshTokenByUserId).not.toHaveBeenCalled();
+    expect(mocks.findPassword).toHaveBeenCalledWith(userId);
   });
 
-  it("hashes the new password, increments token version, and revokes refresh tokens", async () => {
-    await userService.changePassword(userId, "old-password", "new-password");
+  it("updates password hash and increments token version", async () => {
+    await userService.updatePasswordHash(userId, "new-hash");
 
-    expect(mocks.comparePassword).toHaveBeenCalledWith(
-      "old-password",
-      "stored-hash",
-    );
-    expect(mocks.hashPassword).toHaveBeenCalledWith("new-password");
     expect(mocks.updateById).toHaveBeenCalledWith(userId, {
       $set: { password: "new-hash" },
       $inc: { tokenVersion: 1 },
     });
-    expect(mocks.revokeRefreshTokenByUserId).toHaveBeenCalledWith(userId);
   });
 
-  it("requires an existing user before resetting the password", async () => {
-    mocks.findById.mockResolvedValueOnce(null);
+  it("updates the last login timestamp", async () => {
+    await userService.updateLastLoginAt(userId);
 
-    await expect(
-      userService.resetPassword(userId, "new-password"),
-    ).rejects.toMatchObject({
-      statusCode: 404,
-      message: USER_MESSAGES.NOT_FOUND,
-    });
-    expect(mocks.hashPassword).not.toHaveBeenCalled();
-    expect(mocks.revokeRefreshTokenByUserId).not.toHaveBeenCalled();
+    expect(mocks.updateById).toHaveBeenCalledWith(
+      userId,
+      expect.objectContaining({ lastLoginAt: expect.any(Date) }),
+    );
   });
 });
 

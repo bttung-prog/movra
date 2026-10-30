@@ -1,11 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  userCreate: vi.fn(),
+  createWithHashedPassword: vi.fn(),
   getUserByEmail: vi.fn(),
+  getUserByPhone: vi.fn(),
+  getUserById: vi.fn(),
   getUserByIdWithStatus: vi.fn(),
+  getPasswordHash: vi.fn(),
+  updatePasswordHash: vi.fn(),
   updateLastLoginAt: vi.fn(),
   comparePassword: vi.fn(),
+  hashPassword: vi.fn(),
+  generateOtp: vi.fn(),
+  sendRegisterOtpEmail: vi.fn(),
+  sendPasswordResetOtpEmail: vi.fn(),
   generateAccessToken: vi.fn(),
   generateRefreshToken: vi.fn(),
   verifyRefreshToken: vi.fn(),
@@ -13,6 +21,16 @@ const mocks = vi.hoisted(() => ({
   findRefreshToken: vi.fn(),
   deleteRefreshToken: vi.fn(),
   deleteRefreshTokenByUserId: vi.fn(),
+  createRegisterOtp: vi.fn(),
+  findRegisterOtpByEmail: vi.fn(),
+  deleteRegisterOtpByEmail: vi.fn(),
+  incrementRegisterOtpAttempts: vi.fn(),
+  consumeRegisterOtp: vi.fn(),
+  createPasswordResetOtp: vi.fn(),
+  findPasswordResetOtpByEmail: vi.fn(),
+  deletePasswordResetOtpByEmail: vi.fn(),
+  incrementPasswordResetOtpAttempts: vi.fn(),
+  consumePasswordResetOtp: vi.fn(),
   getCustomerByUserId: vi.fn(),
   getDriverByUserId: vi.fn(),
   getStaffByUserId: vi.fn(),
@@ -21,15 +39,34 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("../../../src/modules/user/user.service.js", () => ({
   default: {
-    create: mocks.userCreate,
+    createWithHashedPassword: mocks.createWithHashedPassword,
     getByEmail: mocks.getUserByEmail,
+    getByPhone: mocks.getUserByPhone,
+    getById: mocks.getUserById,
     getByIdWithStatus: mocks.getUserByIdWithStatus,
+    getPasswordHash: mocks.getPasswordHash,
+    updatePasswordHash: mocks.updatePasswordHash,
     updateLastLoginAt: mocks.updateLastLoginAt,
   },
 }));
 
 vi.mock("../../../src/utils/password.js", () => ({
   comparePassword: mocks.comparePassword,
+  hashPassword: mocks.hashPassword,
+}));
+
+vi.mock("../../../src/utils/generateCode.js", () => ({
+  default: vi.fn(),
+  generateOtp: mocks.generateOtp,
+}));
+
+vi.mock("../../../src/utils/email.js", () => ({
+  default: {
+    sendRegisterOtpEmail: mocks.sendRegisterOtpEmail,
+    sendPasswordResetOtpEmail: mocks.sendPasswordResetOtpEmail,
+  },
+  sendRegisterOtpEmail: mocks.sendRegisterOtpEmail,
+  sendPasswordResetOtpEmail: mocks.sendPasswordResetOtpEmail,
 }));
 
 vi.mock("../../../src/utils/jwt.js", () => ({
@@ -44,6 +81,17 @@ vi.mock("../../../src/modules/auth/auth.repository.js", () => ({
     findRefreshToken: mocks.findRefreshToken,
     deleteRefreshToken: mocks.deleteRefreshToken,
     deleteRefreshTokenByUserId: mocks.deleteRefreshTokenByUserId,
+    createRegisterOtp: mocks.createRegisterOtp,
+    findRegisterOtpByEmail: mocks.findRegisterOtpByEmail,
+    deleteRegisterOtpByEmail: mocks.deleteRegisterOtpByEmail,
+    incrementRegisterOtpAttempts: mocks.incrementRegisterOtpAttempts,
+    consumeRegisterOtp: mocks.consumeRegisterOtp,
+    createPasswordResetOtp: mocks.createPasswordResetOtp,
+    findPasswordResetOtpByEmail: mocks.findPasswordResetOtpByEmail,
+    deletePasswordResetOtpByEmail: mocks.deletePasswordResetOtpByEmail,
+    incrementPasswordResetOtpAttempts:
+      mocks.incrementPasswordResetOtpAttempts,
+    consumePasswordResetOtp: mocks.consumePasswordResetOtp,
   },
 }));
 
@@ -63,7 +111,10 @@ vi.mock("../../../src/modules/dispatcher/dispatcher.service.js", () => ({
   default: { getByUserId: mocks.getDispatcherByUserId },
 }));
 
-import { AUTH_MESSAGES } from "../../../src/constants/messages.js";
+import {
+  AUTH_MESSAGES,
+  USER_MESSAGES,
+} from "../../../src/constants/messages.js";
 import ROLES from "../../../src/constants/roles.js";
 import USER_STATUSES from "../../../src/constants/userStatuses.js";
 import ApiError from "../../../src/utils/ApiError.js";
@@ -82,16 +133,91 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.generateAccessToken.mockReturnValue("access-token");
   mocks.generateRefreshToken.mockReturnValue("refresh-token");
+  mocks.generateOtp.mockReturnValue("12345678");
+  mocks.hashPassword.mockResolvedValue("hashed-password");
   mocks.comparePassword.mockResolvedValue(true);
+  mocks.getUserById.mockResolvedValue(activeUser);
+  mocks.getPasswordHash.mockResolvedValue({ password: "old-hash" });
+  mocks.updatePasswordHash.mockResolvedValue(activeUser);
   mocks.getCustomerByUserId.mockResolvedValue({ _id: "customer-1" });
 });
 
-describe("authService.register", () => {
-  it("creates a customer account and returns only public user fields", async () => {
-    mocks.userCreate.mockResolvedValue({
-      ...activeUser,
-      password: "must-not-be-returned",
+describe("authService password management", () => {
+  it("does not expose arbitrary password reset by user ID", () => {
+    expect(authService.resetPassword).toBeUndefined();
+  });
+
+  it("hashes and delegates password-backed user creation", async () => {
+    mocks.createWithHashedPassword.mockResolvedValue(activeUser);
+
+    await expect(
+      authService.createUser({
+        email: activeUser.email,
+        password: "plain-password",
+        fullName: activeUser.fullName,
+        phone: "0123456789",
+      }),
+    ).resolves.toEqual(activeUser);
+
+    expect(mocks.hashPassword).toHaveBeenCalledWith("plain-password");
+    expect(mocks.createWithHashedPassword).toHaveBeenCalledWith({
+      email: activeUser.email,
+      fullName: activeUser.fullName,
+      phone: "0123456789",
+      passwordHash: "hashed-password",
     });
+  });
+
+  it("validates the old password before changing it and revokes refresh tokens", async () => {
+    await authService.changePassword(
+      activeUser._id,
+      "old-password",
+      "new-password",
+    );
+
+    expect(mocks.comparePassword).toHaveBeenCalledWith(
+      "old-password",
+      "old-hash",
+    );
+    expect(mocks.hashPassword).toHaveBeenCalledWith("new-password");
+    expect(mocks.updatePasswordHash).toHaveBeenCalledWith(
+      activeUser._id,
+      "hashed-password",
+    );
+    expect(mocks.deleteRefreshTokenByUserId).toHaveBeenCalledWith(
+      activeUser._id,
+    );
+  });
+
+  it("rejects password changes when the old password is incorrect", async () => {
+    mocks.comparePassword.mockResolvedValue(false);
+
+    await expect(
+      authService.changePassword(
+        activeUser._id,
+        "wrong-password",
+        "new-password",
+      ),
+    ).rejects.toMatchObject({
+      statusCode: 401,
+      message: USER_MESSAGES.OLD_PASSWORD_INCORRECT,
+    });
+    expect(mocks.updatePasswordHash).not.toHaveBeenCalled();
+  });
+
+  it("updates last login through the user service", async () => {
+    await authService.updateLastLoginAt(activeUser._id);
+
+    expect(mocks.updateLastLoginAt).toHaveBeenCalledWith(activeUser._id);
+  });
+});
+
+describe("authService.register", () => {
+  it("stores a hashed registration and sends an OTP without creating the account", async () => {
+    mocks.getUserByEmail.mockResolvedValue(null);
+    mocks.getUserByPhone.mockResolvedValue(null);
+    mocks.createRegisterOtp.mockResolvedValue({});
+    mocks.sendRegisterOtpEmail.mockResolvedValue({});
 
     await expect(
       authService.register({
@@ -101,19 +227,152 @@ describe("authService.register", () => {
         phone: "0123456789",
       }),
     ).resolves.toEqual({
+      email: activeUser.email,
+    });
+    expect(mocks.createRegisterOtp).toHaveBeenCalledWith(
+      expect.objectContaining({
+        email: activeUser.email,
+        otp: "12345678",
+        pendingRegistration: {
+          passwordHash: "hashed-password",
+          fullName: activeUser.fullName,
+          phone: "0123456789",
+        },
+      }),
+    );
+    expect(mocks.sendRegisterOtpEmail).toHaveBeenCalledWith(
+      activeUser.email,
+      "12345678",
+    );
+    expect(mocks.createWithHashedPassword).not.toHaveBeenCalled();
+  });
+
+  it("creates an account only after consuming a valid OTP", async () => {
+    const savedOtp = {
+      otp: "12345678",
+      expiresAt: new Date(Date.now() + 60_000),
+      attempts: 0,
+      pendingRegistration: {
+        passwordHash: "hashed-password",
+        fullName: activeUser.fullName,
+        phone: "0123456789",
+      },
+    };
+    mocks.findRegisterOtpByEmail.mockResolvedValue(savedOtp);
+    mocks.consumeRegisterOtp.mockResolvedValue(savedOtp);
+    mocks.createWithHashedPassword.mockResolvedValue({
+      ...activeUser,
+      phone: "0123456789",
+    });
+
+    await expect(
+      authService.verifyRegisterOtp({
+        email: activeUser.email,
+        otp: "12345678",
+      }),
+    ).resolves.toEqual({
       _id: activeUser._id,
       email: activeUser.email,
       fullName: activeUser.fullName,
+      phone: "0123456789",
       role: ROLES.CUSTOMER,
       status: USER_STATUSES.ACTIVE,
     });
-    expect(mocks.userCreate).toHaveBeenCalledWith({
+    expect(mocks.consumeRegisterOtp).toHaveBeenCalledWith(
+      activeUser.email,
+      "12345678",
+    );
+    expect(mocks.createWithHashedPassword).toHaveBeenCalledWith({
       email: activeUser.email,
-      password: "plain-password",
-      fullName: activeUser.fullName,
-      phone: "0123456789",
+      ...savedOtp.pendingRegistration,
       role: ROLES.CUSTOMER,
     });
+  });
+
+  it("increments attempts and rejects an incorrect OTP", async () => {
+    mocks.findRegisterOtpByEmail.mockResolvedValue({
+      otp: "12345678",
+      expiresAt: new Date(Date.now() + 60_000),
+      attempts: 0,
+    });
+    mocks.incrementRegisterOtpAttempts.mockResolvedValue({});
+
+    await expect(
+      authService.verifyRegisterOtp({
+        email: activeUser.email,
+        otp: "87654321",
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: AUTH_MESSAGES.INVALID_OR_EXPIRED_OTP,
+    });
+    expect(mocks.incrementRegisterOtpAttempts).toHaveBeenCalledWith(
+      activeUser.email,
+    );
+    expect(mocks.consumeRegisterOtp).not.toHaveBeenCalled();
+  });
+});
+
+describe("authService password reset OTP", () => {
+  it("sends a reset OTP for an existing account", async () => {
+    mocks.getUserByEmail.mockResolvedValue(activeUser);
+    mocks.createPasswordResetOtp.mockResolvedValue({});
+    mocks.sendPasswordResetOtpEmail.mockResolvedValue({});
+
+    await expect(
+      authService.requestPasswordResetOtp({ email: activeUser.email }),
+    ).resolves.toBeUndefined();
+    expect(mocks.createPasswordResetOtp).toHaveBeenCalledWith(
+      expect.objectContaining({
+        email: activeUser.email,
+        otp: "12345678",
+      }),
+    );
+    expect(mocks.sendPasswordResetOtpEmail).toHaveBeenCalledWith(
+      activeUser.email,
+      "12345678",
+    );
+  });
+
+  it("does not reveal whether the requested email exists", async () => {
+    mocks.getUserByEmail.mockResolvedValue(null);
+
+    await expect(
+      authService.requestPasswordResetOtp({ email: activeUser.email }),
+    ).resolves.toBeUndefined();
+    expect(mocks.createPasswordResetOtp).not.toHaveBeenCalled();
+    expect(mocks.sendPasswordResetOtpEmail).not.toHaveBeenCalled();
+  });
+
+  it("resets the password after consuming a valid OTP", async () => {
+    const savedOtp = {
+      otp: "12345678",
+      expiresAt: new Date(Date.now() + 60_000),
+      attempts: 0,
+    };
+    mocks.getUserByEmail.mockResolvedValue(activeUser);
+    mocks.findPasswordResetOtpByEmail.mockResolvedValue(savedOtp);
+    mocks.consumePasswordResetOtp.mockResolvedValue(savedOtp);
+
+    await expect(
+      authService.resetPasswordWithOtp({
+        email: activeUser.email,
+        otp: "12345678",
+        newPassword: "new-password",
+      }),
+    ).resolves.toBeUndefined();
+    expect(mocks.consumePasswordResetOtp).toHaveBeenCalledWith(
+      activeUser.email,
+      "12345678",
+    );
+    expect(mocks.hashPassword).toHaveBeenCalledWith("new-password");
+    expect(mocks.updatePasswordHash).toHaveBeenCalledWith(
+      activeUser._id,
+      "hashed-password",
+    );
+    expect(mocks.deleteRefreshTokenByUserId).toHaveBeenCalledWith(
+      activeUser._id,
+    );
   });
 });
 

@@ -1,6 +1,6 @@
 import USER_STATUSES from "../../constants/userStatuses.js";
 import ROLES from "../../constants/roles.js";
-import { AUTH_MESSAGES } from "../../constants/messages.js";
+import { AUTH_MESSAGES, USER_MESSAGES } from "../../constants/messages.js";
 
 import ApiError from "../../utils/ApiError.js";
 import {
@@ -8,7 +8,12 @@ import {
   generateRefreshToken,
   verifyRefreshToken,
 } from "../../utils/jwt.js";
-import { comparePassword } from "../../utils/password.js";
+import { comparePassword, hashPassword } from "../../utils/password.js";
+import { generateOtp } from "../../utils/generateCode.js";
+import {
+  sendPasswordResetOtpEmail,
+  sendRegisterOtpEmail,
+} from "../../utils/email.js";
 
 import userService from "../user/user.service.js";
 import customerService from "../customer/customer.service.js";
@@ -17,6 +22,72 @@ import staffService from "../staff/staff.service.js";
 import dispatcherService from "../dispatcher/dispatcher.service.js";
 
 import authRepository from "./auth.repository.js";
+
+const OTP_EXPIRY_MS = 5 * 60 * 1000;
+const MAX_OTP_ATTEMPTS = 5;
+
+const createUser = async ({ password, ...userData }) => {
+  const passwordHash = await hashPassword(password);
+  return userService.createWithHashedPassword({ ...userData, passwordHash });
+};
+
+const changePassword = async (userId, oldPassword, newPassword) => {
+  const user = await userService.getPasswordHash(userId);
+
+  if (!user) {
+    throw new ApiError(404, USER_MESSAGES.NOT_FOUND);
+  }
+
+  const isMatchPassword = await comparePassword(oldPassword, user.password);
+  if (!isMatchPassword) {
+    throw new ApiError(401, USER_MESSAGES.OLD_PASSWORD_INCORRECT);
+  }
+
+  const passwordHash = await hashPassword(newPassword);
+  const updatedUser = await userService.updatePasswordHash(
+    userId,
+    passwordHash,
+  );
+
+  await authRepository.deleteRefreshTokenByUserId(userId);
+  return updatedUser;
+};
+
+const updateLastLoginAt = (userId) => {
+  return userService.updateLastLoginAt(userId);
+};
+
+const normalizeEmail = (email) => email.toLowerCase().trim();
+
+const verifyOtp = async ({
+  email,
+  otp,
+  findOtp,
+  incrementAttempts,
+  consumeOtp,
+}) => {
+  const savedOtp = await findOtp(email);
+
+  if (
+    !savedOtp ||
+    savedOtp.expiresAt <= new Date() ||
+    savedOtp.attempts >= MAX_OTP_ATTEMPTS
+  ) {
+    throw new ApiError(400, AUTH_MESSAGES.INVALID_OR_EXPIRED_OTP);
+  }
+
+  if (savedOtp.otp !== otp) {
+    await incrementAttempts(email);
+    throw new ApiError(400, AUTH_MESSAGES.INVALID_OR_EXPIRED_OTP);
+  }
+
+  const consumedOtp = await consumeOtp(email, otp);
+  if (!consumedOtp) {
+    throw new ApiError(400, AUTH_MESSAGES.INVALID_OR_EXPIRED_OTP);
+  }
+
+  return consumedOtp;
+};
 
 const getRoleSpecificInfo = async (user) => {
   const roleInfo = {};
@@ -27,6 +98,7 @@ const getRoleSpecificInfo = async (user) => {
       roleInfo.customerId = customer._id;
       break;
     }
+
     case ROLES.DRIVER: {
       let driver;
       try {
@@ -43,12 +115,12 @@ const getRoleSpecificInfo = async (user) => {
       if (!roleInfo.warehouseId) {
         throw new ApiError(403, AUTH_MESSAGES.DRIVER_NO_WAREHOUSE);
       }
-
       if (driver.status !== "active") {
         throw new ApiError(403, AUTH_MESSAGES.ACCOUNT_INACTIVE_OR_LOCKED);
       }
       break;
     }
+
     case ROLES.WAREHOUSE_STAFF: {
       let staff;
       try {
@@ -79,6 +151,7 @@ const getRoleSpecificInfo = async (user) => {
       }
       break;
     }
+
     case ROLES.DISPATCHER: {
       let dispatcher;
       try {
@@ -109,14 +182,55 @@ const getRoleSpecificInfo = async (user) => {
 };
 
 const register = async ({ email, password, fullName, phone }) => {
-  const role = ROLES.CUSTOMER;
+  const cleanEmail = normalizeEmail(email);
 
-  const newUser = await userService.create({
-    email,
-    password,
-    fullName,
-    phone,
-    role,
+  if (await userService.getByEmail(cleanEmail)) {
+    throw new ApiError(409, USER_MESSAGES.EMAIL_EXISTS);
+  }
+
+  if (await userService.getByPhone(phone.trim())) {
+    throw new ApiError(409, USER_MESSAGES.PHONE_EXISTS);
+  }
+
+  const otp = generateOtp();
+  await authRepository.createRegisterOtp({
+    email: cleanEmail,
+    otp,
+    expiresAt: new Date(Date.now() + OTP_EXPIRY_MS),
+    attempts: 0,
+    pendingRegistration: {
+      passwordHash: await hashPassword(password),
+      fullName: fullName.trim(),
+      phone: phone.trim(),
+    },
+  });
+
+  try {
+    await sendRegisterOtpEmail(cleanEmail, otp);
+  } catch (error) {
+    await authRepository.deleteRegisterOtpByEmail(cleanEmail);
+    throw error;
+  }
+
+  return {
+    email: cleanEmail,
+  };
+};
+
+const verifyRegisterOtp = async ({ email, otp }) => {
+  const cleanEmail = normalizeEmail(email);
+  const verifiedOtp = await verifyOtp({
+    email: cleanEmail,
+    otp,
+    findOtp: authRepository.findRegisterOtpByEmail,
+    incrementAttempts: authRepository.incrementRegisterOtpAttempts,
+    consumeOtp: authRepository.consumeRegisterOtp,
+  });
+
+  const newUser = await userService.createWithHashedPassword({
+    email: cleanEmail,
+    ...verifiedOtp.pendingRegistration,
+    role: ROLES.CUSTOMER,
   });
 
   return {
@@ -124,9 +238,52 @@ const register = async ({ email, password, fullName, phone }) => {
     email: newUser.email,
     fullName: newUser.fullName,
     phone: newUser.phone,
-    role,
+    role: ROLES.CUSTOMER,
     status: newUser.status,
   };
+};
+
+const requestPasswordResetOtp = async ({ email }) => {
+  const cleanEmail = normalizeEmail(email);
+  const user = await userService.getByEmail(cleanEmail);
+
+  if (user) {
+    const otp = generateOtp();
+    await authRepository.createPasswordResetOtp({
+      email: cleanEmail,
+      otp,
+      expiresAt: new Date(Date.now() + OTP_EXPIRY_MS),
+      attempts: 0,
+    });
+
+    try {
+      await sendPasswordResetOtpEmail(cleanEmail, otp);
+    } catch (error) {
+      await authRepository.deletePasswordResetOtpByEmail(cleanEmail);
+      throw error;
+    }
+  }
+};
+
+const resetPasswordWithOtp = async ({ email, otp, newPassword }) => {
+  const cleanEmail = normalizeEmail(email);
+  const user = await userService.getByEmail(cleanEmail);
+
+  if (!user) {
+    throw new ApiError(400, AUTH_MESSAGES.INVALID_OR_EXPIRED_OTP);
+  }
+
+  await verifyOtp({
+    email: cleanEmail,
+    otp,
+    findOtp: authRepository.findPasswordResetOtpByEmail,
+    incrementAttempts: authRepository.incrementPasswordResetOtpAttempts,
+    consumeOtp: authRepository.consumePasswordResetOtp,
+  });
+
+  const passwordHash = await hashPassword(newPassword);
+  await userService.updatePasswordHash(user._id, passwordHash);
+  await authRepository.deleteRefreshTokenByUserId(user._id);
 };
 
 const login = async ({ email, password }) => {
@@ -159,7 +316,7 @@ const login = async ({ email, password }) => {
 
   await authRepository.createRefreshToken(user._id, refreshToken);
 
-  await userService.updateLastLoginAt(user._id);
+  await updateLastLoginAt(user._id);
 
   return {
     user: {
@@ -235,7 +392,13 @@ const revokeRefreshTokenByUserId = (userId) => {
 };
 
 export default {
+  createUser,
+  changePassword,
+  updateLastLoginAt,
   register,
+  verifyRegisterOtp,
+  requestPasswordResetOtp,
+  resetPasswordWithOtp,
   login,
   refreshAccessToken,
   logout,

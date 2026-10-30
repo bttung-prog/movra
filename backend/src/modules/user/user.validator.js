@@ -10,15 +10,4 @@ const updateMeSchema = Joi.object({
   }),
 }).min(1);
 
-const changePasswordSchema = Joi.object({
-  oldPassword: Joi.string().required().messages({
-    "any.required": "Old password is required",
-  }),
-  newPassword: Joi.string().min(6).max(24).required().messages({
-    "string.min": "Password must be at least 6 characters",
-    "string.max": "Password must be at most 24 characters",
-    "any.required": "New password is required",
-  }),
-});
-
-export default { updateMeSchema, changePasswordSchema };
+export default { updateMeSchema };

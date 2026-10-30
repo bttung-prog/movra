@@ -15,7 +15,63 @@ const register = async (req, res, next) => {
   try {
     const result = await authService.register(req.body);
 
+    return ApiResponse.success(res, result, AUTH_MESSAGES.REGISTER_OTP_SENT);
+  } catch (error) {
+    next(error);
+  }
+};
+
+const verifyRegisterOtp = async (req, res, next) => {
+  try {
+    const result = await authService.verifyRegisterOtp(req.body);
+
     return ApiResponse.created(res, result, AUTH_MESSAGES.REGISTER_SUCCESS);
+  } catch (error) {
+    next(error);
+  }
+};
+
+const requestPasswordResetOtp = async (req, res, next) => {
+  try {
+    await authService.requestPasswordResetOtp(req.body);
+
+    return ApiResponse.success(
+      res,
+      null,
+      AUTH_MESSAGES.PASSWORD_RESET_OTP_SENT,
+    );
+  } catch (error) {
+    next(error);
+  }
+};
+
+const resetPasswordWithOtp = async (req, res, next) => {
+  try {
+    await authService.resetPasswordWithOtp(req.body);
+
+    return ApiResponse.success(
+      res,
+      null,
+      AUTH_MESSAGES.PASSWORD_RESET_SUCCESS,
+    );
+  } catch (error) {
+    next(error);
+  }
+};
+
+const changePassword = async (req, res, next) => {
+  try {
+    const user = await authService.changePassword(
+      req.user.userId,
+      req.body.oldPassword,
+      req.body.newPassword,
+    );
+
+    return ApiResponse.success(
+      res,
+      user,
+      AUTH_MESSAGES.CHANGE_PASSWORD_SUCCESS,
+    );
   } catch (error) {
     next(error);
   }
@@ -79,6 +135,10 @@ const logout = async (req, res, next) => {
 
 export default {
   register,
+  verifyRegisterOtp,
+  requestPasswordResetOtp,
+  resetPasswordWithOtp,
+  changePassword,
   login,
   refreshAccessToken,
   logout,

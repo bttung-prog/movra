@@ -29,28 +29,3 @@ describe("userValidator.updateMeSchema", () => {
     ).toBeDefined();
   });
 });
-
-describe("userValidator.changePasswordSchema", () => {
-  it("accepts passwords within the supported length", () => {
-    expect(
-      userValidator.changePasswordSchema.validate({
-        oldPassword: "old-password",
-        newPassword: "new-pass",
-      }).error,
-    ).toBeUndefined();
-  });
-
-  it("requires both passwords and enforces new password length", () => {
-    for (const payload of [
-      {},
-      { oldPassword: "old-password" },
-      { newPassword: "new-password" },
-      { oldPassword: "old-password", newPassword: "12345" },
-      { oldPassword: "old-password", newPassword: "x".repeat(25) },
-    ]) {
-      expect(
-        userValidator.changePasswordSchema.validate(payload).error,
-      ).toBeDefined();
-    }
-  });
-});

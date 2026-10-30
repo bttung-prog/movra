@@ -5,6 +5,10 @@ import ApiError from "../../../src/utils/ApiError.js";
 
 const authServiceMock = vi.hoisted(() => ({
   register: vi.fn(),
+  verifyRegisterOtp: vi.fn(),
+  requestPasswordResetOtp: vi.fn(),
+  resetPasswordWithOtp: vi.fn(),
+  changePassword: vi.fn(),
   login: vi.fn(),
   refreshAccessToken: vi.fn(),
   logout: vi.fn(),
@@ -21,13 +25,9 @@ describe("Auth API integration", () => {
     vi.clearAllMocks();
   });
 
-  it("registers a new customer account", async () => {
+  it("sends an OTP to verify a new customer registration", async () => {
     authServiceMock.register.mockResolvedValue({
-      _id: "user-1",
       email: "customer@example.com",
-      fullName: "Test Customer",
-      role: "customer",
-      status: "active",
     });
 
     const response = await request(app)
@@ -40,14 +40,10 @@ describe("Auth API integration", () => {
         phone: "0123456789",
       });
 
-    expect(response.status).toBe(201);
+    expect(response.status).toBe(200);
     expect(response.body.success).toBe(true);
     expect(response.body.data).toEqual({
-      _id: "user-1",
       email: "customer@example.com",
-      fullName: "Test Customer",
-      role: "customer",
-      status: "active",
     });
     expect(authServiceMock.register).toHaveBeenCalledWith({
       email: "customer@example.com",
@@ -55,6 +51,90 @@ describe("Auth API integration", () => {
       fullName: "Test Customer",
       phone: "0123456789",
     });
+  });
+
+  it("creates a customer after registration OTP verification", async () => {
+    authServiceMock.verifyRegisterOtp.mockResolvedValue({
+    _id: "user-1",
+    email: "customer@example.com",
+    fullName: "Test Customer",
+    role: "customer",
+    status: "active",
+    });
+
+    const response = await request(app)
+    .post("/api/v1/auth/register/verify-otp")
+    .set("Origin", "http://localhost:5173")
+    .send({
+      email: "customer@example.com",
+      otp: "12345678",
+    });
+
+    expect(response.status).toBe(201);
+    expect(response.body.success).toBe(true);
+    expect(authServiceMock.verifyRegisterOtp).toHaveBeenCalledWith({
+    email: "customer@example.com",
+    otp: "12345678",
+    });
+  });
+
+  it("rejects malformed registration OTPs before calling the service", async () => {
+    const response = await request(app)
+    .post("/api/v1/auth/register/verify-otp")
+    .set("Origin", "http://localhost:5173")
+    .send({
+      email: "customer@example.com",
+      otp: "1234",
+    });
+
+    expect(response.status).toBe(400);
+    expect(authServiceMock.verifyRegisterOtp).not.toHaveBeenCalled();
+  });
+
+  it("requests a password-reset OTP", async () => {
+    authServiceMock.requestPasswordResetOtp.mockResolvedValue(undefined);
+
+    const response = await request(app)
+      .post("/api/v1/auth/forgot-password")
+      .send({ email: "customer@example.com" });
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(authServiceMock.requestPasswordResetOtp).toHaveBeenCalledWith({
+      email: "customer@example.com",
+    });
+  });
+
+  it("resets a password with a valid OTP payload", async () => {
+    authServiceMock.resetPasswordWithOtp.mockResolvedValue(undefined);
+
+    const response = await request(app)
+      .post("/api/v1/auth/reset-password")
+      .send({
+        email: "customer@example.com",
+        otp: "12345678",
+        newPassword: "new-password",
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(authServiceMock.resetPasswordWithOtp).toHaveBeenCalledWith({
+      email: "customer@example.com",
+      otp: "12345678",
+      newPassword: "new-password",
+    });
+  });
+
+  it("requires authentication to change a password", async () => {
+    const response = await request(app)
+      .patch("/api/v1/auth/change-password")
+      .send({
+        oldPassword: "old-password",
+        newPassword: "new-password",
+      });
+
+    expect(response.status).toBe(401);
+    expect(authServiceMock.changePassword).not.toHaveBeenCalled();
   });
 
   it("rejects invalid register payload before calling the service", async () => {

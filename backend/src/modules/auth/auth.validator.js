@@ -40,7 +40,62 @@ const loginSchema = Joi.object({
   }),
 });
 
+const verifyRegisterOtpSchema = Joi.object({
+  email: Joi.string().email().required().messages({
+    "string.email": "Email must be a valid email",
+    "string.required": "Email is required",
+  }),
+  otp: Joi.string()
+    .pattern(/^\d{8}$/)
+    .required()
+    .messages({
+      "string.pattern.base": "OTP must be exactly 8 digits",
+      "string.required": "OTP is required",
+    }),
+});
+
+const requestPasswordResetOtpSchema = Joi.object({
+  email: Joi.string().email().required().messages({
+    "string.email": "Email must be a valid email",
+    "string.required": "Email is required",
+  }),
+});
+
+const resetPasswordSchema = Joi.object({
+  email: Joi.string().email().required().messages({
+    "string.email": "Email must be a valid email",
+    "string.required": "Email is required",
+  }),
+  otp: Joi.string()
+    .pattern(/^\d{8}$/)
+    .required()
+    .messages({
+      "string.pattern.base": "OTP must be exactly 8 digits",
+      "string.required": "OTP is required",
+    }),
+  newPassword: Joi.string().min(6).max(24).required().messages({
+    "string.min": "Password must be at least 6 characters",
+    "string.max": "Password must be at most 24 characters",
+    "string.required": "New password is required",
+  }),
+});
+
+const changePasswordSchema = Joi.object({
+  oldPassword: Joi.string().required().messages({
+    "any.required": "Old password is required",
+  }),
+  newPassword: Joi.string().min(6).max(24).required().messages({
+    "string.min": "Password must be at least 6 characters",
+    "string.max": "Password must be at most 24 characters",
+    "any.required": "New password is required",
+  }),
+});
+
 export default {
   registerSchema,
+  verifyRegisterOtpSchema,
   loginSchema,
+  requestPasswordResetOtpSchema,
+  resetPasswordSchema,
+  changePasswordSchema,
 };

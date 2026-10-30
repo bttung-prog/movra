@@ -14,6 +14,7 @@ const errorMiddleware = (err, req, res, next) => {
     method: req.method,
     path: req.path,
     message: err.message,
+    ...(err.errors && err.errors.length ? { errors: err.errors } : {}),
     ...(statusCode >= 500 && err.stack ? { stack: err.stack } : {}),
   });
 
