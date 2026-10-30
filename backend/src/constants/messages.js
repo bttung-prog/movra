@@ -21,6 +21,14 @@ export const UPLOAD_MESSAGES = {
 
 export const AUTH_MESSAGES = {
   REGISTER_SUCCESS: "Đăng ký tài khoản thành công",
+  REGISTER_OTP_SENT: "Mã OTP xác nhận đăng ký đã được gửi đến email",
+  REGISTER_OTP_VERIFIED: "Xác thực OTP đăng ký thành công",
+  PASSWORD_RESET_OTP_SENT:
+    "Nếu email đã đăng ký, mã OTP đặt lại mật khẩu đã được gửi",
+  PASSWORD_RESET_SUCCESS: "Đặt lại mật khẩu thành công",
+  CHANGE_PASSWORD_SUCCESS: "Đổi mật khẩu thành công",
+  INVALID_OR_EXPIRED_OTP:
+    "Mã OTP không hợp lệ, đã hết hạn hoặc vượt quá số lần thử",
   LOGIN_SUCCESS: "Đăng nhập thành công",
   REFRESH_TOKEN_SUCCESS: "Làm mới mã truy cập thành công",
   LOGOUT_SUCCESS: "Đăng xuất thành công",
@@ -47,7 +55,6 @@ export const AUTH_MESSAGES = {
 export const USER_MESSAGES = {
   GET_PROFILE_SUCCESS: "Lấy thông tin người dùng thành công",
   UPDATE_PROFILE_SUCCESS: "Cập nhật thông tin người dùng thành công",
-  CHANGE_PASSWORD_SUCCESS: "Đổi mật khẩu thành công",
   EMAIL_EXISTS: "Email đã tồn tại",
   PHONE_EXISTS: "Số điện thoại đã tồn tại",
   NOT_FOUND: "Không tìm thấy người dùng",

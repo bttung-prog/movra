@@ -21,13 +21,6 @@ const userRouter = express.Router();
 userRouter.get("/me", authorize(...ALL_ROLES), userController.getMe);
 
 userRouter.patch(
-  "/me/change-password",
-  authorize(...ALL_ROLES),
-  validate(userValidator.changePasswordSchema),
-  userController.changePassword,
-);
-
-userRouter.patch(
   "/me",
   authorize(...ALL_ROLES),
   validate(userValidator.updateMeSchema),

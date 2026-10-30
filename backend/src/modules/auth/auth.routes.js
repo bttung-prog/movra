@@ -1,8 +1,11 @@
 import express from "express";
 
+import authMiddleware from "../../middlewares/auth.middleware.js";
+import authorize from "../../middlewares/authorize.middleware.js";
 import validate from "../../middlewares/validate.middleware.js";
 
 import { COMMON_MESSAGES } from "../../constants/messages.js";
+import ROLES from "../../constants/roles.js";
 
 import ApiError from "../../utils/ApiError.js";
 
@@ -22,10 +25,44 @@ const validateClientOrigin = (req, res, next) => {
 
 const authRouter = express.Router();
 
+const ALL_ROLES = [
+  ROLES.ADMIN,
+  ROLES.DRIVER,
+  ROLES.DISPATCHER,
+  ROLES.WAREHOUSE_STAFF,
+  ROLES.CUSTOMER,
+];
+
 authRouter.post(
   "/register",
   validate(authValidator.registerSchema),
   authController.register,
+);
+
+authRouter.post(
+  "/register/verify-otp",
+  validate(authValidator.verifyRegisterOtpSchema),
+  authController.verifyRegisterOtp,
+);
+
+authRouter.post(
+  "/forgot-password",
+  validate(authValidator.requestPasswordResetOtpSchema),
+  authController.requestPasswordResetOtp,
+);
+
+authRouter.post(
+  "/reset-password",
+  validate(authValidator.resetPasswordSchema),
+  authController.resetPasswordWithOtp,
+);
+
+authRouter.patch(
+  "/change-password",
+  authMiddleware,
+  authorize(...ALL_ROLES),
+  validate(authValidator.changePasswordSchema),
+  authController.changePassword,
 );
 
 authRouter.post(

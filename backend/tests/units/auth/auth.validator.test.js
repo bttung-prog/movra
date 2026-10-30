@@ -55,3 +55,56 @@ describe("authValidator.loginSchema", () => {
     expect(result.error.details[0].path).toEqual(["password"]);
   });
 });
+
+describe("auth OTP validators", () => {
+  it("accepts a valid registration OTP payload", () => {
+    const result = authValidator.verifyRegisterOtpSchema.validate({
+      email: "customer@example.com",
+      otp: "12345678",
+    });
+
+    expect(result.error).toBeUndefined();
+  });
+
+  it("rejects registration OTPs that are not eight digits", () => {
+    const result = authValidator.verifyRegisterOtpSchema.validate({
+      email: "customer@example.com",
+      otp: "1234",
+    });
+
+    expect(result.error).toBeDefined();
+  });
+
+  it("accepts a valid password reset payload", () => {
+    const result = authValidator.resetPasswordSchema.validate({
+      email: "customer@example.com",
+      otp: "12345678",
+      newPassword: "new-password",
+    });
+
+    expect(result.error).toBeUndefined();
+  });
+});
+
+describe("authValidator.changePasswordSchema", () => {
+  it("accepts valid old and new passwords", () => {
+    expect(
+      authValidator.changePasswordSchema.validate({
+        oldPassword: "old-password",
+        newPassword: "new-pass",
+      }).error,
+    ).toBeUndefined();
+  });
+
+  it("requires both passwords and enforces new password length", () => {
+    for (const payload of [
+      {},
+      { oldPassword: "old-password" },
+      { newPassword: "new-password" },
+      { oldPassword: "old-password", newPassword: "12345" },
+      { oldPassword: "old-password", newPassword: "x".repeat(25) },
+    ]) {
+      expect(authValidator.changePasswordSchema.validate(payload).error).toBeDefined();
+    }
+  });
+});

@@ -24,26 +24,7 @@ const updateMe = async (req, res, next) => {
   }
 };
 
-const changePassword = async (req, res, next) => {
-  try {
-    const user = await userService.changePassword(
-      req.user.userId,
-      req.body.oldPassword,
-      req.body.newPassword,
-    );
-
-    return ApiResponse.success(
-      res,
-      user,
-      USER_MESSAGES.CHANGE_PASSWORD_SUCCESS,
-    );
-  } catch (error) {
-    next(error);
-  }
-};
-
 export default {
   getMe,
   updateMe,
-  changePassword,
 };

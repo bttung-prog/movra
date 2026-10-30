@@ -3,10 +3,8 @@ import mongoose from "mongoose";
 import { USER_MESSAGES, COMMON_MESSAGES } from "../../constants/messages.js";
 
 import ApiError from "../../utils/ApiError.js";
-import { hashPassword, comparePassword } from "../../utils/password.js";
 import { escapeRegex } from "../../utils/regexUtils.js";
 
-import authService from "../auth/auth.service.js";
 import customerService from "../customer/customer.service.js";
 import driverService from "../driver/driver.service.js";
 import staffService from "../staff/staff.service.js";
@@ -14,9 +12,9 @@ import dispatcherService from "../dispatcher/dispatcher.service.js";
 
 import userRepository from "./user.repository.js";
 
-const create = async ({
+const createWithHashedPassword = async ({
   email,
-  password,
+  passwordHash,
   phone,
   fullName,
   role = "customer",
@@ -24,7 +22,7 @@ const create = async ({
   staffData,
   dispatcherData,
 }) => {
-  if (!email || !password || !phone || !fullName || !role) {
+  if (!email || !passwordHash || !phone || !fullName || !role) {
     throw new ApiError(400, COMMON_MESSAGES.ALL_FIELDS_REQUIRED);
   }
 
@@ -55,8 +53,6 @@ const create = async ({
     throw new ApiError(409, USER_MESSAGES.PHONE_EXISTS);
   }
 
-  const hashedPassword = await hashPassword(password);
-
   const session = await mongoose.startSession();
   session.startTransaction();
 
@@ -64,7 +60,7 @@ const create = async ({
     const newUser = await userRepository.create(
       {
         email: cleanEmail,
-        password: hashedPassword,
+        password: passwordHash,
         fullName: cleanFullName,
         phone: cleanPhone,
         role: cleanRole,
@@ -118,7 +114,6 @@ const create = async ({
 
 const getById = async (userId, session = null) => {
   const user = await userRepository.findById(userId, session);
-
   if (!user) {
     throw new ApiError(404, USER_MESSAGES.NOT_FOUND);
   }
@@ -138,6 +133,21 @@ const getByEmail = async (email) => {
 const getByPhone = async (phone) => {
   if (!phone || !phone.trim()) return null;
   return userRepository.findByPhone(phone.trim());
+};
+
+const getPasswordHash = (userId) => {
+  return userRepository.findPassword(userId);
+};
+
+const updatePasswordHash = (userId, passwordHash) => {
+  return userRepository.updateById(userId, {
+    $set: { password: passwordHash },
+    $inc: { tokenVersion: 1 },
+  });
+};
+
+const updateLastLoginAt = (userId) => {
+  return userRepository.updateById(userId, { lastLoginAt: new Date() });
 };
 
 const updateMe = async (userId, { phone, fullName }) => {
@@ -166,48 +176,6 @@ const updateMe = async (userId, { phone, fullName }) => {
   }
 
   return user;
-};
-
-const changePassword = async (userId, oldPassword, newPassword) => {
-  const user = await userRepository.findPassword(userId);
-
-  if (!user) {
-    throw new ApiError(404, USER_MESSAGES.NOT_FOUND);
-  }
-
-  const isMatchPassword = await comparePassword(oldPassword, user.password);
-
-  if (!isMatchPassword) {
-    throw new ApiError(401, USER_MESSAGES.OLD_PASSWORD_INCORRECT);
-  }
-
-  const hashedPassword = await hashPassword(newPassword);
-  const updatedUser = await userRepository.updateById(userId, {
-    $set: { password: hashedPassword },
-    $inc: { tokenVersion: 1 },
-  });
-
-  await authService.revokeRefreshTokenByUserId(userId);
-
-  return updatedUser;
-};
-
-const resetPassword = async (userId, newPassword) => {
-  await getById(userId);
-
-  const hashedPassword = await hashPassword(newPassword);
-  const updatedUser = await userRepository.updateById(userId, {
-    $set: { password: hashedPassword },
-    $inc: { tokenVersion: 1 },
-  });
-
-  await authService.revokeRefreshTokenByUserId(userId);
-
-  return updatedUser;
-};
-
-const updateLastLoginAt = (userId) => {
-  return userRepository.updateById(userId, { lastLoginAt: new Date() });
 };
 
 const getByIdWithStatus = (userId) => {
@@ -504,16 +472,16 @@ const updateStatus = async (userId, status, externalSession = null) => {
 };
 
 export default {
-  create,
+  createWithHashedPassword,
   getById,
   getByIdWithStatus,
   getMe,
   getByEmail,
   getByPhone,
-  updateMe,
-  changePassword,
-  resetPassword,
+  getPasswordHash,
+  updatePasswordHash,
   updateLastLoginAt,
+  updateMe,
   getAll,
   search,
   searchPaginated,
