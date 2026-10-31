@@ -28,12 +28,30 @@ const checkAddressOwnership = (address, customerId, action = "truy cập") => {
   }
 };
 
-const create = async (customerId, addressData) => {
+const create = async ({
+  customerId,
+  receiverName,
+  province,
+  district,
+  ward,
+  detail,
+  postalCode,
+  isDefault: requestedDefault,
+}) => {
   const addressCount = await addressRepository.countByCustomerId(customerId);
   const isFirstAddress = addressCount === 0;
 
-  const isDefault = isFirstAddress ? true : addressData.isDefault;
-  const payload = { ...addressData, customerId, isDefault };
+  const isDefault = isFirstAddress ? true : requestedDefault;
+  const payload = {
+    customerId,
+    receiverName,
+    province,
+    district,
+    ward,
+    detail,
+    postalCode,
+    isDefault,
+  };
 
   if (payload.isDefault && !isFirstAddress) {
     return runInTransaction(async (session) => {
@@ -68,6 +86,7 @@ const updateById = async (addressId, addressData, customerId) => {
     throw new ApiError(400, ADDRESS_MESSAGES.CANNOT_UNSET_DEFAULT);
   }
 
+  // If the address is being set as default and it wasn't default before, reset other addresses
   if (addressData.isDefault === true && !existingAddress.isDefault) {
     return runInTransaction(async (session) => {
       await addressRepository.resetDefault(customerId, session);

@@ -6,10 +6,16 @@ import addressService from "./address.service.js";
 
 const create = async (req, res, next) => {
   try {
-    const newAddress = await addressService.create(
-      req.user.customerId,
-      req.body,
-    );
+    const newAddress = await addressService.create({
+      customerId: req.user.customerId,
+      receiverName: req.body.receiverName,
+      province: req.body.province,
+      district: req.body.district,
+      ward: req.body.ward,
+      detail: req.body.detail,
+      postalCode: req.body.postalCode,
+      isDefault: req.body.isDefault,
+    });
 
     return ApiResponse.success(
       res,

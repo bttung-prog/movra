@@ -868,6 +868,8 @@ export const COD_SETTLEMENT_MESSAGES = {
 };
 
 export const NOTIFICATION_MESSAGES = {
+  NOT_FOUND: "Không tìm thấy thông báo",
+  ACCESS_DENIED: "Bạn không có quyền truy cập thông báo này",
   GET_MY_SUCCESS: "Lấy danh sách thông báo thành công",
   MARK_AS_READ_SUCCESS: "Đã đánh dấu thông báo là đã đọc",
   MARK_ALL_AS_READ_SUCCESS: "Đã đánh dấu tất cả thông báo là đã đọc",

@@ -19,14 +19,15 @@ import { SETTLEMENT_STATUSES, PAYOUT_METHODS } from "./codSettlement.js";
 
 import codSettlementRepository from "./codSettlement.repository.js";
 
-const generateSettlement = async (payload, actor) => {
-  const {
+const generateSettlement = async (
+  {
     orderId,
     payoutMethod = PAYOUT_METHODS.WALLET,
     bankDetails = null,
     notes = "",
-  } = payload;
-
+  },
+  actor,
+) => {
   const order = await orderService.getById(orderId, true, actor);
 
   if (order.status !== "delivered") {
@@ -139,8 +140,8 @@ const generateSettlement = async (payload, actor) => {
   }
 };
 
-const confirmSettlement = async (id, actor) => {
-  const settlement = await codSettlementRepository.findById(id);
+const confirmSettlement = async (settlementId, actor) => {
+  const settlement = await codSettlementRepository.findById(settlementId);
   if (!settlement) {
     throw new ApiError(404, COD_SETTLEMENT_MESSAGES.NOT_FOUND);
   }
@@ -154,7 +155,7 @@ const confirmSettlement = async (id, actor) => {
   }
 
   const updatedSettlement = await codSettlementRepository.updateById(
-    id,
+    settlementId,
     {
       status: SETTLEMENT_STATUSES.CONFIRMED,
       handledBy: actor.userId,
@@ -170,10 +171,12 @@ const confirmSettlement = async (id, actor) => {
   return updatedSettlement;
 };
 
-const completeSettlement = async (id, payload, actor) => {
-  const { notes = "", bankTransferReference } = payload;
-
-  const settlement = await codSettlementRepository.findById(id);
+const completeSettlement = async (
+  settlementId,
+  { notes = "", bankTransferReference },
+  actor,
+) => {
+  const settlement = await codSettlementRepository.findById(settlementId);
   if (!settlement) {
     throw new ApiError(404, COD_SETTLEMENT_MESSAGES.NOT_FOUND);
   }
@@ -210,7 +213,7 @@ const completeSettlement = async (id, payload, actor) => {
 
   try {
     const updatedSettlement = await codSettlementRepository.updateById(
-      id,
+      settlementId,
       {
         status: SETTLEMENT_STATUSES.COMPLETED,
         settledAt: new Date(),
@@ -282,8 +285,8 @@ const completeSettlement = async (id, payload, actor) => {
   }
 };
 
-const cancelSettlement = async (id, reason, actor) => {
-  const settlement = await codSettlementRepository.findById(id);
+const cancelSettlement = async (settlementId, reason, actor) => {
+  const settlement = await codSettlementRepository.findById(settlementId);
   if (!settlement) {
     throw new ApiError(404, COD_SETTLEMENT_MESSAGES.NOT_FOUND);
   }
@@ -304,7 +307,7 @@ const cancelSettlement = async (id, reason, actor) => {
 
   try {
     const updatedSettlement = await codSettlementRepository.updateById(
-      id,
+      settlementId,
       {
         status: SETTLEMENT_STATUSES.CANCELLED,
         handledBy: actor.userId,
@@ -392,8 +395,8 @@ const checkSettlementAccess = async (settlement, actor) => {
   }
 };
 
-const getById = async (id, actor = null) => {
-  const settlement = await codSettlementRepository.findById(id);
+const getById = async (settlementId, actor = null) => {
+  const settlement = await codSettlementRepository.findById(settlementId);
   if (!settlement) {
     throw new ApiError(404, COD_SETTLEMENT_MESSAGES.NOT_FOUND);
   }
