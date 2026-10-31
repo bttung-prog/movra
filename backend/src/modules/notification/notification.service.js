@@ -1,3 +1,5 @@
+import { NOTIFICATION_MESSAGES } from "../../constants/messages.js";
+
 import ApiError from "../../utils/ApiError.js";
 
 import notificationRepository from "./notification.repository.js";
@@ -67,11 +69,11 @@ const getMyNotifications = async ({
 const markAsRead = async ({ notificationId, userId }) => {
   const notification = await notificationRepository.findById(notificationId);
   if (!notification) {
-    throw new ApiError(404, "Không tìm thấy thông báo");
+    throw new ApiError(404, NOTIFICATION_MESSAGES.NOT_FOUND);
   }
 
   if (notification.userId.toString() !== userId.toString()) {
-    throw new ApiError(403, "Bạn không có quyền truy cập thông báo này");
+    throw new ApiError(403, NOTIFICATION_MESSAGES.ACCESS_DENIED);
   }
 
   return notificationRepository.markAsRead(notificationId);

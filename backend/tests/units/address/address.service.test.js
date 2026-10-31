@@ -57,15 +57,26 @@ describe("addressService.create", () => {
   it("makes the first customer address default", async () => {
     mocks.countByCustomerId.mockResolvedValue(0);
 
-    await addressService.create(customerId, {
+    await addressService.create({
+      customerId,
       receiverName: "Test Receiver",
+      province: "Province",
+      district: "District",
+      ward: "Ward",
+      detail: "123 Main Street",
+      postalCode: undefined,
       isDefault: false,
     });
 
     expect(mocks.create).toHaveBeenCalledWith({
-      receiverName: "Test Receiver",
-      isDefault: true,
       customerId,
+      receiverName: "Test Receiver",
+      province: "Province",
+      district: "District",
+      ward: "Ward",
+      detail: "123 Main Street",
+      postalCode: undefined,
+      isDefault: true,
     });
   });
 });

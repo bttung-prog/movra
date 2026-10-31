@@ -28,13 +28,16 @@ const generate = async (req, res, next) => {
 
 const confirm = async (req, res, next) => {
   try {
-    const { id } = req.params;
+    const { id: settlementId } = req.params;
     const actor = {
       userId: req.user.userId,
       role: req.user.role,
     };
 
-    const settlement = await codSettlementService.confirmSettlement(id, actor);
+    const settlement = await codSettlementService.confirmSettlement(
+      settlementId,
+      actor,
+    );
     return ApiResponse.success(
       res,
       settlement,
@@ -47,14 +50,14 @@ const confirm = async (req, res, next) => {
 
 const complete = async (req, res, next) => {
   try {
-    const { id } = req.params;
+    const { id: settlementId } = req.params;
     const actor = {
       userId: req.user.userId,
       role: req.user.role,
     };
 
     const settlement = await codSettlementService.completeSettlement(
-      id,
+      settlementId,
       req.body,
       actor,
     );
@@ -70,7 +73,7 @@ const complete = async (req, res, next) => {
 
 const cancel = async (req, res, next) => {
   try {
-    const { id } = req.params;
+    const { id: settlementId } = req.params;
     const { reason } = req.body;
     const actor = {
       userId: req.user.userId,
@@ -78,7 +81,7 @@ const cancel = async (req, res, next) => {
     };
 
     const settlement = await codSettlementService.cancelSettlement(
-      id,
+      settlementId,
       reason,
       actor,
     );
@@ -159,8 +162,11 @@ const getMySettlements = async (req, res, next) => {
 
 const getById = async (req, res, next) => {
   try {
-    const { id } = req.params;
-    const settlement = await codSettlementService.getById(id, req.user);
+    const { id: settlementId } = req.params;
+    const settlement = await codSettlementService.getById(
+      settlementId,
+      req.user,
+    );
     return ApiResponse.success(
       res,
       settlement,
