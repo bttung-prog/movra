@@ -119,6 +119,39 @@ describe("pricingService.calculateFee", () => {
     });
   });
 
+  it("calculates billable weight from per-package weight, volume, and quantity", async () => {
+    mocks.findActiveByServiceType.mockResolvedValue({
+      serviceType: "express",
+      name: "Express",
+      basePrice: 10000,
+      baseWeight: 2,
+      extraWeightPrice: 2000,
+      baseDistance: 12,
+      extraDistancePrice: 1000,
+      categorySurcharges: [],
+    });
+
+    const result = await pricingService.calculateFee({
+      serviceType: "express",
+      weight: 2,
+      volume: 10000,
+      quantity: 3,
+      distance: 12,
+    });
+
+    expect(result).toMatchObject({
+      actualWeight: 6,
+      volumetricWeight: 6,
+      billableWeight: 6,
+    });
+    expect(result.breakdown).toMatchObject({
+      basePrice: 10000,
+      weightFee: 8000,
+      distanceFee: 0,
+      totalShippingFee: 18000,
+    });
+  });
+
   it("rejects invalid distance values", async () => {
     mocks.getRouteById.mockResolvedValue({ _id: routeId, distance: 0 });
 
@@ -133,6 +166,24 @@ describe("pricingService.calculateFee", () => {
       message: "Khoảng cách vận chuyển phải lớn hơn 0",
     });
   });
+
+  it.each([0, -1, 1.5, "invalid"])(
+    "rejects invalid quantity %s before looking up a route",
+    async (quantity) => {
+      await expect(
+        pricingService.calculateFee({
+          weight: 2,
+          quantity,
+          routeId,
+        }),
+      ).rejects.toMatchObject({
+        statusCode: 400,
+        message: "Số lượng kiện hàng phải là số nguyên lớn hơn 0",
+      });
+
+      expect(mocks.getRouteById).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe("pricingService.rate management", () => {

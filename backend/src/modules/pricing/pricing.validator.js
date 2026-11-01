@@ -20,6 +20,7 @@ const calculateFeeSchema = Joi.object({
     "number.positive": "Weight must be greater than 0",
   }),
   volume: Joi.number().min(0).default(0),
+  quantity: Joi.number().integer().positive().default(1),
   distance: Joi.number().positive().optional().messages({
     "number.positive": "Distance must be greater than 0",
   }),

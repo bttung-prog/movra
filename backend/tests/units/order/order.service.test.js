@@ -252,12 +252,16 @@ describe("orderService.create", () => {
   });
 
   it("creates the order and charges the wallet in the provided transaction", async () => {
-    const result = await orderService.create(validCreatePayload, transaction);
+    const result = await orderService.create(
+      { ...validCreatePayload, quantity: 3 },
+      transaction,
+    );
 
     expect(result).toEqual({ _id: "order-1", orderCode: "ORD-0001" });
     expect(mocks.calculateFee).toHaveBeenCalledWith({
       weight: 2,
       volume: 1,
+      quantity: 3,
       routeId: "route-1",
       goodsCategoryId: "category-1",
     });
