@@ -652,6 +652,43 @@ describe("orderService.getPublicTrackingByCode", () => {
   });
 });
 
+describe("orderService.cancelOrder", () => {
+  it("unassigns the cancelled order and syncs its trip in the same transaction", async () => {
+    mocks.findById.mockResolvedValue({
+      ...existingOrder,
+      status: "driver_assigned",
+      tripId: "trip-1",
+    });
+    mocks.updateById.mockResolvedValue({
+      ...existingOrder,
+      status: "cancelled",
+      tripId: null,
+    });
+    mocks.createTrackingLog.mockResolvedValue({ _id: "tracking-1" });
+
+    await orderService.cancelOrder({
+      orderId: "order-1",
+      reason: "Customer cancelled",
+    });
+
+    expect(mocks.updateById).toHaveBeenCalledWith(
+      "order-1",
+      expect.objectContaining({ status: "cancelled", tripId: null }),
+      transaction,
+      expect.any(Object),
+    );
+    expect(mocks.createTrackingLog).toHaveBeenCalledWith(
+      expect.objectContaining({ tripId: "trip-1", status: "cancelled" }),
+      transaction,
+    );
+    expect(mocks.syncTripTotalOrder).toHaveBeenCalledWith(
+      "trip-1",
+      transaction,
+    );
+    expect(transaction.commitTransaction).toHaveBeenCalled();
+  });
+});
+
 describe("orderService.updateById", () => {
   it("recalculates total amount when updating COD", async () => {
     mocks.findById.mockResolvedValue(existingOrder);
