@@ -155,7 +155,7 @@ const setTotalOrder = (tripId, totalOrder, session = null) => {
     tripId,
     { totalOrder },
     { new: true, runValidators: true, session },
-  );
+  ).lean();
 };
 
 const deleteById = (tripId, session = null) => {

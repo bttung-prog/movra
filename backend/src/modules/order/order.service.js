@@ -971,11 +971,13 @@ const cancelOrder = async ({ orderId, reason, cancelledBy, user = null }) => {
   session.startTransaction();
 
   try {
+    const assignedTripId = order.tripId?._id || order.tripId;
     const shippingFeeRefund = getRefundableShippingFee(order);
     let updatedOrder = await orderRepository.updateById(
       orderId,
       {
         status: "cancelled",
+        tripId: null,
         notes: reason || order.notes,
       },
       session,
@@ -1002,13 +1004,17 @@ const cancelOrder = async ({ orderId, reason, cancelledBy, user = null }) => {
     const trackingLog = await orderRepository.createTrackingLog(
       {
         orderId,
-        tripId: order.tripId?._id || order.tripId,
+        tripId: assignedTripId,
         status: "cancelled",
         notes: reason || "Order cancelled",
         changedBy: cancelledBy,
       },
       session,
     );
+
+    if (assignedTripId) {
+      await tripService.syncTotalOrder(assignedTripId, session);
+    }
 
     await session.commitTransaction();
 

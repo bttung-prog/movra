@@ -54,14 +54,15 @@ const normalizeAuditValue = (value) => {
   return value;
 };
 
-const getAuditChanges = (before, after, fields) =>
-  fields.flatMap((field) => {
+const getAuditChanges = (before, after, fields) => {
+  return fields.flatMap((field) => {
     const oldValue = normalizeAuditValue(before?.[field]);
     const newValue = normalizeAuditValue(after?.[field]);
     return JSON.stringify(oldValue) === JSON.stringify(newValue)
       ? []
       : [{ field, oldValue, newValue }];
   });
+};
 
 const getTripSnapshot = (trip) => ({
   tripCode: trip.tripCode,
