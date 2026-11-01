@@ -1,3 +1,5 @@
+import { PRICING_MESSAGES } from "../../constants/messages.js";
+
 import ApiError from "../../utils/ApiError.js";
 
 import goodsCategoryService from "../goodsCategory/goodsCategory.service.js";
@@ -20,10 +22,16 @@ const calculateFee = async ({
   serviceType = "standard",
   weight = 1,
   volume = 0,
+  quantity = 1,
   distance = 5,
   routeId = null,
   goodsCategoryId = null,
 }) => {
+  const normalizedQuantity = Number(quantity);
+  if (!Number.isInteger(normalizedQuantity) || normalizedQuantity < 1) {
+    throw new ApiError(400, PRICING_MESSAGES.INVALID_QUANTITY);
+  }
+
   let effectiveDistance = Number(distance) || 0;
 
   if (routeId) {
@@ -32,7 +40,7 @@ const calculateFee = async ({
   }
 
   if (effectiveDistance <= 0) {
-    throw new ApiError(400, "Khoảng cách vận chuyển phải lớn hơn 0");
+    throw new ApiError(400, PRICING_MESSAGES.INVALID_DISTANCE);
   }
 
   if (goodsCategoryId) {
@@ -44,8 +52,11 @@ const calculateFee = async ({
     rate = DEFAULT_RATE;
   }
 
-  const volumetricWeight = volume > 0 ? Number((volume / 5000).toFixed(2)) : 0;
-  const billableWeight = Math.max(Number(weight) || 1, volumetricWeight);
+  const totalWeight = (Number(weight) || 1) * normalizedQuantity;
+  const totalVolume = (Number(volume) || 0) * normalizedQuantity;
+  const volumetricWeight =
+    totalVolume > 0 ? Number((totalVolume / 5000).toFixed(2)) : 0;
+  const billableWeight = Math.max(totalWeight, volumetricWeight);
 
   const extraWeight = Math.max(0, billableWeight - rate.baseWeight);
   const extraDistance = Math.max(0, effectiveDistance - rate.baseDistance);
@@ -77,7 +88,7 @@ const calculateFee = async ({
   return {
     serviceType: rate.serviceType,
     rateName: rate.name,
-    actualWeight: Number(weight),
+    actualWeight: totalWeight,
     volumetricWeight,
     billableWeight,
     distance: effectiveDistance,
@@ -136,7 +147,7 @@ const getAllRates = async ({
 const getRateById = async (id) => {
   const rate = await pricingRepository.findById(id);
   if (!rate) {
-    throw new ApiError(404, "Không tìm thấy bảng cước");
+    throw new ApiError(404, PRICING_MESSAGES.RATE_NOT_FOUND);
   }
   return rate;
 };
@@ -147,7 +158,7 @@ const updateRate = async (id, updateData) => {
   }
   const rate = await pricingRepository.updateById(id, updateData);
   if (!rate) {
-    throw new ApiError(404, "Không tìm thấy bảng cước");
+    throw new ApiError(404, PRICING_MESSAGES.RATE_NOT_FOUND);
   }
   return rate;
 };
@@ -155,7 +166,7 @@ const updateRate = async (id, updateData) => {
 const deleteRate = async (id) => {
   const rate = await pricingRepository.deleteById(id);
   if (!rate) {
-    throw new ApiError(404, "Không tìm thấy bảng cước");
+    throw new ApiError(404, PRICING_MESSAGES.RATE_NOT_FOUND);
   }
   return rate;
 };

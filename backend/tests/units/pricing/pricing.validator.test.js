@@ -14,6 +14,7 @@ describe("pricingValidator.calculateFeeSchema", () => {
       serviceType: "standard",
       weight: 2,
       volume: 0,
+      quantity: 1,
       distance: 15,
     });
   });
@@ -34,6 +35,14 @@ describe("pricingValidator.calculateFeeSchema", () => {
       pricingValidator.calculateFeeSchema.validate({
         weight: 2,
         serviceType: "overnight",
+        distance: 10,
+      }).error,
+    ).toBeDefined();
+
+    expect(
+      pricingValidator.calculateFeeSchema.validate({
+        weight: 2,
+        quantity: 1.5,
         distance: 10,
       }).error,
     ).toBeDefined();

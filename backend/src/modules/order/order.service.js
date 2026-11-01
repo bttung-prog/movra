@@ -300,6 +300,7 @@ const create = async (
   const feeResult = await pricingService.calculateFee({
     weight,
     volume,
+    quantity,
     routeId,
     goodsCategoryId: goodCategory,
   });

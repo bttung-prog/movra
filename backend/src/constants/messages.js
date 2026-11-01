@@ -877,11 +877,14 @@ export const NOTIFICATION_MESSAGES = {
 
 export const PRICING_MESSAGES = {
   CALCULATE_SUCCESS: "Tính cước vận chuyển thành công",
+  INVALID_DISTANCE: "Khoảng cách vận chuyển phải lớn hơn 0",
+  INVALID_QUANTITY: "Số lượng kiện hàng phải là số nguyên lớn hơn 0",
   CREATE_RATE_SUCCESS: "Tạo bảng cước thành công",
   GET_ALL_RATES_SUCCESS: "Lấy danh sách bảng cước thành công",
   GET_RATE_SUCCESS: "Lấy thông tin bảng cước thành công",
   UPDATE_RATE_SUCCESS: "Cập nhật bảng cước thành công",
   DELETE_RATE_SUCCESS: "Xóa bảng cước thành công",
+  RATE_NOT_FOUND: "Không tìm thấy bảng cước",
 };
 
 const MESSAGES = {
