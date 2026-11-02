@@ -1,4 +1,5 @@
 import { PRICING_MESSAGES } from "../../constants/messages.js";
+import DEFAULT_RATE from "../../constants/defaultShippingRate.js";
 
 import ApiError from "../../utils/ApiError.js";
 
@@ -6,17 +7,6 @@ import goodsCategoryService from "../goodsCategory/goodsCategory.service.js";
 import routeService from "../route/route.service.js";
 
 import pricingRepository from "./pricing.repository.js";
-
-const DEFAULT_RATE = {
-  name: "Bảng cước mặc định",
-  serviceType: "standard",
-  basePrice: 16500,
-  baseWeight: 2,
-  extraWeightPrice: 5000,
-  baseDistance: 10,
-  extraDistancePrice: 2000,
-  categorySurcharges: [],
-};
 
 const calculateFee = async ({
   serviceType = "standard",
