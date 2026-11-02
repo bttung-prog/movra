@@ -50,6 +50,8 @@ export const AUTH_MESSAGES = {
     "Tài khoản điều phối viên chưa được thiết lập hồ sơ. Vui lòng liên hệ Quản trị viên.",
   DISPATCHER_NO_WAREHOUSE:
     "Tài khoản điều phối viên chưa được phân bổ vào kho nào. Vui lòng liên hệ Quản trị viên.",
+  ACCOUNTANT_PROFILE_MISSING:
+    "Tài khoản kế toán chưa được thiết lập hồ sơ. Vui lòng liên hệ Quản trị viên.",
 };
 
 export const USER_MESSAGES = {
@@ -69,6 +71,10 @@ export const USER_MESSAGES = {
     "Người dùng phải có vai trò điều phối viên để tạo hồ sơ điều phối",
   DISPATCHER_USER_NOT_ACTIVE:
     "Chỉ tài khoản điều phối viên đang hoạt động mới được tạo hồ sơ",
+  ACCOUNTANT_ROLE_INVALID:
+    "Người dùng phải có vai trò kế toán để tạo hồ sơ kế toán",
+  ACCOUNTANT_USER_NOT_ACTIVE:
+    "Chỉ tài khoản kế toán đang hoạt động mới được tạo hồ sơ",
   ROLE_STATUS_CHANGE_REQUIRES_DEDICATED_OPERATION:
     "Vui lòng dùng chức năng thay đổi vai trò hoặc trạng thái riêng để cập nhật quyền truy cập tài khoản",
 };
@@ -720,6 +726,19 @@ export const DISPATCHER_MESSAGES = {
   CODE_GEN_FAILED: "Không thể tạo mã điều phối viên duy nhất. Vui lòng thử lại",
 };
 
+export const ACCOUNTANT_MESSAGES = {
+  CREATE_SUCCESS: "Tạo kế toán thành công",
+  GET_ALL_SUCCESS: "Lấy danh sách kế toán thành công",
+  GET_ONE_SUCCESS: "Lấy thông tin kế toán thành công",
+  GET_PROFILE_SUCCESS: "Lấy thông tin cá nhân kế toán thành công",
+  UPDATE_STATUS_SUCCESS: "Cập nhật trạng thái kế toán thành công",
+  DELETE_SUCCESS: "Vô hiệu hóa hồ sơ kế toán thành công",
+  NOT_FOUND: "Không tìm thấy kế toán",
+  ALREADY_EXISTS: "Hồ sơ kế toán đã tồn tại cho người dùng này",
+  CODE_ALREADY_EXISTS: "Mã kế toán đã tồn tại. Vui lòng thử lại",
+  CODE_GEN_FAILED: "Không thể tạo mã kế toán duy nhất. Vui lòng thử lại",
+};
+
 export const INVOICE_MESSAGES = {
   CREATE_SUCCESS: "Tạo hóa đơn thành công",
   CONSOLIDATE_SUCCESS: "Tạo hóa đơn gộp thành công",
@@ -819,7 +838,8 @@ export const WALLET_TRANSACTION_MESSAGES = {
   INSUFFICIENT_BALANCE_FOR_ADJUSTMENT:
     "Số dư ví không đủ để thực hiện điều chỉnh",
   CUSTOMER_REQUIRED_FOR_TOPUP: "Không tìm thấy thông tin khách hàng để nạp ví",
-  ADMIN_ONLY_ADJUSTMENT: "Chỉ quản trị viên mới được điều chỉnh ví",
+  ADMIN_ONLY_ADJUSTMENT:
+    "Chỉ quản trị viên hoặc kế toán mới được điều chỉnh ví",
   BALANCE_CHANGED: "Số dư ví đã thay đổi, vui lòng thử lại",
   ACCESS_DENIED: "Bạn không có quyền truy cập giao dịch này",
   GET_ALL_SUCCESS: "Lấy danh sách giao dịch ví thành công",

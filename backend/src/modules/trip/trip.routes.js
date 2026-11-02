@@ -19,21 +19,21 @@ tripRouter.post(
 
 tripRouter.get(
   "/",
-  authorize(ROLES.ADMIN, ROLES.DISPATCHER, ROLES.DRIVER),
+  authorize(ROLES.ADMIN, ROLES.DISPATCHER, ROLES.ACCOUNTANT, ROLES.DRIVER),
   validate(tripValidator.queryTripSchema, "query"),
   tripController.getAll,
 );
 
 tripRouter.get(
   "/code/:tripCode",
-  authorize(ROLES.ADMIN, ROLES.DISPATCHER, ROLES.DRIVER),
+  authorize(ROLES.ADMIN, ROLES.DISPATCHER, ROLES.ACCOUNTANT, ROLES.DRIVER),
   validate(tripValidator.tripCodeParamSchema, "params"),
   tripController.getByCode,
 );
 
 tripRouter.get(
   "/:tripId",
-  authorize(ROLES.ADMIN, ROLES.DISPATCHER, ROLES.DRIVER),
+  authorize(ROLES.ADMIN, ROLES.DISPATCHER, ROLES.ACCOUNTANT, ROLES.DRIVER),
   validate(tripValidator.tripIdParamSchema, "params"),
   tripController.getById,
 );
@@ -117,7 +117,12 @@ tripRouter.post(
 
 tripRouter.get(
   "/:tripId/expenses",
-  authorize(ROLES.ADMIN, ROLES.DISPATCHER, ROLES.DRIVER),
+  authorize(
+    ROLES.ADMIN,
+    ROLES.DISPATCHER,
+    ROLES.ACCOUNTANT,
+    ROLES.DRIVER,
+  ),
   validate(tripValidator.tripIdParamSchema, "params"),
   validate(tripValidator.paginationQuerySchema, "query"),
   tripController.getExpensesByTripId,
@@ -125,14 +130,14 @@ tripRouter.get(
 
 tripRouter.get(
   "/:tripId/expenses/total",
-  authorize(ROLES.ADMIN, ROLES.DISPATCHER),
+  authorize(ROLES.ADMIN, ROLES.DISPATCHER, ROLES.ACCOUNTANT),
   validate(tripValidator.tripIdParamSchema, "params"),
   tripController.getTotalExpensesByTripId,
 );
 
 tripRouter.patch(
   "/expenses/:expenseId",
-  authorize(ROLES.ADMIN, ROLES.DISPATCHER),
+  authorize(ROLES.ADMIN, ROLES.ACCOUNTANT),
   validate(tripValidator.expenseIdParamSchema, "params"),
   validate(tripValidator.updateExpenseSchema),
   tripController.updateExpenseById,
@@ -140,7 +145,7 @@ tripRouter.patch(
 
 tripRouter.delete(
   "/expenses/:expenseId",
-  authorize(ROLES.ADMIN, ROLES.DISPATCHER),
+  authorize(ROLES.ADMIN, ROLES.ACCOUNTANT),
   validate(tripValidator.expenseIdParamSchema, "params"),
   tripController.deleteExpenseById,
 );

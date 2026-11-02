@@ -35,6 +35,7 @@ const mocks = vi.hoisted(() => ({
   getDriverByUserId: vi.fn(),
   getStaffByUserId: vi.fn(),
   getDispatcherByUserId: vi.fn(),
+  getAccountantByUserId: vi.fn(),
 }));
 
 vi.mock("../../../src/modules/user/user.service.js", () => ({
@@ -89,8 +90,7 @@ vi.mock("../../../src/modules/auth/auth.repository.js", () => ({
     createPasswordResetOtp: mocks.createPasswordResetOtp,
     findPasswordResetOtpByEmail: mocks.findPasswordResetOtpByEmail,
     deletePasswordResetOtpByEmail: mocks.deletePasswordResetOtpByEmail,
-    incrementPasswordResetOtpAttempts:
-      mocks.incrementPasswordResetOtpAttempts,
+    incrementPasswordResetOtpAttempts: mocks.incrementPasswordResetOtpAttempts,
     consumePasswordResetOtp: mocks.consumePasswordResetOtp,
   },
 }));
@@ -109,6 +109,10 @@ vi.mock("../../../src/modules/staff/staff.service.js", () => ({
 
 vi.mock("../../../src/modules/dispatcher/dispatcher.service.js", () => ({
   default: { getByUserId: mocks.getDispatcherByUserId },
+}));
+
+vi.mock("../../../src/modules/accountant/accountant.service.js", () => ({
+  default: { getByUserId: mocks.getAccountantByUserId },
 }));
 
 import {
@@ -436,6 +440,7 @@ describe("authService.login", () => {
         refreshToken: "refresh-token",
       },
     });
+
     expect(mocks.comparePassword).toHaveBeenCalledWith(
       "password",
       activeUser.password,
@@ -455,6 +460,29 @@ describe("authService.login", () => {
       "refresh-token",
     );
     expect(mocks.updateLastLoginAt).toHaveBeenCalledWith(activeUser._id);
+  });
+
+  it("includes the active accountant profile in the login token", async () => {
+    const accountantUser = {
+      ...activeUser,
+      role: ROLES.ACCOUNTANT,
+    };
+    mocks.getUserByEmail.mockResolvedValue(accountantUser);
+    mocks.getAccountantByUserId.mockResolvedValue({
+      _id: "accountant-1",
+      status: "active",
+    });
+
+    await authService.login({
+      email: accountantUser.email,
+      password: "password",
+    });
+
+    expect(mocks.generateAccessToken).toHaveBeenCalledWith({
+      userId: accountantUser._id,
+      role: ROLES.ACCOUNTANT,
+      accountantId: "accountant-1",
+    });
   });
 });
 

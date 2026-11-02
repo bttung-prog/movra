@@ -20,6 +20,7 @@ import customerService from "../customer/customer.service.js";
 import driverService from "../driver/driver.service.js";
 import staffService from "../staff/staff.service.js";
 import dispatcherService from "../dispatcher/dispatcher.service.js";
+import accountantService from "../accountant/accountant.service.js";
 
 import authRepository from "./auth.repository.js";
 
@@ -174,6 +175,26 @@ const getRoleSpecificInfo = async (user) => {
       }
       break;
     }
+
+    case ROLES.ACCOUNTANT: {
+      let accountant;
+      try {
+        accountant = await accountantService.getByUserId(user._id);
+      } catch (error) {
+        if (error instanceof ApiError && error.statusCode === 404) {
+          throw new ApiError(403, AUTH_MESSAGES.ACCOUNTANT_PROFILE_MISSING);
+        }
+        throw error;
+      }
+
+      if (accountant.status !== "active") {
+        throw new ApiError(403, AUTH_MESSAGES.ACCOUNT_INACTIVE_OR_LOCKED);
+      }
+
+      roleInfo.accountantId = accountant._id;
+      break;
+    }
+
     default:
       break;
   }

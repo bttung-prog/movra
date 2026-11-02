@@ -19,7 +19,7 @@ walletTransactionRouter.post(
 
 walletTransactionRouter.post(
   "/adjustment",
-  authorize(ROLES.ADMIN),
+  authorize(ROLES.ADMIN, ROLES.ACCOUNTANT),
   validate(walletTransactionValidator.adjustmentSchema),
   walletTransactionController.adjustWallet,
 );
@@ -33,21 +33,21 @@ walletTransactionRouter.get(
 
 walletTransactionRouter.get(
   "/code/:code",
-  authorize(ROLES.ADMIN, ROLES.CUSTOMER),
+  authorize(ROLES.ADMIN, ROLES.ACCOUNTANT, ROLES.CUSTOMER),
   validate(walletTransactionValidator.paramCodeSchema, "params"),
   walletTransactionController.getByCode,
 );
 
 walletTransactionRouter.get(
   "/:id",
-  authorize(ROLES.ADMIN, ROLES.CUSTOMER),
+  authorize(ROLES.ADMIN, ROLES.ACCOUNTANT, ROLES.CUSTOMER),
   validate(walletTransactionValidator.paramIdSchema, "params"),
   walletTransactionController.getById,
 );
 
 walletTransactionRouter.get(
   "/",
-  authorize(ROLES.ADMIN),
+  authorize(ROLES.ADMIN, ROLES.ACCOUNTANT),
   validate(walletTransactionValidator.queryWalletTransactionSchema, "query"),
   walletTransactionController.getAll,
 );

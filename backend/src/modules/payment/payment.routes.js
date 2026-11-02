@@ -12,21 +12,21 @@ const paymentRouter = express.Router();
 
 paymentRouter.post(
   "/",
-  authorize(ROLES.ADMIN, ROLES.DISPATCHER, ROLES.CUSTOMER),
+  authorize(ROLES.ADMIN, ROLES.ACCOUNTANT, ROLES.CUSTOMER),
   validate(paymentValidator.createPaymentSchema),
   paymentController.create,
 );
 
 paymentRouter.post(
   "/driver-remit",
-  authorize(ROLES.ADMIN, ROLES.DISPATCHER, ROLES.DRIVER),
+  authorize(ROLES.DRIVER),
   validate(paymentValidator.driverRemitSchema),
   paymentController.driverRemit,
 );
 
 paymentRouter.patch(
   "/:paymentId/verify",
-  authorize(ROLES.ADMIN, ROLES.DISPATCHER),
+  authorize(ROLES.ADMIN, ROLES.ACCOUNTANT),
   validate(paymentValidator.paramPaymentIdSchema, "params"),
   validate(paymentValidator.verifyPaymentSchema),
   paymentController.verify,
@@ -42,7 +42,7 @@ paymentRouter.post(
 
 paymentRouter.get(
   "/stats",
-  authorize(ROLES.ADMIN, ROLES.DISPATCHER),
+  authorize(ROLES.ADMIN, ROLES.DISPATCHER, ROLES.ACCOUNTANT),
   paymentController.getStats,
 );
 
@@ -55,20 +55,32 @@ paymentRouter.get(
 
 paymentRouter.get(
   "/code/:paymentCode",
-  authorize(ROLES.ADMIN, ROLES.DISPATCHER, ROLES.CUSTOMER, ROLES.DRIVER),
+  authorize(
+    ROLES.ADMIN,
+    ROLES.DISPATCHER,
+    ROLES.ACCOUNTANT,
+    ROLES.CUSTOMER,
+    ROLES.DRIVER,
+  ),
   paymentController.getByCode,
 );
 
 paymentRouter.get(
   "/:paymentId",
-  authorize(ROLES.ADMIN, ROLES.DISPATCHER, ROLES.CUSTOMER, ROLES.DRIVER),
+  authorize(
+    ROLES.ADMIN,
+    ROLES.DISPATCHER,
+    ROLES.ACCOUNTANT,
+    ROLES.CUSTOMER,
+    ROLES.DRIVER,
+  ),
   validate(paymentValidator.paramPaymentIdSchema, "params"),
   paymentController.getById,
 );
 
 paymentRouter.get(
   "/",
-  authorize(ROLES.ADMIN, ROLES.DISPATCHER),
+  authorize(ROLES.ADMIN, ROLES.DISPATCHER, ROLES.ACCOUNTANT),
   validate(paymentValidator.queryPaymentSchema, "query"),
   paymentController.getAll,
 );

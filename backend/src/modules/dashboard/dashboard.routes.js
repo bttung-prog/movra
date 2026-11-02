@@ -10,7 +10,7 @@ import dashboardValidator from "./dashboard.validator.js";
 
 const dashboardRouter = express.Router();
 
-dashboardRouter.use(authorize(ROLES.ADMIN));
+dashboardRouter.use(authorize(ROLES.ADMIN, ROLES.ACCOUNTANT));
 
 dashboardRouter.get("/overview", dashboardController.getOverview);
 
