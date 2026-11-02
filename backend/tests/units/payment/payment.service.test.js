@@ -1,7 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   create: vi.fn(),
+  startSession: vi.fn(),
   findAll: vi.fn(),
   countAll: vi.fn(),
   findById: vi.fn(),
@@ -24,6 +25,15 @@ const mocks = vi.hoisted(() => ({
   recordTransaction: vi.fn(),
   generateCode: vi.fn(),
 }));
+
+vi.mock("mongoose", async (importOriginal) => {
+  const actual = await importOriginal();
+
+  return {
+    ...actual,
+    default: { ...actual.default, startSession: mocks.startSession },
+  };
+});
 
 vi.mock("../../../src/modules/payment/payment.repository.js", () => ({
   default: {
@@ -93,8 +103,16 @@ const orderId = "order-1";
 const customerId = "customer-1";
 const paymentId = "payment-1";
 
+const transaction = {
+  startTransaction: vi.fn(),
+  commitTransaction: vi.fn().mockResolvedValue(undefined),
+  abortTransaction: vi.fn().mockResolvedValue(undefined),
+  endSession: vi.fn(),
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.startSession.mockResolvedValue(transaction);
   mocks.generateCode.mockReturnValue("PAY-0001");
   mocks.getByOrderId.mockResolvedValue(null);
   mocks.getOrderById.mockResolvedValue({
@@ -119,7 +137,99 @@ beforeEach(() => {
   mocks.updateById.mockResolvedValue(null);
 });
 
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
 describe("paymentService.create", () => {
+  it("completes wallet payments and records the selected method on the order", async () => {
+    mocks.updateOrderById.mockResolvedValue({ _id: orderId });
+    mocks.updateCustomerById.mockResolvedValue({
+      _id: customerId,
+      walletBalance: 4000,
+    });
+
+    const payment = await paymentService.create(
+      {
+        orderId,
+        paymentAmount: 1000,
+        paymentMethod: PAYMENT_METHODS.WALLET_BALANCE,
+      },
+      { role: ROLES.CUSTOMER, customerId },
+    );
+
+    expect(payment.paymentStatus).toBe(PAYMENT_STATUSES.COMPLETED);
+    expect(mocks.updateOrderById).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderId,
+        updateData: expect.objectContaining({
+          paymentMethod: PAYMENT_METHODS.WALLET_BALANCE,
+          shippingFeePaid: true,
+        }),
+      }),
+    );
+    expect(mocks.updateCustomerById).toHaveBeenCalledWith(
+      customerId,
+      expect.objectContaining({
+        $inc: expect.objectContaining({
+          walletBalance: -1000,
+          totalSpent: 1000,
+          loyaltyPoints: 0,
+        }),
+      }),
+      transaction,
+      { walletBalance: { $gte: 1000 } },
+    );
+    expect(mocks.recordTransaction).toHaveBeenCalled();
+    expect(transaction.commitTransaction).toHaveBeenCalled();
+  });
+
+  it("keeps bank-transfer payments pending until verification", async () => {
+    vi.stubEnv("VIETQR_BANK_ID", "970422");
+    vi.stubEnv("VIETQR_ACCOUNT_NUMBER", "1234567890");
+    vi.stubEnv("VIETQR_ACCOUNT_NAME", "MOVRA");
+
+    const payment = await paymentService.create(
+      {
+        orderId,
+        paymentAmount: 1000,
+        paymentMethod: PAYMENT_METHODS.BANK,
+      },
+      { role: ROLES.CUSTOMER, customerId },
+    );
+
+    expect(payment.paymentStatus).toBe(PAYMENT_STATUSES.PENDING);
+    expect(payment.qrCodeUrl).toContain(
+      "https://img.vietqr.io/image/970422-1234567890-compact2.png?",
+    );
+    expect(payment.qrCodeUrl).toContain("amount=1000");
+    expect(payment.qrCodeUrl).toContain("addInfo=PAY-0001");
+    expect(mocks.updateOrderById).not.toHaveBeenCalled();
+    expect(mocks.updateCustomerById).not.toHaveBeenCalled();
+    expect(transaction.commitTransaction).toHaveBeenCalled();
+  });
+
+  it("rejects bank payments when VietQR account configuration is missing", async () => {
+    vi.stubEnv("VIETQR_BANK_ID", "");
+    vi.stubEnv("VIETQR_ACCOUNT_NUMBER", "");
+
+    await expect(
+      paymentService.create(
+        {
+          orderId,
+          paymentAmount: 1000,
+          paymentMethod: PAYMENT_METHODS.BANK,
+        },
+        { role: ROLES.CUSTOMER, customerId },
+      ),
+    ).rejects.toMatchObject({
+      statusCode: 500,
+    });
+
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(mocks.startSession).not.toHaveBeenCalled();
+  });
+
   it("rejects customer attempts to submit a driver payment before creating a transaction", async () => {
     await expect(
       paymentService.create(

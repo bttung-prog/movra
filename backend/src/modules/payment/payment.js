@@ -119,6 +119,12 @@ const paymentsSchema = new mongoose.Schema(
       required: true,
     },
 
+    qrCodeUrl: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+
     paymentStatus: {
       type: String,
       enum: Object.values(PAYMENT_STATUSES),

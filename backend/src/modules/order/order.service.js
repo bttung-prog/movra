@@ -336,37 +336,6 @@ const create = async (
       }
     }
 
-    const currentCustomer = await customerService.getById(
-      customerId,
-      dbSession,
-    );
-    const balanceBefore = Number(currentCustomer.walletBalance || 0);
-    let balanceAfter = balanceBefore;
-
-    if (effectiveShippingFee > 0) {
-      const debitedCustomer = await customerService.debitWallet(
-        customerId,
-        effectiveShippingFee,
-        dbSession,
-      );
-      if (!debitedCustomer) {
-        throw new ApiError(400, PAYMENT_MESSAGES.INSUFFICIENT_WALLET_BALANCE);
-      }
-
-      balanceAfter = Number(debitedCustomer.walletBalance || 0);
-      await customerService.updateById(
-        customerId,
-        {
-          $inc: {
-            totalSpent: effectiveShippingFee,
-            loyaltyPoints: Math.floor(effectiveShippingFee / 10000),
-          },
-          lastPurchaseDate: new Date(),
-        },
-        dbSession,
-      );
-    }
-
     const newOrder = await orderRepository.create(
       {
         orderCode,
@@ -385,16 +354,16 @@ const create = async (
         quantity,
         codAmount,
         shippingFee: effectiveShippingFee,
-        shippingFeePaid: true,
-        shippingFeePaidAmount: effectiveShippingFee,
+        shippingFeePaid: false,
+        shippingFeePaidAmount: 0,
         totalAmount: calculatedTotal,
         routeId,
         tripId,
         warehouseId,
         type,
-        paymentMethod: PAYMENT_METHODS.WALLET_BALANCE,
-        paymentStatus: "success",
-        paymentTime: new Date(),
+        paymentMethod: null,
+        paymentStatus: "pending",
+        paymentTime: null,
         notes,
         status: initialOrderStatus,
         deliveryAttempts: 0,
@@ -404,23 +373,6 @@ const create = async (
 
     if (tripId) {
       await tripService.syncTotalOrder(tripId, dbSession);
-    }
-
-    if (effectiveShippingFee > 0) {
-      await walletTransactionService.recordTransaction(
-        {
-          customerId,
-          type: WALLET_TRANSACTION_TYPES.PAYMENT,
-          direction: WALLET_TRANSACTION_DIRECTIONS.DEBIT,
-          amount: effectiveShippingFee,
-          balanceBefore,
-          balanceAfter,
-          orderId: newOrder._id,
-          status: WALLET_TRANSACTION_STATUSES.SUCCESS,
-          notes: `Thanh toán phí vận chuyển đơn hàng ${newOrder.orderCode}`,
-        },
-        dbSession,
-      );
     }
 
     await orderRepository.createTrackingLog(

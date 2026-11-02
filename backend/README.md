@@ -138,6 +138,15 @@ By default, the API is available at `http://localhost:5000`. The server connects
 
 All routes are mounted under `/api/v1`. The route modules currently serve as the API reference; a generated OpenAPI/Swagger specification is not included.
 
+### Order payment flow
+
+Creating an order does not charge the customer's wallet. It creates the order with a pending shipping-fee payment. The customer then creates a payment through `POST /api/v1/payments` with the order ID, the remaining shipping-fee amount, and a payment method:
+
+- `wallet_balance`: charged immediately and the order is marked paid in the same transaction.
+- `bank`: returns a VietQR image URL and remains pending until an administrator or dispatcher verifies the transfer through `PATCH /api/v1/payments/:paymentId/verify`.
+
+Configure `VIETQR_BANK_ID` and `VIETQR_ACCOUNT_NUMBER` in the backend environment before accepting bank payments. `VIETQR_ACCOUNT_NAME` is optional, and `VIETQR_TEMPLATE` defaults to `compact2`. The QR transfer uses the payment code as its transfer description. VietQR only creates the static QR; it does not confirm that money arrived, so staff verification is still required.
+
 | Resource                           | Base path                                                                        |
 | ---------------------------------- | -------------------------------------------------------------------------------- |
 | Authentication                     | `/auth`                                                                          |

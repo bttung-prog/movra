@@ -112,10 +112,7 @@ vi.mock("../../../src/configs/logger.js", () => ({
   default: { error: mocks.loggerError },
 }));
 
-import {
-  ORDER_MESSAGES,
-  PAYMENT_MESSAGES,
-} from "../../../src/constants/messages.js";
+import { ORDER_MESSAGES } from "../../../src/constants/messages.js";
 import ROLES from "../../../src/constants/roles.js";
 import orderService from "../../../src/modules/order/order.service.js";
 
@@ -165,7 +162,6 @@ beforeEach(() => {
     distanceKm: 3.2,
   });
   mocks.getCustomerByUserId.mockResolvedValue({ _id: "customer-1" });
-  mocks.debitWallet.mockResolvedValue({ walletBalance: 75000 });
   mocks.calculateFee.mockResolvedValue({ totalShippingFee: 25000 });
   mocks.findByCode.mockResolvedValue(null);
   mocks.createOrder.mockResolvedValue({
@@ -251,7 +247,7 @@ describe("orderService.create", () => {
     expect(result).toEqual({ _id: "order-1", orderCode: "ORD-0001" });
   });
 
-  it("creates the order and charges the wallet in the provided transaction", async () => {
+  it("creates the order as unpaid without charging the wallet", async () => {
     const result = await orderService.create(
       { ...validCreatePayload, quantity: 3 },
       transaction,
@@ -265,34 +261,24 @@ describe("orderService.create", () => {
       routeId: "route-1",
       goodsCategoryId: "category-1",
     });
-    expect(mocks.debitWallet).toHaveBeenCalledWith(
-      "customer-1",
-      25000,
-      transaction,
-    );
     expect(mocks.createOrder).toHaveBeenCalledWith(
       expect.objectContaining({
         orderCode: "ORD-0001",
         customerId: "customer-1",
         shippingFee: 25000,
-        shippingFeePaid: true,
+        shippingFeePaid: false,
+        shippingFeePaidAmount: 0,
         totalAmount: 30000,
         status: "created",
-        paymentMethod: "wallet_balance",
-        paymentStatus: "success",
+        paymentMethod: null,
+        paymentStatus: "pending",
+        paymentTime: null,
       }),
       transaction,
     );
-    expect(mocks.recordTransaction).toHaveBeenCalledWith(
-      expect.objectContaining({
-        customerId: "customer-1",
-        amount: 25000,
-        balanceBefore: 100000,
-        balanceAfter: 75000,
-        orderId: "order-1",
-      }),
-      transaction,
-    );
+    expect(mocks.debitWallet).not.toHaveBeenCalled();
+    expect(mocks.updateCustomerById).not.toHaveBeenCalled();
+    expect(mocks.recordTransaction).not.toHaveBeenCalled();
     expect(mocks.createTrackingLog).toHaveBeenCalledWith(
       expect.objectContaining({
         orderId: "order-1",
@@ -302,21 +288,6 @@ describe("orderService.create", () => {
     );
     expect(transaction.commitTransaction).not.toHaveBeenCalled();
     expect(transaction.endSession).not.toHaveBeenCalled();
-  });
-
-  it("rejects when the customer wallet cannot cover the fee", async () => {
-    mocks.debitWallet.mockResolvedValue(null);
-
-    await expect(
-      orderService.create(validCreatePayload, transaction),
-    ).rejects.toMatchObject({
-      statusCode: 400,
-      message: PAYMENT_MESSAGES.INSUFFICIENT_WALLET_BALANCE,
-    });
-
-    expect(transaction.abortTransaction).not.toHaveBeenCalled();
-    expect(transaction.commitTransaction).not.toHaveBeenCalled();
-    expect(mocks.createOrder).not.toHaveBeenCalled();
   });
 
   it("rejects an invalid shipping fee before opening a transaction", async () => {

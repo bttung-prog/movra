@@ -772,6 +772,7 @@ export const PAYMENT_MESSAGES = {
   GET_STATS_SUCCESS: "Lấy thống kê dòng tiền thanh toán thành công",
   NOT_FOUND: "Không tìm thấy giao dịch thanh toán",
   INSUFFICIENT_WALLET_BALANCE: "Số dư ví không đủ để thực hiện thanh toán",
+  VIETQR_CONFIGURATION_MISSING: "Cấu hình tài khoản nhận VietQR chưa đầy đủ",
   CUSTOMER_REQUIRED_FOR_WALLET: "Không xác định được khách hàng để trừ tiền ví",
   DUPLICATE_COD_ORDER: "Không thể khai báo trùng đơn hàng nộp COD",
   COD_ORDER_NOT_DELIVERED: "Chỉ có thể nộp COD của đơn đã giao thành công",
