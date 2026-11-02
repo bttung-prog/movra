@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 
 import { USER_MESSAGES, COMMON_MESSAGES } from "../../constants/messages.js";
+import ROLES from "../../constants/roles.js";
 
 import ApiError from "../../utils/ApiError.js";
 import { escapeRegex } from "../../utils/regexUtils.js";
@@ -9,6 +10,7 @@ import customerService from "../customer/customer.service.js";
 import driverService from "../driver/driver.service.js";
 import staffService from "../staff/staff.service.js";
 import dispatcherService from "../dispatcher/dispatcher.service.js";
+import accountantService from "../accountant/accountant.service.js";
 
 import userRepository from "./user.repository.js";
 
@@ -17,7 +19,7 @@ const createWithHashedPassword = async ({
   passwordHash,
   phone,
   fullName,
-  role = "customer",
+  role = ROLES.CUSTOMER,
   driverData,
   staffData,
   dispatcherData,
@@ -26,15 +28,15 @@ const createWithHashedPassword = async ({
     throw new ApiError(400, COMMON_MESSAGES.ALL_FIELDS_REQUIRED);
   }
 
-  if (role === "driver" && !driverData) {
+  if (role === ROLES.DRIVER && !driverData) {
     throw new ApiError(400, USER_MESSAGES.DRIVER_DATA_REQUIRED);
   }
 
-  if (role === "warehouse_staff" && !staffData) {
+  if (role === ROLES.WAREHOUSE_STAFF && !staffData) {
     throw new ApiError(400, USER_MESSAGES.STAFF_DATA_REQUIRED);
   }
 
-  if (role === "dispatcher" && !dispatcherData) {
+  if (role === ROLES.DISPATCHER && !dispatcherData) {
     throw new ApiError(400, USER_MESSAGES.DISPATCHER_DATA_REQUIRED);
   }
 
@@ -68,11 +70,11 @@ const createWithHashedPassword = async ({
       session,
     );
 
-    if (cleanRole === "customer") {
+    if (cleanRole === ROLES.CUSTOMER) {
       await customerService.create(newUser._id, session);
     }
 
-    if (cleanRole === "driver") {
+    if (cleanRole === ROLES.DRIVER) {
       await driverService.create(
         {
           userId: newUser._id,
@@ -82,7 +84,7 @@ const createWithHashedPassword = async ({
       );
     }
 
-    if (cleanRole === "warehouse_staff") {
+    if (cleanRole === ROLES.WAREHOUSE_STAFF) {
       await staffService.create(
         {
           userId: newUser._id,
@@ -92,7 +94,7 @@ const createWithHashedPassword = async ({
       );
     }
 
-    if (cleanRole === "dispatcher") {
+    if (cleanRole === ROLES.DISPATCHER) {
       await dispatcherService.create(
         {
           userId: newUser._id,
@@ -100,6 +102,10 @@ const createWithHashedPassword = async ({
         },
         session,
       );
+    }
+
+    if (cleanRole === ROLES.ACCOUNTANT) {
+      await accountantService.create({ userId: newUser._id }, session);
     }
 
     await session.commitTransaction();
@@ -302,19 +308,23 @@ const updateRole = async (userId, role, roleData = {}) => {
   const cleanRole = typeof role === "string" ? role.trim() : role;
   const { driverData, staffData, dispatcherData } = roleData;
 
-  if (cleanRole === "dispatcher" && existingUser.status !== "active") {
+  if (cleanRole === ROLES.DISPATCHER && existingUser.status !== "active") {
     throw new ApiError(400, USER_MESSAGES.DISPATCHER_USER_NOT_ACTIVE);
   }
 
-  if (cleanRole === "driver" && !driverData) {
+  if (cleanRole === ROLES.ACCOUNTANT && existingUser.status !== "active") {
+    throw new ApiError(400, USER_MESSAGES.ACCOUNTANT_USER_NOT_ACTIVE);
+  }
+
+  if (cleanRole === ROLES.DRIVER && !driverData) {
     throw new ApiError(400, USER_MESSAGES.DRIVER_DATA_REQUIRED);
   }
 
-  if (cleanRole === "warehouse_staff" && !staffData) {
+  if (cleanRole === ROLES.WAREHOUSE_STAFF && !staffData) {
     throw new ApiError(400, USER_MESSAGES.STAFF_DATA_REQUIRED);
   }
 
-  if (cleanRole === "dispatcher" && !dispatcherData) {
+  if (cleanRole === ROLES.DISPATCHER && !dispatcherData) {
     throw new ApiError(400, USER_MESSAGES.DISPATCHER_DATA_REQUIRED);
   }
 
@@ -322,9 +332,20 @@ const updateRole = async (userId, role, roleData = {}) => {
   session.startTransaction();
 
   try {
-    if (existingUser.role === "dispatcher" && cleanRole !== "dispatcher") {
+    if (
+      existingUser.role === ROLES.DISPATCHER &&
+      cleanRole !== ROLES.DISPATCHER
+    ) {
       const dispatcher = await dispatcherService.getByUserId(userId, session);
       await dispatcherService.updateStatus(dispatcher._id, "inactive", session);
+    }
+
+    if (
+      existingUser.role === ROLES.ACCOUNTANT &&
+      cleanRole !== ROLES.ACCOUNTANT
+    ) {
+      const accountant = await accountantService.getByUserId(userId, session);
+      await accountantService.updateStatus(accountant._id, "inactive", session);
     }
 
     const updatedUser = await userRepository.updateById(
@@ -333,7 +354,7 @@ const updateRole = async (userId, role, roleData = {}) => {
       session,
     );
 
-    if (cleanRole === "customer") {
+    if (cleanRole === ROLES.CUSTOMER) {
       try {
         await customerService.getByUserId(userId, session);
       } catch (error) {
@@ -344,7 +365,7 @@ const updateRole = async (userId, role, roleData = {}) => {
       }
     }
 
-    if (cleanRole === "driver") {
+    if (cleanRole === ROLES.DRIVER) {
       let driver;
       try {
         driver = await driverService.getByUserId(userId, session);
@@ -373,7 +394,7 @@ const updateRole = async (userId, role, roleData = {}) => {
       }
     }
 
-    if (cleanRole === "warehouse_staff") {
+    if (cleanRole === ROLES.WAREHOUSE_STAFF) {
       let staff;
       try {
         staff = await staffService.getByUserId(userId, session);
@@ -400,7 +421,7 @@ const updateRole = async (userId, role, roleData = {}) => {
       }
     }
 
-    if (cleanRole === "dispatcher") {
+    if (cleanRole === ROLES.DISPATCHER) {
       try {
         const dispatcher = await dispatcherService.getByUserId(userId, session);
         await dispatcherService.updateById(
@@ -422,6 +443,18 @@ const updateRole = async (userId, role, roleData = {}) => {
           },
           session,
         );
+      }
+    }
+
+    if (cleanRole === ROLES.ACCOUNTANT) {
+      try {
+        const accountant = await accountantService.getByUserId(userId, session);
+        await accountantService.updateStatus(accountant._id, "active", session);
+      } catch (error) {
+        if (!(error instanceof ApiError) || error.statusCode !== 404) {
+          throw error;
+        }
+        await accountantService.create({ userId }, session);
       }
     }
 
@@ -451,9 +484,17 @@ const updateStatus = async (userId, status, externalSession = null) => {
       { status: cleanStatus },
       session,
     );
-    if (cleanStatus !== "active" && user.role === "dispatcher") {
+    if (cleanStatus !== "active" && user.role === ROLES.DISPATCHER) {
       const dispatcher = await dispatcherService.getByUserId(userId, session);
       await dispatcherService.updateStatus(dispatcher._id, "inactive", session);
+    }
+    if (user.role === ROLES.ACCOUNTANT) {
+      const accountant = await accountantService.getByUserId(userId, session);
+      await accountantService.updateStatus(
+        accountant._id,
+        cleanStatus === "active" ? "active" : "inactive",
+        session,
+      );
     }
     if (ownsSession) {
       await session.commitTransaction();

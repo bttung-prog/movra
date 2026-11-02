@@ -18,7 +18,14 @@ const createUserSchema = Joi.object({
     }),
   fullName: Joi.string().required(),
   role: Joi.string()
-    .valid("admin", "driver", "dispatcher", "warehouse_staff", "customer")
+    .valid(
+      "admin",
+      "driver",
+      "dispatcher",
+      "accountant",
+      "warehouse_staff",
+      "customer",
+    )
     .required(),
   driverData: Joi.object({
     warehouseId: Joi.string().pattern(objectIdPattern).required().messages({
@@ -97,7 +104,14 @@ const updateUserSchema = Joi.object({
 
 const changeRoleUserSchema = Joi.object({
   role: Joi.string()
-    .valid("admin", "driver", "dispatcher", "warehouse_staff", "customer")
+    .valid(
+      "admin",
+      "driver",
+      "dispatcher",
+      "accountant",
+      "warehouse_staff",
+      "customer",
+    )
     .required(),
   driverData: Joi.object({
     warehouseId: Joi.string().pattern(objectIdPattern).required().messages({
@@ -168,6 +182,7 @@ const queryUserSchema = Joi.object({
     "admin",
     "driver",
     "dispatcher",
+    "accountant",
     "warehouse_staff",
     "customer",
   ),

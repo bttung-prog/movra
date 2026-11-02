@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  startSession: vi.fn(),
   create: vi.fn(),
   findById: vi.fn(),
   findByEmail: vi.fn(),
@@ -16,12 +17,22 @@ const mocks = vi.hoisted(() => ({
   driverCreate: vi.fn(),
   staffCreate: vi.fn(),
   dispatcherCreate: vi.fn(),
+  accountantCreate: vi.fn(),
   getCustomerByUserId: vi.fn(),
   getDriverByUserId: vi.fn(),
   getStaffByUserId: vi.fn(),
   getDispatcherByUserId: vi.fn(),
+  getAccountantByUserId: vi.fn(),
   updateDispatcherStatus: vi.fn(),
+  updateAccountantStatus: vi.fn(),
 }));
+
+vi.mock("mongoose", async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    default: { ...actual.default, startSession: mocks.startSession },
+  };
+});
 
 vi.mock("../../../src/modules/user/user.repository.js", () => ({
   default: {
@@ -68,10 +79,19 @@ vi.mock("../../../src/modules/dispatcher/dispatcher.service.js", () => ({
   },
 }));
 
+vi.mock("../../../src/modules/accountant/accountant.service.js", () => ({
+  default: {
+    create: mocks.accountantCreate,
+    getByUserId: mocks.getAccountantByUserId,
+    updateStatus: mocks.updateAccountantStatus,
+  },
+}));
+
 import {
   COMMON_MESSAGES,
   USER_MESSAGES,
 } from "../../../src/constants/messages.js";
+import ApiError from "../../../src/utils/ApiError.js";
 import ROLES from "../../../src/constants/roles.js";
 import USER_STATUSES from "../../../src/constants/userStatuses.js";
 import userService from "../../../src/modules/user/user.service.js";
@@ -86,8 +106,16 @@ const user = {
   status: USER_STATUSES.ACTIVE,
 };
 
+const transaction = {
+  startTransaction: vi.fn(),
+  commitTransaction: vi.fn().mockResolvedValue(undefined),
+  abortTransaction: vi.fn().mockResolvedValue(undefined),
+  endSession: vi.fn(),
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.startSession.mockResolvedValue(transaction);
   mocks.findById.mockResolvedValue(user);
   mocks.findByEmail.mockResolvedValue(null);
   mocks.findByPhone.mockResolvedValue(null);
@@ -101,6 +129,29 @@ beforeEach(() => {
 });
 
 describe("userService.createWithHashedPassword", () => {
+  it("creates an accountant profile in the user creation transaction", async () => {
+    const accountantUser = {
+      ...user,
+      role: ROLES.ACCOUNTANT,
+    };
+    mocks.create.mockResolvedValue(accountantUser);
+
+    await userService.createWithHashedPassword({
+      email: "accountant@example.com",
+      passwordHash: "hashed-password",
+      phone: "0123456789",
+      fullName: "Test Accountant",
+      role: ROLES.ACCOUNTANT,
+    });
+
+    expect(mocks.accountantCreate).toHaveBeenCalledWith(
+      { userId: accountantUser._id },
+      transaction,
+    );
+    expect(transaction.commitTransaction).toHaveBeenCalled();
+    expect(transaction.endSession).toHaveBeenCalled();
+  });
+
   it("requires role-specific profile data before creating staff accounts", async () => {
     await expect(
       userService.createWithHashedPassword({
@@ -299,6 +350,65 @@ describe("userService.searchPaginated", () => {
 });
 
 describe("userService.updateById and updateRole preconditions", () => {
+  it("activates an existing accountant profile when assigning the accountant role", async () => {
+    mocks.getAccountantByUserId.mockResolvedValueOnce({ _id: "accountant-1" });
+    mocks.updateById.mockResolvedValueOnce({
+      ...user,
+      role: ROLES.ACCOUNTANT,
+    });
+
+    await userService.updateRole(userId, ROLES.ACCOUNTANT);
+
+    expect(mocks.updateAccountantStatus).toHaveBeenCalledWith(
+      "accountant-1",
+      "active",
+      transaction,
+    );
+    expect(transaction.commitTransaction).toHaveBeenCalled();
+  });
+
+  it("creates an accountant profile when the role changes and no profile exists", async () => {
+    mocks.getAccountantByUserId.mockRejectedValueOnce(
+      new ApiError(404, "Accountant not found"),
+    );
+    mocks.updateById.mockResolvedValueOnce({
+      ...user,
+      role: ROLES.ACCOUNTANT,
+    });
+
+    await userService.updateRole(userId, ROLES.ACCOUNTANT);
+
+    expect(mocks.accountantCreate).toHaveBeenCalledWith(
+      { userId },
+      transaction,
+    );
+    expect(transaction.commitTransaction).toHaveBeenCalled();
+  });
+
+  it("synchronizes accountant profile status with the user account", async () => {
+    mocks.findById.mockResolvedValueOnce({
+      ...user,
+      role: ROLES.ACCOUNTANT,
+    });
+    mocks.getAccountantByUserId.mockResolvedValueOnce({
+      _id: "accountant-1",
+    });
+
+    await userService.updateStatus(userId, USER_STATUSES.LOCKED);
+
+    expect(mocks.updateById).toHaveBeenCalledWith(
+      userId,
+      { status: USER_STATUSES.LOCKED },
+      transaction,
+    );
+    expect(mocks.updateAccountantStatus).toHaveBeenCalledWith(
+      "accountant-1",
+      "inactive",
+      transaction,
+    );
+    expect(transaction.commitTransaction).toHaveBeenCalled();
+  });
+
   it("requires dedicated operations to change role or status", async () => {
     for (const updateData of [
       { role: ROLES.DRIVER },

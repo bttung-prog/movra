@@ -12,21 +12,21 @@ const codSettlementRouter = express.Router();
 
 codSettlementRouter.post(
   "/generate",
-  authorize(ROLES.ADMIN, ROLES.DISPATCHER),
+  authorize(ROLES.ADMIN, ROLES.ACCOUNTANT),
   validate(codSettlementValidator.generateSettlementSchema),
   codSettlementController.generate,
 );
 
 codSettlementRouter.patch(
   "/:id/confirm",
-  authorize(ROLES.ADMIN, ROLES.DISPATCHER),
+  authorize(ROLES.ADMIN, ROLES.ACCOUNTANT),
   validate(codSettlementValidator.paramIdSchema, "params"),
   codSettlementController.confirm,
 );
 
 codSettlementRouter.post(
   "/:id/complete",
-  authorize(ROLES.ADMIN, ROLES.DISPATCHER),
+  authorize(ROLES.ADMIN, ROLES.ACCOUNTANT),
   validate(codSettlementValidator.paramIdSchema, "params"),
   validate(codSettlementValidator.completeSettlementSchema),
   codSettlementController.complete,
@@ -34,7 +34,7 @@ codSettlementRouter.post(
 
 codSettlementRouter.post(
   "/:id/cancel",
-  authorize(ROLES.ADMIN, ROLES.DISPATCHER),
+  authorize(ROLES.ADMIN, ROLES.ACCOUNTANT),
   validate(codSettlementValidator.paramIdSchema, "params"),
   validate(codSettlementValidator.cancelSettlementSchema),
   codSettlementController.cancel,
@@ -49,20 +49,20 @@ codSettlementRouter.get(
 
 codSettlementRouter.get(
   "/code/:code",
-  authorize(ROLES.ADMIN, ROLES.DISPATCHER, ROLES.CUSTOMER),
+  authorize(ROLES.ADMIN, ROLES.DISPATCHER, ROLES.ACCOUNTANT, ROLES.CUSTOMER),
   codSettlementController.getByCode,
 );
 
 codSettlementRouter.get(
   "/:id",
-  authorize(ROLES.ADMIN, ROLES.DISPATCHER, ROLES.CUSTOMER),
+  authorize(ROLES.ADMIN, ROLES.DISPATCHER, ROLES.ACCOUNTANT, ROLES.CUSTOMER),
   validate(codSettlementValidator.paramIdSchema, "params"),
   codSettlementController.getById,
 );
 
 codSettlementRouter.get(
   "/",
-  authorize(ROLES.ADMIN, ROLES.DISPATCHER),
+  authorize(ROLES.ADMIN, ROLES.DISPATCHER, ROLES.ACCOUNTANT),
   validate(codSettlementValidator.querySettlementSchema, "query"),
   codSettlementController.getAll,
 );

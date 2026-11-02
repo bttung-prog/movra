@@ -94,7 +94,7 @@ const topUp = async (payload, actor) => {
 
 const adjustWallet = async (payload, actor) => {
   const { customerId, amount, direction, reason } = payload;
-  if (!actor?.userId || actor.role !== ROLES.ADMIN) {
+  if (!actor?.userId || ![ROLES.ADMIN, ROLES.ACCOUNTANT].includes(actor.role)) {
     throw new ApiError(403, WALLET_TRANSACTION_MESSAGES.ADMIN_ONLY_ADJUSTMENT);
   }
 

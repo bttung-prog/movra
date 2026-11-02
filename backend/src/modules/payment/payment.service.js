@@ -41,14 +41,17 @@ const assertPaymentWarehouseAccess = async (payment, actor) => {
     await invoiceService.getById(invoiceId, actor);
     hasScopedResource = true;
   }
+
   if (orderId) {
     await orderService.getById(orderId, true, actor);
     hasScopedResource = true;
   }
+
   if (tripId) {
     await tripService.getById(tripId, false, actor);
     hasScopedResource = true;
   }
+
   for (const codOrder of payment.codOrders || []) {
     const codOrderId = codOrder.orderId?._id || codOrder.orderId;
     await orderService.getById(codOrderId, true, actor);
@@ -498,7 +501,7 @@ const create = async (payload, actor) => {
     }
   }
 
-  const isStaff = [ROLES.ADMIN, ROLES.DISPATCHER].includes(actor?.role);
+  const isStaff = [ROLES.ADMIN, ROLES.ACCOUNTANT].includes(actor?.role);
   const shouldCompleteImmediately =
     paymentMethod === PAYMENT_METHODS.WALLET_BALANCE ||
     (isStaff && Boolean(isImmediateVerify));
@@ -727,8 +730,6 @@ const verifyPayment = async (paymentId, payload, verifierUser) => {
   if (!payment) {
     throw new ApiError(404, PAYMENT_MESSAGES.NOT_FOUND);
   }
-  await assertPaymentWarehouseAccess(payment, verifierUser);
-
   if (payment.paymentStatus !== PAYMENT_STATUSES.PENDING) {
     throw new ApiError(400, PAYMENT_MESSAGES.ALREADY_VERIFIED);
   }

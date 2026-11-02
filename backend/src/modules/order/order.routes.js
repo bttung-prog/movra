@@ -48,7 +48,7 @@ orderRouter.get(
 
 orderRouter.get(
   "/trip/:tripId",
-  authorize(ROLES.ADMIN, ROLES.DISPATCHER, ROLES.DRIVER),
+  authorize(ROLES.ADMIN, ROLES.DISPATCHER, ROLES.ACCOUNTANT, ROLES.DRIVER),
   validate(orderValidator.paramTripIdSchema, "params"),
   validate(orderValidator.queryOrderSchema, "query"),
   orderController.getByTripId,
@@ -96,7 +96,13 @@ orderRouter.post(
 
 orderRouter.get(
   "/code/:orderCode",
-  authorize(ROLES.ADMIN, ROLES.DISPATCHER, ROLES.DRIVER, ROLES.CUSTOMER),
+  authorize(
+    ROLES.ADMIN,
+    ROLES.DISPATCHER,
+    ROLES.ACCOUNTANT,
+    ROLES.DRIVER,
+    ROLES.CUSTOMER,
+  ),
   validate(orderValidator.paramOrderCodeSchema, "params"),
   orderController.getByCode,
 );
@@ -126,14 +132,20 @@ orderRouter.post(
 
 orderRouter.get(
   "/:orderId",
-  authorize(ROLES.ADMIN, ROLES.DISPATCHER, ROLES.DRIVER, ROLES.CUSTOMER),
+  authorize(
+    ROLES.ADMIN,
+    ROLES.DISPATCHER,
+    ROLES.ACCOUNTANT,
+    ROLES.DRIVER,
+    ROLES.CUSTOMER,
+  ),
   validate(orderValidator.paramOrderIdSchema, "params"),
   orderController.getById,
 );
 
 orderRouter.get(
   "/",
-  authorize(ROLES.ADMIN, ROLES.DISPATCHER),
+  authorize(ROLES.ADMIN, ROLES.DISPATCHER, ROLES.ACCOUNTANT),
   validate(orderValidator.queryOrderSchema, "query"),
   orderController.getAll,
 );

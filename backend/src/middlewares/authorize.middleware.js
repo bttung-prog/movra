@@ -6,6 +6,7 @@ import ApiError from "../utils/ApiError.js";
 
 import User from "../modules/user/user.js";
 import Dispatcher from "../modules/dispatcher/dispatcher.js";
+import Accountant from "../modules/accountant/accountant.js";
 import Driver from "../modules/driver/driver.js";
 import Warehouse from "../modules/warehouse/warehouse.js";
 import WarehouseStaff from "../modules/staff/staff.js";
@@ -90,6 +91,18 @@ const authorizeMiddleware = (...allowedRoles) => {
 
         req.user.dispatcherId = dispatcher._id;
         req.user.warehouseId = dispatcher.warehouseId;
+      }
+
+      if (userRole === ROLES.ACCOUNTANT) {
+        const accountant = await Accountant.findOne({ userId })
+          .select("_id status")
+          .lean();
+
+        if (!accountant || accountant.status !== "active") {
+          throw new ApiError(403, COMMON_MESSAGES.FORBIDDEN);
+        }
+
+        req.user.accountantId = accountant._id;
       }
 
       return next();
