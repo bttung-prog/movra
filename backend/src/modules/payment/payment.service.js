@@ -103,6 +103,26 @@ const assertCustomerOwnsResource = (resourceCustomerId, actor) => {
   }
 };
 
+const buildVietQrUrl = (amount, paymentCode) => {
+  const { VIETQR_BANK_ID, VIETQR_ACCOUNT_NUMBER, VIETQR_ACCOUNT_NAME } =
+    process.env;
+
+  if (!VIETQR_BANK_ID || !VIETQR_ACCOUNT_NUMBER) {
+    throw new ApiError(500, PAYMENT_MESSAGES.VIETQR_CONFIGURATION_MISSING);
+  }
+
+  const template = process.env.VIETQR_TEMPLATE || "compact2";
+  const query = new URLSearchParams({
+    amount: String(amount),
+    addInfo: paymentCode,
+  });
+  if (VIETQR_ACCOUNT_NAME) {
+    query.set("accountName", VIETQR_ACCOUNT_NAME);
+  }
+
+  return `https://img.vietqr.io/image/${encodeURIComponent(VIETQR_BANK_ID)}-${encodeURIComponent(VIETQR_ACCOUNT_NUMBER)}-${encodeURIComponent(template)}.png?${query}`;
+};
+
 const syncCompletedPaymentEffects = async ({
   invoiceId,
   orderId,
@@ -203,6 +223,7 @@ const syncCompletedPaymentEffects = async ({
       };
 
       if (payerType === PAYER_TYPES.CUSTOMER) {
+        updateData.paymentMethod = paymentMethod;
         const shippingFee = Number(order.shippingFee || 0);
         const previouslyPaidAmount = Number(
           order.shippingFeePaidAmount ??
@@ -486,6 +507,10 @@ const create = async (payload, actor) => {
     : PAYMENT_STATUSES.PENDING;
 
   const paymentCode = generateCode("PAY");
+  const qrCodeUrl =
+    paymentMethod === PAYMENT_METHODS.BANK && payerType === PAYER_TYPES.CUSTOMER
+      ? buildVietQrUrl(paymentAmount, paymentCode)
+      : null;
 
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -500,6 +525,7 @@ const create = async (payload, actor) => {
       paymentDate: new Date(),
       paymentAmount,
       paymentMethod,
+      qrCodeUrl,
       paymentStatus: initialStatus,
       transactionReference: transactionReference || null,
       handledBy: shouldCompleteImmediately

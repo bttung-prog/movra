@@ -187,7 +187,7 @@ const orderSchema = new mongoose.Schema(
 
     paymentMethod: {
       type: String,
-      required: true,
+      default: null,
       trim: true,
     },
 
