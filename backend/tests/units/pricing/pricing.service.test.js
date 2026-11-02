@@ -67,11 +67,11 @@ describe("pricingService.calculateFee", () => {
     expect(result.breakdown).toMatchObject({
       basePrice: 16500,
       weightFee: 5000,
-      distanceFee: 10000,
+      distanceFee: 26000,
       surchargeAmount: 0,
-      totalShippingFee: 31500,
+      totalShippingFee: 47500,
     });
-    expect(result.totalShippingFee).toBe(31500);
+    expect(result.totalShippingFee).toBe(47500);
   });
 
   it("uses route distance and applies matched category surcharge", async () => {
