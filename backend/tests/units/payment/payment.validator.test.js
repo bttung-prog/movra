@@ -27,15 +27,34 @@ describe("paymentValidator.createPaymentSchema", () => {
       }).error,
     ).toBeDefined();
 
+    expect(
+      paymentValidator.createPaymentSchema.validate({
+        orderId,
+        paymentAmount: 1000,
+        paymentMethod: PAYMENT_METHODS.CASH,
+      }).error,
+    ).toBeDefined();
+
     for (const paymentAmount of [0, -1, 1.5]) {
       expect(
         paymentValidator.createPaymentSchema.validate({
-          orderId,
+          invoiceId,
           paymentAmount,
           paymentMethod: PAYMENT_METHODS.CASH,
         }).error,
       ).toBeDefined();
     }
+  });
+
+  it("accepts an order payment only when its invoice ID is provided", () => {
+    const { error } = paymentValidator.createPaymentSchema.validate({
+      invoiceId,
+      orderId,
+      paymentAmount: 1000,
+      paymentMethod: PAYMENT_METHODS.CASH,
+    });
+
+    expect(error).toBeUndefined();
   });
 
   it("rejects invalid IDs, payment methods, and malformed proof URLs", () => {

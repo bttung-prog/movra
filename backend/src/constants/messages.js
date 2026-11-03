@@ -760,6 +760,7 @@ export const INVOICE_MESSAGES = {
   AMOUNT_MUST_BE_INTEGER: "Các khoản tiền phải là số nguyên",
   AMOUNT_OUT_OF_RANGE: "Số tiền vượt quá giới hạn cho phép",
   CUSTOMER_ORDER_MISMATCH: "Khách hàng trên hóa đơn không khớp với đơn hàng",
+  ORDER_MISMATCH: "Hóa đơn không thuộc đơn hàng đã chọn",
   ITEM_AMOUNT_MISMATCH:
     "Thành tiền của từng khoản phải bằng số lượng nhân với đơn giá",
   SUBTOTAL_ITEMS_MISMATCH:
@@ -778,6 +779,8 @@ export const INVOICE_MESSAGES = {
   NO_ELIGIBLE_ORDERS: "Không có đơn hàng nào hợp lệ để gộp hóa đơn",
   CANNOT_CANCEL_PAID: (paidAmount) =>
     `Không thể hủy hóa đơn đã có khoản thanh toán (${paidAmount}). Vui lòng xử lý hoàn tiền trước.`,
+  CANNOT_CANCEL_PENDING:
+    "Không thể hủy hóa đơn khi đang có giao dịch thanh toán chờ xác nhận",
 };
 
 export const PAYMENT_MESSAGES = {
@@ -796,6 +799,8 @@ export const PAYMENT_MESSAGES = {
   DUPLICATE_COD_ORDER: "Không thể khai báo trùng đơn hàng nộp COD",
   COD_ORDER_NOT_DELIVERED: "Chỉ có thể nộp COD của đơn đã giao thành công",
   COD_ALREADY_SETTLED: "COD của đơn hàng đã được đối soát",
+  ORDER_INVOICE_REQUIRED:
+    "Đơn hàng cần có hóa đơn hợp lệ trước khi tạo thanh toán",
   DRIVER_NOT_ASSIGNED_TO_COD_ORDER:
     "Tài xế không được phép nộp COD của đơn này",
   COD_ORDER_TRIP_MISMATCH: "Đơn hàng không thuộc chuyến xe đã chọn",

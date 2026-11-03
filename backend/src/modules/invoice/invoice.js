@@ -83,6 +83,10 @@ const invoicesSchema = new mongoose.Schema(
       required: true,
     }),
 
+    pendingAmount: integerMoney({
+      default: 0,
+    }),
+
     status: {
       type: String,
       enum: Object.values(INVOICE_STATUSES),

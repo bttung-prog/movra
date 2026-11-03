@@ -41,7 +41,9 @@ const createPaymentSchema = Joi.object({
   proofUrl: Joi.string().trim().uri().allow("").optional(),
   notes: Joi.string().trim().allow("").optional(),
   isImmediateVerify: Joi.boolean().optional(),
-}).or("invoiceId", "orderId");
+})
+  .or("invoiceId", "orderId")
+  .with("orderId", "invoiceId");
 
 const driverRemitSchema = Joi.object({
   tripId: objectId.optional(),

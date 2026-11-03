@@ -136,87 +136,98 @@ const syncCompletedPaymentEffects = async ({
   paymentId = null,
   session,
   actor = null,
+  releaseInvoiceReservation = false,
 }) => {
   let targetCustomerId = customerId;
   let invoicePaidAmount = null;
   let invoiceIsPaid = null;
 
+  if (orderId && !invoiceId) {
+    throw new ApiError(409, PAYMENT_MESSAGES.ORDER_INVOICE_REQUIRED);
+  }
+
   if (invoiceId) {
-    const invoice = await invoiceService.getById(invoiceId, actor);
-    if (invoice) {
-      if (
-        ![
-          INVOICE_STATUSES.ISSUED,
-          INVOICE_STATUSES.PARTIALLY_PAID,
-          INVOICE_STATUSES.OVERDUE,
-        ].includes(invoice.status)
-      ) {
-        throw new ApiError(
-          409,
-          INVOICE_MESSAGES.CANNOT_PAY_UNISSUED(invoice.status),
-        );
-      }
-      if (paymentAmount > invoice.remainingAmount) {
-        throw new ApiError(
-          409,
-          PAYMENT_MESSAGES.EXCEEDS_REMAINING_AMOUNT(invoice.remainingAmount),
-        );
-      }
+    const invoice = await invoiceService.getById(invoiceId, actor, session);
+    const invoiceOrderId = invoice.orderId?._id || invoice.orderId;
+    if (
+      orderId &&
+      (!invoiceOrderId || invoiceOrderId.toString() !== orderId.toString())
+    ) {
+      throw new ApiError(409, INVOICE_MESSAGES.ORDER_MISMATCH);
+    }
 
-      targetCustomerId =
-        targetCustomerId || invoice.customerId?._id || invoice.customerId;
-      const newPaidAmount = (invoice.paidAmount || 0) + paymentAmount;
-      invoicePaidAmount = newPaidAmount;
-      const newRemainingAmount = invoice.remainingAmount - paymentAmount;
-      const newStatus =
-        newRemainingAmount === 0
-          ? INVOICE_STATUSES.PAID
-          : INVOICE_STATUSES.PARTIALLY_PAID;
-      invoiceIsPaid = newStatus === INVOICE_STATUSES.PAID;
-
-      const updatedInvoice = await invoiceService.updatePaymentProgress(
-        invoiceId,
-        {
-          paidAmount: newPaidAmount,
-          remainingAmount: newRemainingAmount,
-          status: newStatus,
-        },
-        session,
-        {
-          status: {
-            $in: [
-              INVOICE_STATUSES.ISSUED,
-              INVOICE_STATUSES.PARTIALLY_PAID,
-              INVOICE_STATUSES.OVERDUE,
-            ],
-          },
-          paidAmount: invoice.paidAmount || 0,
-          remainingAmount: { $gte: paymentAmount },
-        },
+    if (
+      ![
+        INVOICE_STATUSES.ISSUED,
+        INVOICE_STATUSES.PARTIALLY_PAID,
+        INVOICE_STATUSES.OVERDUE,
+      ].includes(invoice.status)
+    ) {
+      throw new ApiError(
+        409,
+        INVOICE_MESSAGES.CANNOT_PAY_UNISSUED(invoice.status),
       );
-      if (!updatedInvoice) {
-        throw new ApiError(
-          409,
-          PAYMENT_MESSAGES.EXCEEDS_REMAINING_AMOUNT(invoice.remainingAmount),
-        );
-      }
+    }
 
-      const targetOrderId = invoice.orderId?._id || invoice.orderId;
-      if (!orderId && targetOrderId && newStatus === INVOICE_STATUSES.PAID) {
-        orderId = targetOrderId;
-      }
+    if (paymentAmount > invoice.remainingAmount) {
+      throw new ApiError(
+        409,
+        PAYMENT_MESSAGES.EXCEEDS_REMAINING_AMOUNT(invoice.remainingAmount),
+      );
+    }
+
+    targetCustomerId =
+      targetCustomerId || invoice.customerId?._id || invoice.customerId;
+    const newPaidAmount = (invoice.paidAmount || 0) + paymentAmount;
+    invoicePaidAmount = newPaidAmount;
+    const newRemainingAmount = invoice.remainingAmount - paymentAmount;
+    const newStatus =
+      newRemainingAmount === 0
+        ? INVOICE_STATUSES.PAID
+        : INVOICE_STATUSES.PARTIALLY_PAID;
+    invoiceIsPaid = newStatus === INVOICE_STATUSES.PAID;
+
+    const updatedInvoice = await invoiceService.updatePaymentProgress(
+      invoiceId,
+      {
+        paidAmount: newPaidAmount,
+        remainingAmount: newRemainingAmount,
+        status: newStatus,
+        ...(releaseInvoiceReservation
+          ? { $inc: { pendingAmount: -paymentAmount } }
+          : {}),
+      },
+      session,
+      {
+        status: {
+          $in: [
+            INVOICE_STATUSES.ISSUED,
+            INVOICE_STATUSES.PARTIALLY_PAID,
+            INVOICE_STATUSES.OVERDUE,
+          ],
+        },
+        paidAmount: invoice.paidAmount || 0,
+        remainingAmount: { $gte: paymentAmount },
+        ...(releaseInvoiceReservation
+          ? { pendingAmount: { $gte: paymentAmount } }
+          : {}),
+      },
+    );
+    if (!updatedInvoice) {
+      throw new ApiError(
+        409,
+        PAYMENT_MESSAGES.EXCEEDS_REMAINING_AMOUNT(invoice.remainingAmount),
+      );
+    }
+
+    const targetOrderId = invoice.orderId?._id || invoice.orderId;
+    if (!orderId && targetOrderId && newStatus === INVOICE_STATUSES.PAID) {
+      orderId = targetOrderId;
     }
   }
 
   if (orderId) {
-    const isDirectOrderPayment =
-      payerType === PAYER_TYPES.CUSTOMER && !invoiceId;
-    const order = await orderService.getById(
-      orderId,
-      true,
-      actor,
-      isDirectOrderPayment ? session : null,
-    );
+    const order = await orderService.getById(orderId, true, actor, session);
     if (order) {
       targetCustomerId =
         targetCustomerId || order.customerId?._id || order.customerId;
@@ -228,66 +239,20 @@ const syncCompletedPaymentEffects = async ({
       if (payerType === PAYER_TYPES.CUSTOMER) {
         updateData.paymentMethod = paymentMethod;
         const shippingFee = Number(order.shippingFee || 0);
-        const previouslyPaidAmount = Number(
-          order.shippingFeePaidAmount ??
-            (order.shippingFeePaid ? shippingFee : 0),
-        );
-        const remainingShippingFee = Math.max(
-          0,
-          shippingFee - previouslyPaidAmount,
-        );
-        if (isDirectOrderPayment) {
-          if (remainingShippingFee <= 0) {
-            throw new ApiError(400, ORDER_MESSAGES.SHIPPING_FEE_ALREADY_PAID);
-          }
-          if (paymentAmount > remainingShippingFee) {
-            throw new ApiError(
-              400,
-              PAYMENT_MESSAGES.EXCEEDS_ORDER_SHIPPING_BALANCE(
-                remainingShippingFee,
-              ),
-            );
-          }
-        }
-
-        const amountPaidTowardOrder =
-          invoicePaidAmount ?? previouslyPaidAmount + paymentAmount;
         updateData.shippingFeePaidAmount = Math.min(
           shippingFee,
-          Math.max(0, amountPaidTowardOrder),
+          Math.max(0, invoicePaidAmount ?? 0),
         );
         updateData.shippingFeePaid =
           updateData.shippingFeePaidAmount >= shippingFee;
-        if (!invoiceId) {
-          updateData.paymentStatus = updateData.shippingFeePaid
-            ? "success"
-            : "pending";
-        }
       }
 
-      const updateConditions =
-        payerType === PAYER_TYPES.CUSTOMER && !invoiceId
-          ? {
-              shippingFee: order.shippingFee,
-              shippingFeePaid:
-                order.shippingFeePaid === true ? true : { $in: [null, false] },
-              shippingFeePaidAmount:
-                order.shippingFeePaidAmount == null
-                  ? { $in: [null, 0] }
-                  : Number(order.shippingFeePaidAmount),
-            }
-          : {};
-
-      const updatedOrder = await orderService.updateById({
+      await orderService.updateById({
         orderId,
         updateData,
         session,
-        conditions: updateConditions,
         user: actor,
       });
-      if (isDirectOrderPayment && !updatedOrder) {
-        throw new ApiError(409, PAYMENT_MESSAGES.ORDER_PAYMENT_CHANGED);
-      }
     }
   }
 
@@ -368,19 +333,18 @@ const create = async (payload, actor) => {
   let finalOrderId = inputOrderId;
   let linkedInvoiceId = invoiceId;
   let customerId = null;
+  let availableInvoiceAmount = null;
 
   if (!linkedInvoiceId && finalOrderId) {
     const activeInvoice = await invoiceService.getByOrderId(
       finalOrderId,
       actor,
     );
-    if (
-      activeInvoice &&
-      activeInvoice.status !== INVOICE_STATUSES.CANCELLED &&
-      activeInvoice.status !== INVOICE_STATUSES.PAID
-    ) {
-      linkedInvoiceId = activeInvoice._id;
+    if (!activeInvoice) {
+      await orderService.getById(finalOrderId, true, actor);
+      throw new ApiError(400, PAYMENT_MESSAGES.ORDER_INVOICE_REQUIRED);
     }
+    linkedInvoiceId = activeInvoice._id;
   }
 
   if (linkedInvoiceId) {
@@ -403,6 +367,7 @@ const create = async (payload, actor) => {
 
     if (
       ![
+        INVOICE_STATUSES.DRAFT,
         INVOICE_STATUSES.ISSUED,
         INVOICE_STATUSES.PARTIALLY_PAID,
         INVOICE_STATUSES.OVERDUE,
@@ -414,14 +379,24 @@ const create = async (payload, actor) => {
       );
     }
 
-    if (paymentAmount > invoice.remainingAmount) {
+    availableInvoiceAmount =
+      invoice.remainingAmount - Number(invoice.pendingAmount || 0);
+    if (paymentAmount > availableInvoiceAmount) {
       throw new ApiError(
         400,
-        PAYMENT_MESSAGES.EXCEEDS_REMAINING_AMOUNT(invoice.remainingAmount),
+        PAYMENT_MESSAGES.EXCEEDS_REMAINING_AMOUNT(availableInvoiceAmount),
       );
     }
 
-    finalOrderId = finalOrderId || invoice.orderId?._id || invoice.orderId;
+    const invoiceOrderId = invoice.orderId?._id || invoice.orderId;
+    if (
+      finalOrderId &&
+      (!invoiceOrderId || invoiceOrderId.toString() !== finalOrderId.toString())
+    ) {
+      throw new ApiError(400, INVOICE_MESSAGES.ORDER_MISMATCH);
+    }
+
+    finalOrderId = finalOrderId || invoiceOrderId;
     customerId = invoice.customerId?._id || invoice.customerId;
   }
 
@@ -442,27 +417,6 @@ const create = async (payload, actor) => {
         );
       }
 
-      if (order.shippingFeePaid) {
-        throw new ApiError(400, ORDER_MESSAGES.SHIPPING_FEE_ALREADY_PAID);
-      }
-
-      if (!linkedInvoiceId) {
-        const shippingFee = Number(order.shippingFee || 0);
-        const paidAmount = Number(
-          order.shippingFeePaidAmount ??
-            (order.shippingFeePaid ? shippingFee : 0),
-        );
-        const remainingShippingFee = Math.max(0, shippingFee - paidAmount);
-        if (paymentAmount > remainingShippingFee) {
-          throw new ApiError(
-            400,
-            PAYMENT_MESSAGES.EXCEEDS_ORDER_SHIPPING_BALANCE(
-              remainingShippingFee,
-            ),
-          );
-        }
-      }
-
       customerId = customerId || order.customerId?._id || order.customerId;
     } else if (!customerId) {
       customerId = order.customerId?._id || order.customerId;
@@ -477,16 +431,6 @@ const create = async (payload, actor) => {
     }
     if (finalOrderId) {
       await orderService.getById(finalOrderId, true, actor);
-    }
-    if (linkedInvoiceId) {
-      const invoiceOrderId = invoice?.orderId?._id || invoice?.orderId;
-      if (
-        invoiceOrderId &&
-        finalOrderId &&
-        invoiceOrderId.toString() !== finalOrderId.toString()
-      ) {
-        throw new ApiError(400, PAYMENT_MESSAGES.ACCESS_DENIED);
-      }
     }
   }
 
@@ -530,6 +474,8 @@ const create = async (payload, actor) => {
       paymentMethod,
       qrCodeUrl,
       paymentStatus: initialStatus,
+      invoiceAmountReserved:
+        Boolean(linkedInvoiceId) && initialStatus === PAYMENT_STATUSES.PENDING,
       transactionReference: transactionReference || null,
       handledBy: shouldCompleteImmediately
         ? actor?.userId || actor?._id || null
@@ -537,6 +483,26 @@ const create = async (payload, actor) => {
       proofUrl: proofUrl || null,
       notes,
     };
+
+    if (invoice?.status === INVOICE_STATUSES.DRAFT) {
+      await invoiceService.issueInvoice(linkedInvoiceId, null, session);
+    }
+
+    if (paymentData.invoiceAmountReserved) {
+      const reservedInvoice = await invoiceService.reservePendingPayment(
+        linkedInvoiceId,
+        paymentAmount,
+        session,
+      );
+      if (!reservedInvoice) {
+        throw new ApiError(
+          409,
+          PAYMENT_MESSAGES.EXCEEDS_REMAINING_AMOUNT(
+            availableInvoiceAmount ?? 0,
+          ),
+        );
+      }
+    }
 
     const newPayment = await paymentRepository.create(paymentData, session);
 
@@ -735,6 +701,51 @@ const verifyPayment = async (paymentId, payload, verifierUser) => {
   }
 
   if (status === PAYMENT_STATUSES.FAILED) {
+    if (payment.invoiceAmountReserved) {
+      const session = await mongoose.startSession();
+      session.startTransaction();
+
+      try {
+        const updatedPayment = await paymentRepository.updateById(
+          paymentId,
+          {
+            paymentStatus: PAYMENT_STATUSES.FAILED,
+            invoiceAmountReserved: false,
+            handledBy: verifierUser.userId,
+            notes: payment.notes
+              ? `${payment.notes} | Từ chối: ${notes}`
+              : `Từ chối: ${notes}`,
+          },
+          session,
+          {
+            paymentStatus: PAYMENT_STATUSES.PENDING,
+            invoiceAmountReserved: true,
+          },
+        );
+        if (!updatedPayment) {
+          throw new ApiError(409, PAYMENT_MESSAGES.ALREADY_VERIFIED);
+        }
+
+        const invoiceId = payment.invoiceId?._id || payment.invoiceId;
+        const releasedInvoice = await invoiceService.releasePendingPayment(
+          invoiceId,
+          payment.paymentAmount,
+          session,
+        );
+        if (!releasedInvoice) {
+          throw new ApiError(409, PAYMENT_MESSAGES.ALREADY_VERIFIED);
+        }
+
+        await session.commitTransaction();
+        return updatedPayment;
+      } catch (error) {
+        await session.abortTransaction();
+        throw error;
+      } finally {
+        session.endSession();
+      }
+    }
+
     const updatedPayment = await paymentRepository.updateById(
       paymentId,
       {
@@ -761,6 +772,7 @@ const verifyPayment = async (paymentId, payload, verifierUser) => {
       paymentId,
       {
         paymentStatus: PAYMENT_STATUSES.COMPLETED,
+        invoiceAmountReserved: false,
         handledBy: verifierUser.userId,
         notes: notes
           ? `${payment.notes || ""} | Duyệt: ${notes}`
@@ -811,6 +823,7 @@ const verifyPayment = async (paymentId, payload, verifierUser) => {
         paymentId: payment._id,
         session,
         actor: verifierUser,
+        releaseInvoiceReservation: Boolean(payment.invoiceAmountReserved),
       });
     }
 
