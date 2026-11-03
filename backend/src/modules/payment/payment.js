@@ -131,6 +131,11 @@ const paymentsSchema = new mongoose.Schema(
       default: PAYMENT_STATUSES.PENDING,
     },
 
+    invoiceAmountReserved: {
+      type: Boolean,
+      default: false,
+    },
+
     transactionReference: {
       type: String,
       trim: true,

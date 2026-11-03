@@ -349,6 +349,53 @@ describe("invoiceService issue, update and cancel", () => {
     );
   });
 
+  it("issues a draft invoice inside the caller's transaction", async () => {
+    const session = { transactionId: "transaction-1" };
+    mocks.updateById.mockResolvedValue({
+      ...draftInvoice,
+      status: INVOICE_STATUSES.ISSUED,
+    });
+
+    await invoiceService.issueInvoice(invoiceId, null, session);
+
+    expect(mocks.findById).toHaveBeenCalledWith(invoiceId, session);
+    expect(mocks.updateById).toHaveBeenCalledWith(
+      invoiceId,
+      expect.objectContaining({ status: INVOICE_STATUSES.ISSUED }),
+      session,
+      expect.objectContaining({ status: INVOICE_STATUSES.DRAFT }),
+    );
+  });
+
+  it("reserves and releases pending payment amounts conditionally", async () => {
+    const session = { transactionId: "transaction-1" };
+    await invoiceService.reservePendingPayment(invoiceId, 1000, session);
+
+    expect(mocks.updateById).toHaveBeenCalledWith(
+      invoiceId,
+      { $inc: { pendingAmount: 1000 } },
+      session,
+      expect.objectContaining({
+        status: {
+          $in: [
+            INVOICE_STATUSES.ISSUED,
+            INVOICE_STATUSES.PARTIALLY_PAID,
+            INVOICE_STATUSES.OVERDUE,
+          ],
+        },
+        $expr: expect.any(Object),
+      }),
+    );
+
+    await invoiceService.releasePendingPayment(invoiceId, 1000, session);
+    expect(mocks.updateById).toHaveBeenLastCalledWith(
+      invoiceId,
+      { $inc: { pendingAmount: -1000 } },
+      session,
+      { pendingAmount: { $gte: 1000 } },
+    );
+  });
+
   it("rejects issuing a non-draft invoice and reports concurrent changes", async () => {
     mocks.findById.mockResolvedValue({
       ...draftInvoice,
@@ -461,6 +508,7 @@ describe("invoiceService issue, update and cancel", () => {
       status: INVOICE_STATUSES.PARTIALLY_PAID,
       paidAmount: 500,
     });
+
     await expect(
       invoiceService.cancelInvoice(invoiceId, "Duplicate"),
     ).rejects.toMatchObject({
@@ -479,6 +527,21 @@ describe("invoiceService issue, update and cancel", () => {
       message: INVOICE_MESSAGES.CANNOT_CANCEL_STATUS(
         INVOICE_STATUSES.CANCELLED,
       ),
+    });
+  });
+
+  it("prevents cancelling invoices with pending payments", async () => {
+    mocks.findById.mockResolvedValue({
+      ...draftInvoice,
+      status: INVOICE_STATUSES.ISSUED,
+      pendingAmount: 1000,
+    });
+
+    await expect(
+      invoiceService.cancelInvoice(invoiceId, "Duplicate"),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: INVOICE_MESSAGES.CANNOT_CANCEL_PENDING,
     });
   });
 });

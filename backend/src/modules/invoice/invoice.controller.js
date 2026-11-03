@@ -1,4 +1,3 @@
-import ROLES from "../../constants/roles.js";
 import { INVOICE_MESSAGES } from "../../constants/messages.js";
 
 import ApiResponse from "../../utils/ApiResponse.js";
@@ -12,10 +11,6 @@ const create = async (req, res, next) => {
       ...req.body,
       issuedBy: req.user.userId,
     };
-
-    if (req.user.role === ROLES.CUSTOMER && req.user.customerId) {
-      payload.customerId = req.user.customerId;
-    }
 
     const invoice = await invoiceService.create(payload, null, req.user);
     return ApiResponse.created(res, invoice, INVOICE_MESSAGES.CREATE_SUCCESS);
@@ -133,11 +128,7 @@ const issue = async (req, res, next) => {
   try {
     const { invoiceId } = req.params;
     const issuedBy = req.user.userId;
-    const invoice = await invoiceService.issueInvoice(
-      invoiceId,
-      issuedBy,
-      req.user,
-    );
+    const invoice = await invoiceService.issueInvoice(invoiceId, issuedBy);
     return ApiResponse.success(res, invoice, INVOICE_MESSAGES.ISSUE_SUCCESS);
   } catch (error) {
     next(error);

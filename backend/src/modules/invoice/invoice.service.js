@@ -241,8 +241,8 @@ const getAll = async ({
   };
 };
 
-const getById = async (id, actor = null) => {
-  const invoice = await invoiceRepository.findById(id);
+const getById = async (invoiceId, actor = null, session = null) => {
+  const invoice = await invoiceRepository.findById(invoiceId, session);
   if (!invoice) {
     throw new ApiError(404, INVOICE_MESSAGES.NOT_FOUND);
   }
@@ -287,13 +287,11 @@ const getByCode = async (invoiceCode, actor = null) => {
   return invoice;
 };
 
-const issueInvoice = async (id, issuedBy = null, actor = null) => {
-  const invoice = await invoiceRepository.findById(id);
+const issueInvoice = async (invoiceId, issuedBy = null, session = null) => {
+  const invoice = await invoiceRepository.findById(invoiceId, session);
   if (!invoice) {
     throw new ApiError(404, INVOICE_MESSAGES.NOT_FOUND);
   }
-
-  await assertInvoiceWarehouseAccess(invoice, actor);
 
   if (invoice.status !== INVOICE_STATUSES.DRAFT) {
     throw new ApiError(
@@ -303,13 +301,13 @@ const issueInvoice = async (id, issuedBy = null, actor = null) => {
   }
 
   const updatedInvoice = await invoiceRepository.updateById(
-    id,
+    invoiceId,
     {
       status: INVOICE_STATUSES.ISSUED,
       issueDate: new Date(),
       ...(issuedBy ? { issuedBy } : {}),
     },
-    null,
+    session,
     { status: INVOICE_STATUSES.DRAFT, updatedAt: invoice.updatedAt },
   );
 
@@ -320,12 +318,46 @@ const issueInvoice = async (id, issuedBy = null, actor = null) => {
   return updatedInvoice;
 };
 
-const updateById = async (id, updateData, actor = null) => {
-  const invoice = await invoiceRepository.findById(id);
+const reservePendingPayment = async (invoiceId, amount, session) => {
+  const reservedInvoice = await invoiceRepository.updateById(
+    invoiceId,
+    { $inc: { pendingAmount: amount } },
+    session,
+    {
+      status: {
+        $in: [
+          INVOICE_STATUSES.ISSUED,
+          INVOICE_STATUSES.PARTIALLY_PAID,
+          INVOICE_STATUSES.OVERDUE,
+        ],
+      },
+      $expr: {
+        $lte: [
+          {
+            $add: [{ $ifNull: ["$pendingAmount", 0] }, amount],
+          },
+          "$remainingAmount",
+        ],
+      },
+    },
+  );
+  return reservedInvoice;
+};
+
+const releasePendingPayment = async (invoiceId, amount, session) => {
+  return invoiceRepository.updateById(
+    invoiceId,
+    { $inc: { pendingAmount: -amount } },
+    session,
+    { pendingAmount: { $gte: amount } },
+  );
+};
+
+const updateById = async (invoiceId, updateData, actor = null) => {
+  const invoice = await invoiceRepository.findById(invoiceId);
   if (!invoice) {
     throw new ApiError(404, INVOICE_MESSAGES.NOT_FOUND);
   }
-  await assertInvoiceWarehouseAccess(invoice, actor);
 
   if (invoice.status !== INVOICE_STATUSES.DRAFT) {
     throw new ApiError(
@@ -369,7 +401,7 @@ const updateById = async (id, updateData, actor = null) => {
   const remainingAmount = Math.max(0, totalAmount - (invoice.paidAmount || 0));
 
   const updatedInvoice = await invoiceRepository.updateById(
-    id,
+    invoiceId,
     {
       ...updateData,
       ...(items ? { items } : {}),
@@ -388,8 +420,8 @@ const updateById = async (id, updateData, actor = null) => {
   return updatedInvoice;
 };
 
-const cancelInvoice = async (id, reason, actor = null) => {
-  const invoice = await invoiceRepository.findById(id);
+const cancelInvoice = async (invoiceId, reason, actor = null) => {
+  const invoice = await invoiceRepository.findById(invoiceId);
   if (!invoice) {
     throw new ApiError(404, INVOICE_MESSAGES.NOT_FOUND);
   }
@@ -406,6 +438,10 @@ const cancelInvoice = async (id, reason, actor = null) => {
     );
   }
 
+  if (invoice.pendingAmount > 0) {
+    throw new ApiError(400, INVOICE_MESSAGES.CANNOT_CANCEL_PENDING);
+  }
+
   if (invoice.status === INVOICE_STATUSES.CANCELLED) {
     throw new ApiError(
       400,
@@ -418,7 +454,7 @@ const cancelInvoice = async (id, reason, actor = null) => {
     : `Lý do hủy: ${reason}`;
 
   const updatedInvoice = await invoiceRepository.updateById(
-    id,
+    invoiceId,
     {
       status: INVOICE_STATUSES.CANCELLED,
       notes,
@@ -464,12 +500,17 @@ const getIdsByWarehouseId = async (warehouseId) => {
 };
 
 const updatePaymentProgress = async (
-  id,
+  invoiceId,
   updateData,
   session = null,
   conditions = {},
 ) => {
-  return invoiceRepository.updateById(id, updateData, session, conditions);
+  return invoiceRepository.updateById(
+    invoiceId,
+    updateData,
+    session,
+    conditions,
+  );
 };
 
 export default {
@@ -480,6 +521,8 @@ export default {
   getByOrderId,
   getIdsByWarehouseId,
   issueInvoice,
+  reservePendingPayment,
+  releasePendingPayment,
   updateById,
   updatePaymentProgress,
   cancelInvoice,

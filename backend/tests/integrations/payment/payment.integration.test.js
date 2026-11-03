@@ -29,12 +29,14 @@ vi.mock("../../../src/middlewares/auth.middleware.js", () => ({
 }));
 
 vi.mock("../../../src/middlewares/authorize.middleware.js", () => ({
-  default: (...allowedRoles) => (req, res, next) => {
-    if (!req.user || !allowedRoles.includes(req.user.role)) {
-      return next(new ApiError(403, "Forbidden"));
-    }
-    next();
-  },
+  default:
+    (...allowedRoles) =>
+    (req, res, next) => {
+      if (!req.user || !allowedRoles.includes(req.user.role)) {
+        return next(new ApiError(403, "Forbidden"));
+      }
+      next();
+    },
 }));
 
 import app from "../../../src/app.js";
@@ -60,6 +62,7 @@ describe("Payment API integration", () => {
       .post("/api/v1/payments")
       .set("Origin", "http://localhost:5173")
       .send({
+        invoiceId: "507f1f77bcf86cd799439015",
         orderId: "507f1f77bcf86cd799439013",
         payerType: "customer",
         paymentAmount: 250000,
@@ -76,6 +79,7 @@ describe("Payment API integration", () => {
     });
     expect(paymentServiceMock.create).toHaveBeenCalledWith(
       expect.objectContaining({
+        invoiceId: "507f1f77bcf86cd799439015",
         orderId: "507f1f77bcf86cd799439013",
         paymentAmount: 250000,
         paymentMethod: "bank",
@@ -94,6 +98,22 @@ describe("Payment API integration", () => {
       .set("Origin", "http://localhost:5173")
       .send({
         paymentAmount: 0,
+        paymentMethod: "bank",
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.success).toBe(false);
+    expect(paymentServiceMock.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects order payments without an invoice before calling the service", async () => {
+    const response = await request(app)
+      .post("/api/v1/payments")
+      .set("Origin", "http://localhost:5173")
+      .send({
+        orderId: "507f1f77bcf86cd799439013",
+        payerType: "customer",
+        paymentAmount: 250000,
         paymentMethod: "bank",
       });
 

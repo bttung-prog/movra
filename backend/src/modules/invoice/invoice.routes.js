@@ -12,7 +12,7 @@ const invoiceRouter = express.Router();
 
 invoiceRouter.post(
   "/",
-  authorize(ROLES.ADMIN, ROLES.ACCOUNTANT, ROLES.CUSTOMER),
+  authorize(ROLES.ADMIN, ROLES.ACCOUNTANT),
   validate(invoiceValidator.createInvoiceSchema),
   invoiceController.create,
 );
