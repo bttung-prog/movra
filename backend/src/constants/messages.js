@@ -667,6 +667,10 @@ export const ORDER_MESSAGES = {
     "Không thể thay đổi tiền COD sau khi đã thu hoặc nộp COD",
   CUSTOMER_LOCKED_AFTER_COD:
     "Không thể thay đổi khách hàng sau khi đã thu hoặc nộp COD",
+  COD_COLLECTION_REQUIRED:
+    "Đơn hàng có tiền thu hộ (COD). Vui lòng xác nhận số tiền COD đã thu khi giao hàng",
+  INVALID_COD_COLLECTED_AMOUNT:
+    "Số tiền COD thu được không hợp lệ hoặc không đủ số tiền COD của đơn hàng",
   CANNOT_MARK_DELIVERED: (status) =>
     `Không thể đánh dấu đơn hàng đã giao khi trạng thái hiện tại là '${status}'`,
   NOT_DRIVER_OF_TRIP: "Bạn không phải là tài xế được phân công cho chuyến này",

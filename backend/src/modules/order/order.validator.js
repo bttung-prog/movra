@@ -213,6 +213,7 @@ const markAsDeliveredSchema = Joi.object({
   address: Joi.string().trim().allow("").optional(),
   notes: Joi.string().trim().allow("").optional(),
   recipientReceivedName: Joi.string().trim().allow("").optional(),
+  codCollectedAmount: Joi.number().min(0).optional(),
 });
 
 const cancelOrderSchema = Joi.object({

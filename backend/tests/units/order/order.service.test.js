@@ -729,3 +729,107 @@ describe("orderService.updateById", () => {
     });
   });
 });
+
+describe("orderService.markAsDelivered", () => {
+  const deliveryOrder = {
+    _id: "order-1",
+    deletedAt: null,
+    orderCode: "ORD-0001",
+    status: "out_for_delivery",
+    codAmount: 50000,
+    codCollected: false,
+    codCollectedAmount: 0,
+    tripId: "trip-1",
+    customerId: { userId: { _id: "user-1" } },
+  };
+
+  it("requires codCollectedAmount when order has COD and has not been collected", async () => {
+    mocks.findById.mockResolvedValue(deliveryOrder);
+    mocks.getTripById.mockResolvedValue({ _id: "trip-1" });
+
+    await expect(
+      orderService.markAsDelivered({
+        orderId: "order-1",
+        user: { role: ROLES.ADMIN },
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: ORDER_MESSAGES.COD_COLLECTION_REQUIRED,
+    });
+  });
+
+  it("rejects when codCollectedAmount does not match order codAmount", async () => {
+    mocks.findById.mockResolvedValue(deliveryOrder);
+    mocks.getTripById.mockResolvedValue({ _id: "trip-1" });
+
+    await expect(
+      orderService.markAsDelivered({
+        orderId: "order-1",
+        codCollectedAmount: 30000,
+        user: { role: ROLES.ADMIN },
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: ORDER_MESSAGES.INVALID_COD_COLLECTED_AMOUNT,
+    });
+  });
+
+  it("marks as delivered and records COD collection when exact amount is provided", async () => {
+    mocks.findById.mockResolvedValue(deliveryOrder);
+    mocks.getTripById.mockResolvedValue({ _id: "trip-1" });
+    mocks.updateById.mockResolvedValue({
+      ...deliveryOrder,
+      status: "delivered",
+      codCollected: true,
+      codCollectedAmount: 50000,
+    });
+    mocks.createTrackingLog.mockResolvedValue({ _id: "log-1" });
+
+    const result = await orderService.markAsDelivered({
+      orderId: "order-1",
+      codCollectedAmount: 50000,
+      user: { role: ROLES.ADMIN },
+    });
+
+    expect(result.order.status).toBe("delivered");
+    expect(mocks.updateById).toHaveBeenCalledWith(
+      "order-1",
+      expect.objectContaining({
+        status: "delivered",
+        codCollected: true,
+        codCollectedAmount: 50000,
+      }),
+      transaction,
+      expect.any(Object),
+    );
+  });
+
+  it("marks as delivered without COD when order codAmount is 0", async () => {
+    mocks.findById.mockResolvedValue({
+      ...deliveryOrder,
+      codAmount: 0,
+    });
+    mocks.getTripById.mockResolvedValue({ _id: "trip-1" });
+    mocks.updateById.mockResolvedValue({
+      ...deliveryOrder,
+      codAmount: 0,
+      status: "delivered",
+    });
+    mocks.createTrackingLog.mockResolvedValue({ _id: "log-1" });
+
+    const result = await orderService.markAsDelivered({
+      orderId: "order-1",
+      user: { role: ROLES.ADMIN },
+    });
+
+    expect(result.order.status).toBe("delivered");
+    expect(mocks.updateById).toHaveBeenCalledWith(
+      "order-1",
+      expect.not.objectContaining({
+        codCollected: true,
+      }),
+      transaction,
+      expect.any(Object),
+    );
+  });
+});

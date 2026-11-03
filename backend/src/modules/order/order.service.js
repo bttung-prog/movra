@@ -725,6 +725,7 @@ const markAsDelivered = async ({
   notes = "Delivered successfully",
   podImageUrl = null,
   recipientReceivedName = null,
+  codCollectedAmount = undefined,
   deliveredBy,
   user = null,
 }) => {
@@ -755,11 +756,28 @@ const markAsDelivered = async ({
     throw new ApiError(403, ORDER_MESSAGES.NOT_DRIVER_OF_TRIP);
   }
 
-  let trip = null;
   if (effectiveTripId) {
-    trip = await tripService.getById(effectiveTripId, false, user);
+    const trip = await tripService.getById(effectiveTripId, false, user);
+    if (trip) {
+      assertDriverAssignedToTrip(trip, user);
+    }
   }
-  if (trip) assertDriverAssignedToTrip(trip, user);
+
+  const codAmount = Number(order.codAmount || 0);
+  const alreadyCollected =
+    order.codCollected && Number(order.codCollectedAmount || 0) >= codAmount;
+  if (codAmount > 0 && !alreadyCollected) {
+    if (codCollectedAmount === undefined || codCollectedAmount === null) {
+      throw new ApiError(400, ORDER_MESSAGES.COD_COLLECTION_REQUIRED);
+    }
+    const numericCodCollected = Number(codCollectedAmount);
+    if (
+      !Number.isFinite(numericCodCollected) ||
+      numericCodCollected !== codAmount
+    ) {
+      throw new ApiError(400, ORDER_MESSAGES.INVALID_COD_COLLECTED_AMOUNT);
+    }
+  }
 
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -775,6 +793,12 @@ const markAsDelivered = async ({
         recipientReceivedName:
           recipientReceivedName || order.recipientReceivedName,
         notes: notes || order.notes,
+        ...(codAmount > 0 && !alreadyCollected
+          ? {
+              codCollectedAmount: Number(codCollectedAmount),
+              codCollected: true,
+            }
+          : {}),
       },
       session,
       {
