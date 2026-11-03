@@ -158,3 +158,30 @@ describe("orderValidator.pickupConfirmationSchema", () => {
     ).toBeUndefined();
   });
 });
+
+describe("orderValidator.markAsDeliveredSchema", () => {
+  it("accepts valid delivery payloads with and without COD amount", () => {
+    expect(
+      orderValidator.markAsDeliveredSchema.validate({
+        notes: "Delivered to neighbor",
+        recipientReceivedName: "John Doe",
+      }).error,
+    ).toBeUndefined();
+
+    expect(
+      orderValidator.markAsDeliveredSchema.validate({
+        notes: "Delivered",
+        recipientReceivedName: "John Doe",
+        codCollectedAmount: 50000,
+      }).error,
+    ).toBeUndefined();
+  });
+
+  it("rejects negative codCollectedAmount", () => {
+    expect(
+      orderValidator.markAsDeliveredSchema.validate({
+        codCollectedAmount: -1000,
+      }).error,
+    ).toBeDefined();
+  });
+});

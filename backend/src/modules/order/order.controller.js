@@ -248,6 +248,10 @@ const markAsDelivered = async (req, res, next) => {
       orderId: req.params.orderId,
       podImageUrl,
       recipientReceivedName: req.body.recipientReceivedName,
+      codCollectedAmount:
+        req.body.codCollectedAmount !== undefined
+          ? Number(req.body.codCollectedAmount)
+          : undefined,
       deliveredBy: req.user.userId,
       user: req.user,
     };
