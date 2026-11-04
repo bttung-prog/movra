@@ -285,7 +285,6 @@ const create = async (
     quantity,
     codAmount = 0,
     routeId,
-    tripId,
     type = "normal",
     notes,
     createdBy,
@@ -304,10 +303,6 @@ const create = async (
   }
   const customer = await customerService.getById(customerId);
 
-  if (user?.role === ROLES.CUSTOMER && tripId) {
-    throw new ApiError(403, ORDER_MESSAGES.ACCESS_DENIED);
-  }
-
   if (user?.role === ROLES.CUSTOMER && routeId) {
     throw new ApiError(400, ORDER_MESSAGES.CUSTOMER_ROUTE_NOT_ALLOWED);
   }
@@ -316,12 +311,7 @@ const create = async (
     await routeService.getById(routeId);
   }
 
-  if (user?.role === ROLES.DISPATCHER) {
-    warehouseId = user.warehouseId;
-    if (!warehouseId) {
-      throw new ApiError(403, WAREHOUSE_MESSAGES.DISPATCHER_NOT_ASSIGNED);
-    }
-  } else if (user && user.role !== ROLES.ADMIN) {
+  if (user && user.role !== ROLES.ADMIN) {
     warehouseId = null;
   }
 
@@ -348,29 +338,6 @@ const create = async (
 
   if (warehouseId && user?.role === ROLES.ADMIN) {
     await warehouseService.getById(warehouseId, true, true);
-  }
-
-  if (tripId) {
-    const trip = await tripService.getById(tripId, true, user);
-    if (trip.status !== "planned") {
-      throw new ApiError(400, ORDER_MESSAGES.TRIP_NOT_PLANNED);
-    }
-    const tripRouteId = trip.routeId?._id || trip.routeId;
-    const tripWarehouseId =
-      trip.warehouseId ||
-      trip.driverId?.warehouseId?._id ||
-      trip.driverId?.warehouseId;
-    if (!routeId) {
-      routeId = tripRouteId;
-    }
-    if (routeId && tripRouteId?.toString() !== routeId.toString()) {
-      throw new ApiError(400, ORDER_MESSAGES.ROUTE_TRIP_MISMATCH);
-    }
-    if (warehouseId && warehouseId.toString() !== tripWarehouseId?.toString()) {
-      throw new ApiError(400, WAREHOUSE_MESSAGES.ACCESS_DENIED);
-    }
-    warehouseId = warehouseId || tripWarehouseId;
-    await assertTripCapacity(trip, [{ weight, volume }]);
   }
 
   if (createdBy) {
@@ -407,7 +374,6 @@ const create = async (
   }
 
   const calculatedTotal = effectiveShippingFee + Number(codAmount || 0);
-  const initialOrderStatus = tripId ? "driver_assigned" : "created";
 
   const isInternalSession = !session;
   const dbSession = session || (await mongoose.startSession());
@@ -416,24 +382,6 @@ const create = async (
   }
 
   try {
-    if (tripId) {
-      const currentTrip = await tripService.getById(
-        tripId,
-        true,
-        user,
-        dbSession,
-      );
-      if (currentTrip.status !== "planned") {
-        throw new ApiError(400, ORDER_MESSAGES.TRIP_NOT_PLANNED);
-      }
-      const currentTripRouteId =
-        currentTrip.routeId?._id || currentTrip.routeId;
-      if (currentTripRouteId?.toString() !== routeId?.toString()) {
-        throw new ApiError(400, ORDER_MESSAGES.ROUTE_TRIP_MISMATCH);
-      }
-      await assertTripCapacity(currentTrip, [{ weight, volume }], dbSession);
-    }
-
     const newOrder = await orderRepository.create(
       {
         orderCode,
@@ -456,28 +404,22 @@ const create = async (
         shippingFeePaidAmount: 0,
         totalAmount: calculatedTotal,
         routeId,
-        tripId,
         warehouseId,
         type,
         paymentMethod: null,
         paymentStatus: "pending",
         paymentTime: null,
         notes,
-        status: initialOrderStatus,
+        status: "created",
         deliveryAttempts: 0,
       },
       dbSession,
     );
 
-    if (tripId) {
-      await tripService.syncTotalOrder(tripId, dbSession);
-    }
-
     await orderRepository.createTrackingLog(
       {
         orderId: newOrder._id,
-        tripId,
-        status: initialOrderStatus,
+        status: "created",
         notes: "Order created successfully",
         changedBy: createdBy,
       },
