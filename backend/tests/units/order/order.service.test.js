@@ -217,47 +217,6 @@ describe("orderService.create", () => {
     });
   });
 
-  it("does not allow customers to assign an order to a trip", async () => {
-    await expect(
-      orderService.create({ ...validCreatePayload, tripId: "trip-1" }, null, {
-        role: ROLES.CUSTOMER,
-      }),
-    ).rejects.toMatchObject({
-      statusCode: 403,
-      message: ORDER_MESSAGES.ACCESS_DENIED,
-    });
-
-    expect(mocks.startSession).not.toHaveBeenCalled();
-  });
-
-  it("rejects order creation when order weight exceeds trip vehicle capacity", async () => {
-    mocks.getTripById.mockResolvedValue({
-      _id: "trip-1",
-      status: "planned",
-      routeId: "route-1",
-      warehouseId: "warehouse-nearest",
-      vehicleId: {
-        _id: "vehicle-1",
-        capacityWeight: 5,
-        capacityVolume: 10,
-      },
-    });
-    mocks.findLoadsByTripId.mockResolvedValue([
-      { _id: "other-1", weight: 4, volume: 1 },
-    ]);
-
-    await expect(
-      orderService.create(
-        { ...validCreatePayload, tripId: "trip-1", weight: 2 },
-        transaction,
-        { role: ROLES.DISPATCHER, warehouseId: "warehouse-nearest" },
-      ),
-    ).rejects.toMatchObject({
-      statusCode: 400,
-      message: ORDER_MESSAGES.EXCEED_VEHICLE_WEIGHT(6, 5),
-    });
-  });
-
   it("assigns customer orders to the nearest active warehouse without a route", async () => {
     const payload = { ...validCreatePayload, routeId: undefined };
     const result = await orderService.create(payload, transaction, {

@@ -101,8 +101,6 @@ const createOrderSchema = Joi.object({
 
   warehouseId: objectId.optional(),
 
-  tripId: objectId.optional(),
-
   type: Joi.string()
     .valid(...orderTypeEnum)
     .default("normal"),

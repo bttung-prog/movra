@@ -28,7 +28,7 @@ orderRouter.get(
 // ==========================================
 orderRouter.post(
   "/",
-  authorize(ROLES.ADMIN, ROLES.DISPATCHER, ROLES.CUSTOMER),
+  authorize(ROLES.ADMIN, ROLES.CUSTOMER),
   validate(orderValidator.createOrderSchema),
   orderController.create,
 );
