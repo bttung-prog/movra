@@ -123,6 +123,34 @@ const findByIds = (orderIds, session = null) => {
   return query.lean();
 };
 
+const findByTripId = (
+  tripId,
+  { skip = 0, limit = 20, sort = { createdAt: -1 } } = {},
+) => {
+  return Order.find({ tripId, deletedAt: null })
+    .sort(sort)
+    .skip(skip)
+    .limit(limit)
+    .populate(ORDER_POPULATE)
+    .lean();
+};
+
+const countByTripId = (tripId, session = null) => {
+  const query = Order.countDocuments({ tripId, deletedAt: null });
+  if (session) query.session(session);
+  return query;
+};
+
+const findLoadsByTripId = (tripId, session = null) => {
+  if (!tripId) return Promise.resolve([]);
+  const query = Order.find(
+    { tripId, deletedAt: null },
+    "_id weight volume",
+  ).lean();
+  if (session) query.session(session);
+  return query;
+};
+
 const updateById = (orderId, updateData, session = null, conditions = {}) => {
   return Order.findOneAndUpdate({ ...conditions, _id: orderId }, updateData, {
     new: true,
@@ -298,24 +326,6 @@ const countTrackingLogsByOrderId = (orderId) => {
   return OrderTrackingLog.countDocuments({ orderId });
 };
 
-const findByTripId = (
-  tripId,
-  { skip = 0, limit = 20, sort = { createdAt: -1 } } = {},
-) => {
-  return Order.find({ tripId, deletedAt: null })
-    .sort(sort)
-    .skip(skip)
-    .limit(limit)
-    .populate(ORDER_POPULATE)
-    .lean();
-};
-
-const countByTripId = (tripId, session = null) => {
-  const query = Order.countDocuments({ tripId, deletedAt: null });
-  if (session) query.session(session);
-  return query;
-};
-
 const getLatestTrackingLogByOrderId = (orderId) => {
   return OrderTrackingLog.findOne({ orderId })
     .sort({ createdAt: -1 })
@@ -335,6 +345,7 @@ export default {
   findByIds,
   findByTripId,
   countByTripId,
+  findLoadsByTripId,
   updateById,
   recordFailureAttempt,
   updateMany,

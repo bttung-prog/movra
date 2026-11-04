@@ -25,6 +25,8 @@ const mocks = vi.hoisted(() => ({
   findAll: vi.fn(),
   countAll: vi.fn(),
   updateById: vi.fn(),
+  updateMany: vi.fn(),
+  findLoadsByTripId: vi.fn(),
   findPublicTrackingLogsByOrderId: vi.fn(),
   generateCode: vi.fn(),
   loggerError: vi.fn(),
@@ -100,6 +102,8 @@ vi.mock("../../../src/modules/order/order.repository.js", () => ({
     findAll: mocks.findAll,
     countAll: mocks.countAll,
     updateById: mocks.updateById,
+    updateMany: mocks.updateMany,
+    findLoadsByTripId: mocks.findLoadsByTripId,
     findPublicTrackingLogsByOrderId: mocks.findPublicTrackingLogsByOrderId,
   },
 }));
@@ -171,6 +175,8 @@ beforeEach(() => {
   mocks.createTrackingLog.mockResolvedValue({ _id: "tracking-1" });
   mocks.createNotification.mockResolvedValue(undefined);
   mocks.generateCode.mockReturnValue("ORD-0001");
+  mocks.findLoadsByTripId.mockResolvedValue([]);
+  mocks.updateMany.mockResolvedValue({ modifiedCount: 1 });
 });
 
 describe("orderService.create", () => {
@@ -222,6 +228,34 @@ describe("orderService.create", () => {
     });
 
     expect(mocks.startSession).not.toHaveBeenCalled();
+  });
+
+  it("rejects order creation when order weight exceeds trip vehicle capacity", async () => {
+    mocks.getTripById.mockResolvedValue({
+      _id: "trip-1",
+      status: "planned",
+      routeId: "route-1",
+      warehouseId: "warehouse-nearest",
+      vehicleId: {
+        _id: "vehicle-1",
+        capacityWeight: 5,
+        capacityVolume: 10,
+      },
+    });
+    mocks.findLoadsByTripId.mockResolvedValue([
+      { _id: "other-1", weight: 4, volume: 1 },
+    ]);
+
+    await expect(
+      orderService.create(
+        { ...validCreatePayload, tripId: "trip-1", weight: 2 },
+        transaction,
+        { role: ROLES.DISPATCHER, warehouseId: "warehouse-nearest" },
+      ),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: ORDER_MESSAGES.EXCEED_VEHICLE_WEIGHT(6, 5),
+    });
   });
 
   it("assigns customer orders to the nearest active warehouse without a route", async () => {
@@ -489,6 +523,168 @@ describe("orderService.assignOrdersToTrip", () => {
       message: ORDER_MESSAGES.ORDER_TRIP_TYPE_MISMATCH,
     });
     expect(mocks.startSession).not.toHaveBeenCalled();
+  });
+
+  it("rejects assignment when total weight exceeds vehicle capacity", async () => {
+    mocks.getTripById.mockResolvedValue({
+      _id: "trip-1",
+      type: "delivery",
+      status: "planned",
+      routeId: "route-1",
+      warehouseId: "warehouse-1",
+      vehicleId: {
+        _id: "vehicle-1",
+        capacityWeight: 100,
+        capacityVolume: 10,
+      },
+    });
+    mocks.findByIds.mockResolvedValue([
+      {
+        _id: "order-1",
+        orderCode: "ORD-0001",
+        status: "stored",
+        routeId: "route-1",
+        warehouseId: "warehouse-1",
+        weight: 30,
+        volume: 1,
+      },
+    ]);
+    mocks.findLoadsByTripId.mockResolvedValue([
+      { _id: "other-1", weight: 80, volume: 2 },
+    ]);
+
+    await expect(
+      orderService.assignOrdersToTrip({
+        tripId: "trip-1",
+        orderIds: ["order-1"],
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: ORDER_MESSAGES.EXCEED_VEHICLE_WEIGHT(110, 100),
+    });
+    expect(mocks.startSession).not.toHaveBeenCalled();
+  });
+
+  it("rejects assignment when total volume exceeds vehicle capacity", async () => {
+    mocks.getTripById.mockResolvedValue({
+      _id: "trip-1",
+      type: "delivery",
+      status: "planned",
+      routeId: "route-1",
+      warehouseId: "warehouse-1",
+      vehicleId: {
+        _id: "vehicle-1",
+        capacityWeight: 500,
+        capacityVolume: 5,
+      },
+    });
+    mocks.findByIds.mockResolvedValue([
+      {
+        _id: "order-1",
+        orderCode: "ORD-0001",
+        status: "stored",
+        routeId: "route-1",
+        warehouseId: "warehouse-1",
+        weight: 20,
+        volume: 2,
+      },
+    ]);
+    mocks.findLoadsByTripId.mockResolvedValue([
+      { _id: "other-1", weight: 50, volume: 4 },
+    ]);
+
+    await expect(
+      orderService.assignOrdersToTrip({
+        tripId: "trip-1",
+        orderIds: ["order-1"],
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: ORDER_MESSAGES.EXCEED_VEHICLE_VOLUME(6, 5),
+    });
+    expect(mocks.startSession).not.toHaveBeenCalled();
+  });
+
+  it("successfully assigns orders when within vehicle capacity", async () => {
+    const trip = {
+      _id: "trip-1",
+      tripCode: "TRIP-0001",
+      type: "delivery",
+      status: "planned",
+      routeId: "route-1",
+      warehouseId: "warehouse-1",
+      vehicleId: {
+        _id: "vehicle-1",
+        capacityWeight: 500,
+        capacityVolume: 10,
+      },
+    };
+    const order = {
+      _id: "order-1",
+      orderCode: "ORD-0001",
+      status: "stored",
+      routeId: "route-1",
+      warehouseId: "warehouse-1",
+      weight: 50,
+      volume: 1,
+    };
+    mocks.getTripById.mockResolvedValue(trip);
+    mocks.findByIds.mockResolvedValue([order]);
+    mocks.findLoadsByTripId.mockResolvedValue([
+      { _id: "other-1", weight: 100, volume: 2 },
+    ]);
+    mocks.updateMany.mockResolvedValue({ modifiedCount: 1 });
+
+    const result = await orderService.assignOrdersToTrip({
+      tripId: "trip-1",
+      orderIds: ["order-1"],
+    });
+
+    expect(result).toEqual({ assignedCount: 1, tripId: "trip-1" });
+    expect(mocks.startSession).toHaveBeenCalled();
+    expect(mocks.updateMany).toHaveBeenCalledWith(
+      {
+        _id: { $in: ["order-1"] },
+        status: "stored",
+        $or: [{ tripId: null }, { tripId: "trip-1" }],
+      },
+      { tripId: "trip-1", warehouseId: "warehouse-1" },
+      transaction,
+    );
+    expect(mocks.syncTripTotalOrder).toHaveBeenCalledWith(
+      "trip-1",
+      transaction,
+    );
+  });
+});
+
+describe("orderService.getTripLoadMetrics", () => {
+  it("calculates total weight and volume excluding specified orders", async () => {
+    mocks.findLoadsByTripId.mockResolvedValue([
+      { _id: "order-1", weight: 15, volume: 1 },
+      { _id: "order-2", weight: 25, volume: 2 },
+      { _id: "order-3", weight: 10, volume: 0.5 },
+    ]);
+
+    const result = await orderService.getTripLoadMetrics("trip-1", ["order-2"]);
+
+    expect(result).toEqual({
+      totalWeight: 25,
+      totalVolume: 1.5,
+      count: 2,
+    });
+    expect(mocks.findLoadsByTripId).toHaveBeenCalledWith("trip-1", null);
+  });
+
+  it("returns zero metrics when tripId is empty", async () => {
+    const result = await orderService.getTripLoadMetrics(null);
+
+    expect(result).toEqual({
+      totalWeight: 0,
+      totalVolume: 0,
+      count: 0,
+    });
+    expect(mocks.findLoadsByTripId).not.toHaveBeenCalled();
   });
 });
 
