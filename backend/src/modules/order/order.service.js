@@ -125,6 +125,102 @@ const assertOrderWarehouseAccess = async (order, user) => {
   checkWarehouseAccess(order.warehouseId, user);
 };
 
+const getTripLoadMetrics = async (
+  tripId,
+  excludeOrderIds = [],
+  session = null,
+) => {
+  if (!tripId) {
+    return { totalWeight: 0, totalVolume: 0, count: 0 };
+  }
+
+  const orders = await orderRepository.findLoadsByTripId(tripId, session);
+  const excludeSet = new Set(
+    (excludeOrderIds || []).map((id) => id?.toString()),
+  );
+
+  return orders.reduce(
+    (acc, order) => {
+      if (!excludeSet.has(order._id?.toString())) {
+        acc.totalWeight += Number(order.weight) || 0;
+        acc.totalVolume += Number(order.volume) || 0;
+        acc.count += 1;
+      }
+      return acc;
+    },
+    { totalWeight: 0, totalVolume: 0, count: 0 },
+  );
+};
+
+const assertTripCapacity = async (
+  trip,
+  candidateOrders = [],
+  session = null,
+) => {
+  const vehicle = trip?.vehicleId;
+  const hasCapacityLimit =
+    vehicle &&
+    typeof vehicle === "object" &&
+    ((typeof vehicle.capacityWeight === "number" &&
+      vehicle.capacityWeight > 0) ||
+      (typeof vehicle.capacityVolume === "number" &&
+        vehicle.capacityVolume > 0));
+
+  if (!hasCapacityLimit) {
+    return;
+  }
+
+  const candidateOrderIds = candidateOrders
+    .map((o) => {
+      if (o?._id) return o._id.toString();
+      if (typeof o === "string") return o;
+      return null;
+    })
+    .filter(Boolean);
+
+  const existingMetrics = await getTripLoadMetrics(
+    trip._id || trip.id,
+    candidateOrderIds,
+    session,
+  );
+
+  const newWeight = candidateOrders.reduce(
+    (sum, o) => sum + (Number(o.weight) || 0),
+    0,
+  );
+  const newVolume = candidateOrders.reduce(
+    (sum, o) => sum + (Number(o.volume) || 0),
+    0,
+  );
+
+  const totalWeight =
+    Math.round((existingMetrics.totalWeight + newWeight) * 100) / 100;
+  const totalVolume =
+    Math.round((existingMetrics.totalVolume + newVolume) * 100) / 100;
+
+  if (
+    typeof vehicle.capacityWeight === "number" &&
+    vehicle.capacityWeight > 0 &&
+    totalWeight > vehicle.capacityWeight
+  ) {
+    throw new ApiError(
+      400,
+      ORDER_MESSAGES.EXCEED_VEHICLE_WEIGHT(totalWeight, vehicle.capacityWeight),
+    );
+  }
+
+  if (
+    typeof vehicle.capacityVolume === "number" &&
+    vehicle.capacityVolume > 0 &&
+    totalVolume > vehicle.capacityVolume
+  ) {
+    throw new ApiError(
+      400,
+      ORDER_MESSAGES.EXCEED_VEHICLE_VOLUME(totalVolume, vehicle.capacityVolume),
+    );
+  }
+};
+
 const scopeOrderFilter = async (filter, user) => {
   if (user?.role !== ROLES.DISPATCHER) return filter;
   if (!user.warehouseId) {
@@ -274,6 +370,7 @@ const create = async (
       throw new ApiError(400, WAREHOUSE_MESSAGES.ACCESS_DENIED);
     }
     warehouseId = warehouseId || tripWarehouseId;
+    await assertTripCapacity(trip, [{ weight, volume }]);
   }
 
   if (createdBy) {
@@ -334,6 +431,7 @@ const create = async (
       if (currentTripRouteId?.toString() !== routeId?.toString()) {
         throw new ApiError(400, ORDER_MESSAGES.ROUTE_TRIP_MISMATCH);
       }
+      await assertTripCapacity(currentTrip, [{ weight, volume }], dbSession);
     }
 
     const newOrder = await orderRepository.create(
@@ -1104,6 +1202,8 @@ const assignOrdersToTrip = async ({ tripId, orderIds = [] }, user = null) => {
     }
   }
 
+  await assertTripCapacity(trip, orders);
+
   const storedOrderIds = orders
     .filter((o) => o.status === "stored")
     .map((o) => o._id);
@@ -1161,6 +1261,8 @@ const assignOrdersToTrip = async ({ tripId, orderIds = [] }, user = null) => {
         throw new ApiError(400, WAREHOUSE_MESSAGES.ACCESS_DENIED);
       }
     }
+
+    await assertTripCapacity(currentTrip, currentOrders, session);
 
     if (storedOrderIds.length > 0) {
       const result = await orderRepository.updateMany(
@@ -1650,6 +1752,7 @@ export default {
   getAll,
   getIdsByWarehouseId,
   countByTripId,
+  getTripLoadMetrics,
   countRouteMismatchesByTripId,
   getMyOrders,
   getById,

@@ -710,6 +710,10 @@ export const ORDER_MESSAGES = {
   CANNOT_DELETE_STATUS: (status) =>
     `Chỉ có thể xóa các đơn hàng mới tạo. Trạng thái hiện tại là '${status}'`,
   TRACKING_NOT_FOUND: "Không tìm thấy nhật ký theo dõi cho đơn hàng này",
+  EXCEED_VEHICLE_WEIGHT: (current, capacity) =>
+    `Tổng khối lượng đơn hàng (${current} kg) vượt quá tải trọng xe (${capacity} kg)`,
+  EXCEED_VEHICLE_VOLUME: (current, capacity) =>
+    `Tổng thể tích đơn hàng (${current} m³) vượt quá thể tích thùng xe (${capacity} m³)`,
 };
 
 export const DISPATCHER_MESSAGES = {
