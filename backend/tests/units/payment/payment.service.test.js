@@ -239,9 +239,13 @@ describe("paymentService.create", () => {
       loyaltyPointsAwarded: false,
     });
     mocks.updateOrderById.mockResolvedValue({ _id: orderId });
+    mocks.getCustomerById.mockResolvedValue({
+      _id: customerId,
+      walletBalance: 20000,
+    });
     mocks.updateCustomerById.mockResolvedValue({
       _id: customerId,
-      walletBalance: 4000,
+      walletBalance: 10000,
     });
 
     const payment = await paymentService.create(
