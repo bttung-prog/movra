@@ -127,6 +127,11 @@ const orderSchema = new mongoose.Schema(
       min: 0,
     },
 
+    loyaltyPointsAwarded: {
+      type: Boolean,
+      default: false,
+    },
+
     totalAmount: {
       type: Number,
       required: true,

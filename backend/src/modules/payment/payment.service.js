@@ -226,8 +226,9 @@ const syncCompletedPaymentEffects = async ({
     }
   }
 
+  let order = null;
   if (orderId) {
-    const order = await orderService.getById(orderId, true, actor, session);
+    order = await orderService.getById(orderId, true, actor, session);
     if (order) {
       targetCustomerId =
         targetCustomerId || order.customerId?._id || order.customerId;
@@ -258,13 +259,19 @@ const syncCompletedPaymentEffects = async ({
 
   if (targetCustomerId) {
     const customer = await customerService.getById(targetCustomerId, session);
+
+    const shouldAwardPointsNow =
+      !order || (order.status === "delivered" && !order.loyaltyPointsAwarded);
+
     const customerUpdate = {
-      $inc: {
-        totalSpent: paymentAmount,
-        loyaltyPoints: Math.floor(paymentAmount / 10000),
-      },
+      $inc: {},
       lastPurchaseDate: new Date(),
     };
+
+    if (shouldAwardPointsNow) {
+      customerUpdate.$inc.totalSpent = paymentAmount;
+      customerUpdate.$inc.loyaltyPoints = Math.floor(paymentAmount / 10000);
+    }
 
     if (paymentMethod === PAYMENT_METHODS.WALLET_BALANCE) {
       const balanceBefore = Number(customer.walletBalance || 0);
@@ -282,6 +289,15 @@ const syncCompletedPaymentEffects = async ({
       );
       if (!updatedCustomer) {
         throw new ApiError(400, PAYMENT_MESSAGES.INSUFFICIENT_WALLET_BALANCE);
+      }
+
+      if (order && shouldAwardPointsNow) {
+        await orderService.updateById({
+          orderId,
+          updateData: { loyaltyPointsAwarded: true },
+          session,
+          user: actor,
+        });
       }
 
       await walletTransactionService.recordTransaction(
@@ -304,7 +320,20 @@ const syncCompletedPaymentEffects = async ({
       return;
     }
 
+    if (Object.keys(customerUpdate.$inc).length === 0) {
+      delete customerUpdate.$inc;
+    }
+
     await customerService.updateById(targetCustomerId, customerUpdate, session);
+
+    if (order && shouldAwardPointsNow) {
+      await orderService.updateById({
+        orderId,
+        updateData: { loyaltyPointsAwarded: true },
+        session,
+        user: actor,
+      });
+    }
   }
 };
 
@@ -1119,21 +1148,58 @@ const refundPayment = async (paymentId, payload, actor) => {
       );
     } else if (customerId && !isWalletTopUp) {
       const customer = await customerService.getById(customerId, session);
-      const pointsBeforeRefund = Math.floor(
-        Math.max(0, Number(payment.paymentAmount) - previousRefundedAmount) /
-          10000,
-      );
-      const pointsAfterRefund = Math.floor(
-        Math.max(0, Number(payment.paymentAmount) - refundedAmount) / 10000,
-      );
-      const pointsToReverse = pointsBeforeRefund - pointsAfterRefund;
+
+      // Check whether this payment was for an order and if points were actually awarded
+      let paymentOrder = null;
+      if (payment.orderId) {
+        paymentOrder = await orderService.getById(
+          payment.orderId?._id || payment.orderId,
+          true,
+          null,
+          session,
+        );
+      }
+      const pointsWereAwarded =
+        !paymentOrder || paymentOrder.loyaltyPointsAwarded;
+
+      let pointsToReverse = 0;
+      let spentToReverse = 0;
+
+      if (pointsWereAwarded) {
+        const pointsBeforeRefund = Math.floor(
+          Math.max(0, Number(payment.paymentAmount) - previousRefundedAmount) /
+            10000,
+        );
+        const pointsAfterRefund = Math.floor(
+          Math.max(0, Number(payment.paymentAmount) - refundedAmount) / 10000,
+        );
+        const calculatedPointsToReverse =
+          pointsBeforeRefund - pointsAfterRefund;
+
+        const currentPoints = Math.max(0, Number(customer.loyaltyPoints || 0));
+        pointsToReverse = Math.min(currentPoints, calculatedPointsToReverse);
+
+        const currentSpent = Math.max(0, Number(customer.totalSpent || 0));
+        spentToReverse = Math.min(currentSpent, effectiveRefundAmount);
+      }
 
       const customerUpdate = {
-        $inc: {
-          totalSpent: -effectiveRefundAmount,
-          loyaltyPoints: -pointsToReverse,
-        },
+        $inc: {},
       };
+      if (spentToReverse > 0) {
+        customerUpdate.$inc.totalSpent = -spentToReverse;
+      }
+      if (pointsToReverse > 0) {
+        customerUpdate.$inc.loyaltyPoints = -pointsToReverse;
+      }
+
+      const occConditions = {};
+      if (spentToReverse > 0) {
+        occConditions.totalSpent = { $gte: spentToReverse };
+      }
+      if (pointsToReverse > 0) {
+        occConditions.loyaltyPoints = { $gte: pointsToReverse };
+      }
 
       if (payment.paymentMethod === PAYMENT_METHODS.WALLET_BALANCE) {
         const balanceBefore = Number(customer.walletBalance || 0);
@@ -1144,10 +1210,7 @@ const refundPayment = async (paymentId, payload, actor) => {
           customerId,
           customerUpdate,
           session,
-          {
-            totalSpent: { $gte: effectiveRefundAmount },
-            loyaltyPoints: { $gte: pointsToReverse },
-          },
+          occConditions,
         );
         if (!updatedCustomer) {
           throw new ApiError(409, PAYMENT_MESSAGES.REFUND_STATE_CHANGED);
@@ -1170,15 +1233,12 @@ const refundPayment = async (paymentId, payload, actor) => {
           },
           session,
         );
-      } else {
+      } else if (Object.keys(customerUpdate.$inc).length > 0) {
         const updatedCustomer = await customerService.updateById(
           customerId,
           customerUpdate,
           session,
-          {
-            totalSpent: { $gte: effectiveRefundAmount },
-            loyaltyPoints: { $gte: pointsToReverse },
-          },
+          occConditions,
         );
         if (!updatedCustomer) {
           throw new ApiError(409, PAYMENT_MESSAGES.REFUND_STATE_CHANGED);
