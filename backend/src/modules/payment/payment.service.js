@@ -227,6 +227,7 @@ const syncCompletedPaymentEffects = async ({
   }
 
   let order = null;
+  let isOrderFullyPaid = false;
   if (orderId) {
     order = await orderService.getById(orderId, true, actor, session);
     if (order) {
@@ -246,6 +247,9 @@ const syncCompletedPaymentEffects = async ({
         );
         updateData.shippingFeePaid =
           updateData.shippingFeePaidAmount >= shippingFee;
+        isOrderFullyPaid = updateData.shippingFeePaid;
+      } else {
+        isOrderFullyPaid = Boolean(order.shippingFeePaid);
       }
 
       await orderService.updateById({
@@ -261,7 +265,10 @@ const syncCompletedPaymentEffects = async ({
     const customer = await customerService.getById(targetCustomerId, session);
 
     const shouldAwardPointsNow =
-      !order || (order.status === "delivered" && !order.loyaltyPointsAwarded);
+      !order ||
+      (order.status === "delivered" &&
+        isOrderFullyPaid &&
+        !order.loyaltyPointsAwarded);
 
     const customerUpdate = {
       $inc: {},
@@ -269,8 +276,11 @@ const syncCompletedPaymentEffects = async ({
     };
 
     if (shouldAwardPointsNow) {
-      customerUpdate.$inc.totalSpent = paymentAmount;
-      customerUpdate.$inc.loyaltyPoints = Math.floor(paymentAmount / 10000);
+      const rewardAmount = order
+        ? Number(order.shippingFee || 0)
+        : paymentAmount;
+      customerUpdate.$inc.totalSpent = rewardAmount;
+      customerUpdate.$inc.loyaltyPoints = Math.floor(rewardAmount / 10000);
     }
 
     if (paymentMethod === PAYMENT_METHODS.WALLET_BALANCE) {

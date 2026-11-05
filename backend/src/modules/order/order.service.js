@@ -824,17 +824,12 @@ const markAsDelivered = async ({
 
   try {
     const now = new Date();
-    const isPaid =
-      order.shippingFeePaid || Number(order.shippingFeePaidAmount || 0) > 0;
-    const shouldAwardPoints = isPaid && !order.loyaltyPointsAwarded;
-    const paidAmount = shouldAwardPoints
-      ? Number(
-          order.shippingFeePaidAmount ||
-            (order.shippingFeePaid ? order.shippingFee : 0) ||
-            0,
-        )
+    const isFullyPaid = order.shippingFeePaid === true;
+    const shouldAwardPoints = isFullyPaid && !order.loyaltyPointsAwarded;
+    const totalShippingFee = shouldAwardPoints
+      ? Number(order.shippingFee || order.shippingFeePaidAmount || 0)
       : 0;
-    const pointsToAward = Math.floor(paidAmount / 10000);
+    const pointsToAward = Math.floor(totalShippingFee / 10000);
 
     const updatedOrder = await orderRepository.updateById(
       orderId,
@@ -873,12 +868,12 @@ const markAsDelivered = async ({
 
     if (shouldAwardPoints) {
       const customerId = order.customerId?._id || order.customerId;
-      if (customerId && (pointsToAward > 0 || paidAmount > 0)) {
+      if (customerId && (pointsToAward > 0 || totalShippingFee > 0)) {
         await customerService.updateById(
           customerId,
           {
             $inc: {
-              totalSpent: paidAmount,
+              totalSpent: totalShippingFee,
               loyaltyPoints: pointsToAward,
             },
             lastPurchaseDate: now,

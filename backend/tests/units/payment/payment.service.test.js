@@ -280,6 +280,68 @@ describe("paymentService.create", () => {
     );
   });
 
+  it("does not award loyalty points when payment is only partial for a delivered order", async () => {
+    const invoice = {
+      _id: "invoice-1",
+      orderId,
+      customerId,
+      status: "issued",
+      paidAmount: 0,
+      remainingAmount: 10000,
+      pendingAmount: 0,
+    };
+    mocks.getByOrderId.mockResolvedValue(invoice);
+    mocks.getInvoiceById.mockResolvedValue(invoice);
+    mocks.updatePaymentProgress.mockResolvedValue({ _id: invoice._id });
+    mocks.getOrderById.mockResolvedValue({
+      _id: orderId,
+      customerId,
+      status: "delivered",
+      shippingFee: 10000,
+      shippingFeePaid: false,
+      shippingFeePaidAmount: 0,
+      loyaltyPointsAwarded: false,
+    });
+    mocks.updateOrderById.mockResolvedValue({ _id: orderId });
+    mocks.getCustomerById.mockResolvedValue({
+      _id: customerId,
+      walletBalance: 20000,
+    });
+    mocks.updateCustomerById.mockResolvedValue({
+      _id: customerId,
+      walletBalance: 16000,
+    });
+
+    const payment = await paymentService.create(
+      {
+        orderId,
+        paymentAmount: 4000,
+        paymentMethod: PAYMENT_METHODS.WALLET_BALANCE,
+      },
+      { role: ROLES.CUSTOMER, customerId },
+    );
+
+    expect(payment.paymentStatus).toBe(PAYMENT_STATUSES.COMPLETED);
+    expect(mocks.updateCustomerById).toHaveBeenCalledWith(
+      customerId,
+      expect.objectContaining({
+        $inc: {
+          walletBalance: -4000,
+        },
+      }),
+      transaction,
+      { walletBalance: { $gte: 4000 } },
+    );
+    expect(mocks.updateOrderById).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderId,
+        updateData: expect.not.objectContaining({
+          loyaltyPointsAwarded: true,
+        }),
+      }),
+    );
+  });
+
   it("keeps bank-transfer payments pending until verification", async () => {
     vi.stubEnv("VIETQR_BANK_ID", "970422");
     vi.stubEnv("VIETQR_ACCOUNT_NUMBER", "1234567890");

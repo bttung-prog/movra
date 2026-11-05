@@ -1034,6 +1034,7 @@ describe("orderService.markAsDelivered", () => {
     mocks.findById.mockResolvedValue({
       ...deliveryOrder,
       codAmount: 0,
+      shippingFee: 50000,
       shippingFeePaid: true,
       shippingFeePaidAmount: 50000,
       loyaltyPointsAwarded: false,
@@ -1074,5 +1075,41 @@ describe("orderService.markAsDelivered", () => {
       }),
       transaction,
     );
+  });
+
+  it("does not award loyalty points when order is delivered but not fully paid", async () => {
+    mocks.findById.mockResolvedValue({
+      ...deliveryOrder,
+      codAmount: 0,
+      shippingFeePaid: false,
+      shippingFeePaidAmount: 20000,
+      shippingFee: 50000,
+      loyaltyPointsAwarded: false,
+      customerId: { _id: "cust-1", userId: { _id: "user-1" } },
+    });
+    mocks.getTripById.mockResolvedValue({ _id: "trip-1" });
+    mocks.updateById.mockResolvedValue({
+      ...deliveryOrder,
+      codAmount: 0,
+      status: "delivered",
+      loyaltyPointsAwarded: false,
+    });
+    mocks.createTrackingLog.mockResolvedValue({ _id: "log-1" });
+
+    const result = await orderService.markAsDelivered({
+      orderId: "order-1",
+      user: { role: ROLES.ADMIN },
+    });
+
+    expect(result.order.status).toBe("delivered");
+    expect(mocks.updateById).toHaveBeenCalledWith(
+      "order-1",
+      expect.not.objectContaining({
+        loyaltyPointsAwarded: true,
+      }),
+      transaction,
+      expect.any(Object),
+    );
+    expect(mocks.updateCustomerById).not.toHaveBeenCalled();
   });
 });
