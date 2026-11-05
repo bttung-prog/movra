@@ -813,6 +813,48 @@ describe("orderService.cancelOrder", () => {
     );
     expect(transaction.commitTransaction).toHaveBeenCalled();
   });
+
+  it("refunds wallet balance without deducting loyalty points when cancelling an undelivered order paid via wallet", async () => {
+    mocks.findById.mockResolvedValue({
+      ...existingOrder,
+      status: "created",
+      paymentMethod: "wallet_balance",
+      shippingFeePaid: true,
+      shippingFeePaidAmount: 30000,
+      shippingFee: 30000,
+      loyaltyPointsAwarded: false,
+      customerId: { _id: "cust-1" },
+    });
+    mocks.updateById.mockResolvedValue({
+      ...existingOrder,
+      status: "cancelled",
+      tripId: null,
+    });
+    mocks.getCustomerById.mockResolvedValue({
+      _id: "cust-1",
+      walletBalance: 10000,
+      loyaltyPoints: 0,
+      totalSpent: 0,
+    });
+    mocks.updateCustomerById.mockResolvedValue({ _id: "cust-1" });
+    mocks.createTrackingLog.mockResolvedValue({ _id: "tracking-1" });
+
+    await orderService.cancelOrder({
+      orderId: "order-1",
+      reason: "Customer cancelled",
+    });
+
+    expect(mocks.updateCustomerById).toHaveBeenCalledWith(
+      "cust-1",
+      {
+        $inc: {
+          walletBalance: 30000,
+        },
+      },
+      transaction,
+      {},
+    );
+  });
 });
 
 describe("orderService.updateById", () => {
@@ -985,6 +1027,52 @@ describe("orderService.markAsDelivered", () => {
       }),
       transaction,
       expect.any(Object),
+    );
+  });
+
+  it("marks as delivered and awards loyalty points and totalSpent when shippingFee is paid", async () => {
+    mocks.findById.mockResolvedValue({
+      ...deliveryOrder,
+      codAmount: 0,
+      shippingFeePaid: true,
+      shippingFeePaidAmount: 50000,
+      loyaltyPointsAwarded: false,
+      customerId: { _id: "cust-1", userId: { _id: "user-1" } },
+    });
+    mocks.getTripById.mockResolvedValue({ _id: "trip-1" });
+    mocks.updateById.mockResolvedValue({
+      ...deliveryOrder,
+      codAmount: 0,
+      status: "delivered",
+      loyaltyPointsAwarded: true,
+    });
+    mocks.createTrackingLog.mockResolvedValue({ _id: "log-1" });
+    mocks.updateCustomerById.mockResolvedValue({ _id: "cust-1" });
+
+    const result = await orderService.markAsDelivered({
+      orderId: "order-1",
+      user: { role: ROLES.ADMIN },
+    });
+
+    expect(result.order.status).toBe("delivered");
+    expect(mocks.updateById).toHaveBeenCalledWith(
+      "order-1",
+      expect.objectContaining({
+        status: "delivered",
+        loyaltyPointsAwarded: true,
+      }),
+      transaction,
+      expect.any(Object),
+    );
+    expect(mocks.updateCustomerById).toHaveBeenCalledWith(
+      "cust-1",
+      expect.objectContaining({
+        $inc: {
+          totalSpent: 50000,
+          loyaltyPoints: 5,
+        },
+      }),
+      transaction,
     );
   });
 });

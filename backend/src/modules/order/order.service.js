@@ -402,6 +402,7 @@ const create = async (
         shippingFee: effectiveShippingFee,
         shippingFeePaid: false,
         shippingFeePaidAmount: 0,
+        loyaltyPointsAwarded: false,
         totalAmount: calculatedTotal,
         routeId,
         warehouseId,
@@ -784,7 +785,6 @@ const markAsDelivered = async ({
     await userService.getById(deliveredBy);
   }
 
-  const effectiveTripId = tripId || order.tripId?._id || order.tripId;
   const assignedTripId = order.tripId?._id || order.tripId;
   if (
     tripId &&
@@ -796,8 +796,8 @@ const markAsDelivered = async ({
     throw new ApiError(403, ORDER_MESSAGES.NOT_DRIVER_OF_TRIP);
   }
 
-  if (effectiveTripId) {
-    const trip = await tripService.getById(effectiveTripId, false, user);
+  if (assignedTripId) {
+    const trip = await tripService.getById(assignedTripId, false, user);
     if (trip) {
       assertDriverAssignedToTrip(trip, user);
     }
@@ -824,6 +824,18 @@ const markAsDelivered = async ({
 
   try {
     const now = new Date();
+    const isPaid =
+      order.shippingFeePaid || Number(order.shippingFeePaidAmount || 0) > 0;
+    const shouldAwardPoints = isPaid && !order.loyaltyPointsAwarded;
+    const paidAmount = shouldAwardPoints
+      ? Number(
+          order.shippingFeePaidAmount ||
+            (order.shippingFeePaid ? order.shippingFee : 0) ||
+            0,
+        )
+      : 0;
+    const pointsToAward = Math.floor(paidAmount / 10000);
+
     const updatedOrder = await orderRepository.updateById(
       orderId,
       {
@@ -839,6 +851,7 @@ const markAsDelivered = async ({
               codCollected: true,
             }
           : {}),
+        ...(shouldAwardPoints ? { loyaltyPointsAwarded: true } : {}),
       },
       session,
       {
@@ -858,10 +871,27 @@ const markAsDelivered = async ({
       throw new ApiError(409, ORDER_MESSAGES.ORDER_ASSIGNMENT_CHANGED);
     }
 
+    if (shouldAwardPoints) {
+      const customerId = order.customerId?._id || order.customerId;
+      if (customerId && (pointsToAward > 0 || paidAmount > 0)) {
+        await customerService.updateById(
+          customerId,
+          {
+            $inc: {
+              totalSpent: paidAmount,
+              loyaltyPoints: pointsToAward,
+            },
+            lastPurchaseDate: now,
+          },
+          session,
+        );
+      }
+    }
+
     const trackingLog = await orderRepository.createTrackingLog(
       {
         orderId,
-        tripId: effectiveTripId,
+        tripId: assignedTripId,
         status: "delivered",
         latitude,
         longitude,
@@ -930,22 +960,37 @@ const refundShippingFeeToWallet = async (order, amount, session, reason) => {
   const customer = await customerService.getById(customerId, session);
   const balanceBefore = Number(customer.walletBalance || 0);
   const balanceAfter = balanceBefore + amount;
-  const loyaltyPointsToReverse = Math.floor(amount / 10000);
+
+  const customerUpdate = {
+    $inc: {
+      walletBalance: amount,
+    },
+  };
+  const occConditions = {};
+
+  if (order.loyaltyPointsAwarded) {
+    const calculatedPointsToReverse = Math.floor(amount / 10000);
+    const currentPoints = Math.max(0, Number(customer.loyaltyPoints || 0));
+    const pointsToReverse = Math.min(currentPoints, calculatedPointsToReverse);
+
+    const currentSpent = Math.max(0, Number(customer.totalSpent || 0));
+    const spentToReverse = Math.min(currentSpent, amount);
+
+    if (pointsToReverse > 0) {
+      customerUpdate.$inc.loyaltyPoints = -pointsToReverse;
+      occConditions.loyaltyPoints = { $gte: pointsToReverse };
+    }
+    if (spentToReverse > 0) {
+      customerUpdate.$inc.totalSpent = -spentToReverse;
+      occConditions.totalSpent = { $gte: spentToReverse };
+    }
+  }
 
   const updatedCustomer = await customerService.updateById(
     customerId,
-    {
-      $inc: {
-        walletBalance: amount,
-        totalSpent: -amount,
-        loyaltyPoints: -loyaltyPointsToReverse,
-      },
-    },
+    customerUpdate,
     session,
-    {
-      totalSpent: { $gte: amount },
-      loyaltyPoints: { $gte: loyaltyPointsToReverse },
-    },
+    occConditions,
   );
   if (!updatedCustomer) {
     throw new ApiError(409, ORDER_MESSAGES.CUSTOMER_FINANCIAL_STATE_CHANGED);
