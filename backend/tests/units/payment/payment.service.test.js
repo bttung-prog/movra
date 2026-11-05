@@ -205,17 +205,75 @@ describe("paymentService.create", () => {
     expect(mocks.updateCustomerById).toHaveBeenCalledWith(
       customerId,
       expect.objectContaining({
-        $inc: expect.objectContaining({
+        $inc: {
           walletBalance: -1000,
-          totalSpent: 1000,
-          loyaltyPoints: 0,
-        }),
+        },
       }),
       transaction,
       { walletBalance: { $gte: 1000 } },
     );
     expect(mocks.recordTransaction).toHaveBeenCalled();
     expect(transaction.commitTransaction).toHaveBeenCalled();
+  });
+
+  it("awards loyalty points and totalSpent when paying for an already delivered order", async () => {
+    const invoice = {
+      _id: "invoice-1",
+      orderId,
+      customerId,
+      status: "issued",
+      paidAmount: 0,
+      remainingAmount: 10000,
+      pendingAmount: 0,
+    };
+    mocks.getByOrderId.mockResolvedValue(invoice);
+    mocks.getInvoiceById.mockResolvedValue(invoice);
+    mocks.updatePaymentProgress.mockResolvedValue({ _id: invoice._id });
+    mocks.getOrderById.mockResolvedValue({
+      _id: orderId,
+      customerId,
+      status: "delivered",
+      shippingFee: 10000,
+      shippingFeePaid: false,
+      shippingFeePaidAmount: 0,
+      loyaltyPointsAwarded: false,
+    });
+    mocks.updateOrderById.mockResolvedValue({ _id: orderId });
+    mocks.updateCustomerById.mockResolvedValue({
+      _id: customerId,
+      walletBalance: 4000,
+    });
+
+    const payment = await paymentService.create(
+      {
+        orderId,
+        paymentAmount: 10000,
+        paymentMethod: PAYMENT_METHODS.WALLET_BALANCE,
+      },
+      { role: ROLES.CUSTOMER, customerId },
+    );
+
+    expect(payment.paymentStatus).toBe(PAYMENT_STATUSES.COMPLETED);
+    expect(mocks.updateCustomerById).toHaveBeenCalledWith(
+      customerId,
+      expect.objectContaining({
+        $inc: {
+          walletBalance: -10000,
+          totalSpent: 10000,
+          loyaltyPoints: 1,
+        },
+      }),
+      transaction,
+      { walletBalance: { $gte: 10000 } },
+    );
+    expect(mocks.updateOrderById).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderId,
+        updateData: expect.objectContaining({
+          loyaltyPointsAwarded: true,
+        }),
+      }),
+    );
   });
 
   it("keeps bank-transfer payments pending until verification", async () => {
