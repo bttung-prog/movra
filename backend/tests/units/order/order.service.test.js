@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+﻿import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   startSession: vi.fn(),
@@ -117,7 +117,7 @@ vi.mock("../../../src/configs/logger.js", () => ({
 }));
 
 import { ORDER_MESSAGES } from "../../../src/constants/messages.js";
-import ROLES from "../../../src/constants/roles.js";
+import { ROLES } from "../../../src/constants/roles.js";
 import orderService from "../../../src/modules/order/order.service.js";
 
 const existingOrder = {

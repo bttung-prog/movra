@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+﻿import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   create: vi.fn(),
@@ -49,8 +49,8 @@ import {
   INVOICE_MESSAGES,
   ORDER_MESSAGES,
 } from "../../../src/constants/messages.js";
-import INVOICE_STATUSES from "../../../src/constants/invoiceStatuses.js";
-import ROLES from "../../../src/constants/roles.js";
+import { INVOICE_STATUSES } from "../../../src/constants/invoiceStatuses.js";
+import { ROLES } from "../../../src/constants/roles.js";
 import invoiceService from "../../../src/modules/invoice/invoice.service.js";
 
 const invoiceId = "invoice-1";

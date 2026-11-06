@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+﻿import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   create: vi.fn(),
@@ -57,7 +57,7 @@ vi.mock("../../../src/modules/user/user.service.js", () => ({
 }));
 
 import { FAILURE_REASON_MESSAGES } from "../../../src/constants/messages.js";
-import ROLES from "../../../src/constants/roles.js";
+import { ROLES } from "../../../src/constants/roles.js";
 import failureReasonService from "../../../src/modules/failureReason/failureReason.service.js";
 
 const orderId = "order-1";

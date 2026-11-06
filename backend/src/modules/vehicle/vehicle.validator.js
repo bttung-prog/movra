@@ -1,6 +1,6 @@
-import Joi from "joi";
+﻿import Joi from "joi";
 
-import VEHICLE_STATUSES from "../../constants/vehicleStatuses.js";
+import { VEHICLE_STATUSES } from "../../constants/vehicleStatuses.js";
 
 const objectIdPattern = /^[0-9a-fA-F]{24}$/;
 

@@ -1,12 +1,10 @@
-import mongoose from "mongoose";
+﻿import mongoose from "mongoose";
 
-import PAYMENT_STATUSES from "../../constants/paymentStatuses.js";
-import PAYMENT_METHODS, {
-  PAYER_TYPES,
-} from "../../constants/paymentMethods.js";
-import PAYMENT_PURPOSES from "../../constants/paymentPurposes.js";
-import INVOICE_STATUSES from "../../constants/invoiceStatuses.js";
-import ROLES from "../../constants/roles.js";
+import { PAYMENT_STATUSES } from "../../constants/paymentStatuses.js";
+import { PAYMENT_METHODS, PAYER_TYPES } from "../../constants/paymentMethods.js";
+import { PAYMENT_PURPOSES } from "../../constants/paymentPurposes.js";
+import { INVOICE_STATUSES } from "../../constants/invoiceStatuses.js";
+import { ROLES } from "../../constants/roles.js";
 import {
   PAYMENT_MESSAGES,
   INVOICE_MESSAGES,

@@ -10,5 +10,3 @@ export const PAYER_TYPES = {
   CUSTOMER: "customer",
   DRIVER: "driver",
 };
-
-export default PAYMENT_METHODS;

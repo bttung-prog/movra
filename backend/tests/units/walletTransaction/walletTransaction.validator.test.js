@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 
-import PAYMENT_METHODS from "../../../src/constants/paymentMethods.js";
+import { PAYMENT_METHODS } from "../../../src/constants/paymentMethods.js";
 import { WALLET_TRANSACTION_STATUSES } from "../../../src/constants/walletTransactionStatuses.js";
 import { WALLET_TRANSACTION_TYPES } from "../../../src/constants/walletTransactionTypes.js";
 import walletTransactionValidator from "../../../src/modules/walletTransaction/walletTransaction.validator.js";

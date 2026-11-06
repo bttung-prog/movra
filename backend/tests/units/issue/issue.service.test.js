@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+﻿import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   create: vi.fn(),
@@ -89,10 +89,10 @@ import {
   ISSUE_MESSAGES,
   WAREHOUSE_MESSAGES,
 } from "../../../src/constants/messages.js";
-import INVENTORY_STATUSES from "../../../src/constants/inventoryStatuses.js";
-import ISSUE_STATUSES from "../../../src/constants/issueStatuses.js";
-import ROLES from "../../../src/constants/roles.js";
-import TRIP_TYPES from "../../../src/constants/tripTypes.js";
+import { INVENTORY_STATUSES } from "../../../src/constants/inventoryStatuses.js";
+import { ISSUE_STATUSES } from "../../../src/constants/issueStatuses.js";
+import { ROLES } from "../../../src/constants/roles.js";
+import { TRIP_TYPES } from "../../../src/constants/tripTypes.js";
 import issueService from "../../../src/modules/issue/issue.service.js";
 
 const issueId = "issue-1";

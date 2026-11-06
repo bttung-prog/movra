@@ -1,6 +1,6 @@
-import mongoose from "mongoose";
+﻿import mongoose from "mongoose";
 
-import TRIP_TYPES from "../../constants/tripTypes.js";
+import { TRIP_TYPES } from "../../constants/tripTypes.js";
 
 const tripSchema = new mongoose.Schema(
   {

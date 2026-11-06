@@ -1,6 +1,6 @@
-import Invoice from "./invoice.js";
+﻿import Invoice from "./invoice.js";
 
-import INVOICE_STATUSES from "../../constants/invoiceStatuses.js";
+import { INVOICE_STATUSES } from "../../constants/invoiceStatuses.js";
 
 const INVOICE_POPULATE = [
   {

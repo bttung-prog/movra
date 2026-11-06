@@ -6,5 +6,3 @@ export const INVOICE_STATUSES = {
   OVERDUE: "overdue",
   CANCELLED: "cancelled",
 };
-
-export default INVOICE_STATUSES;

@@ -1,9 +1,9 @@
-import express from "express";
+﻿import express from "express";
 
 import authorize from "../../middlewares/authorize.middleware.js";
 import validate from "../../middlewares/validate.middleware.js";
 
-import ROLES from "../../constants/roles.js";
+import { ROLES } from "../../constants/roles.js";
 
 import warehouseValidator from "./warehouse.validator.js";
 import warehouseController from "./warehouse.controller.js";

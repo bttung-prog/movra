@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+﻿import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   create: vi.fn(),
@@ -97,15 +97,13 @@ vi.mock("../../../src/utils/generateCode.js", () => ({
   default: mocks.generateCode,
 }));
 
-import PAYMENT_METHODS, {
-  PAYER_TYPES,
-} from "../../../src/constants/paymentMethods.js";
-import PAYMENT_STATUSES from "../../../src/constants/paymentStatuses.js";
+import { PAYMENT_METHODS, PAYER_TYPES } from "../../../src/constants/paymentMethods.js";
+import { PAYMENT_STATUSES } from "../../../src/constants/paymentStatuses.js";
 import {
   INVOICE_MESSAGES,
   PAYMENT_MESSAGES,
 } from "../../../src/constants/messages.js";
-import ROLES from "../../../src/constants/roles.js";
+import { ROLES } from "../../../src/constants/roles.js";
 import paymentService from "../../../src/modules/payment/payment.service.js";
 
 const orderId = "order-1";

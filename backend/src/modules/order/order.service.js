@@ -1,13 +1,13 @@
-import mongoose from "mongoose";
+﻿import mongoose from "mongoose";
 
-import PAYMENT_METHODS from "../../constants/paymentMethods.js";
+import { PAYMENT_METHODS } from "../../constants/paymentMethods.js";
 import {
   WALLET_TRANSACTION_TYPES,
   WALLET_TRANSACTION_DIRECTIONS,
 } from "../../constants/walletTransactionTypes.js";
 import { WALLET_TRANSACTION_STATUSES } from "../../constants/walletTransactionStatuses.js";
-import ROLES from "../../constants/roles.js";
-import TRIP_TYPES from "../../constants/tripTypes.js";
+import { ROLES } from "../../constants/roles.js";
+import { TRIP_TYPES } from "../../constants/tripTypes.js";
 import {
   ORDER_MESSAGES,
   PAYMENT_MESSAGES,

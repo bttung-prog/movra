@@ -1,10 +1,8 @@
-import mongoose from "mongoose";
+﻿import mongoose from "mongoose";
 
-import PAYMENT_STATUSES from "../../constants/paymentStatuses.js";
-import PAYMENT_METHODS, {
-  PAYER_TYPES,
-} from "../../constants/paymentMethods.js";
-import PAYMENT_PURPOSES from "../../constants/paymentPurposes.js";
+import { PAYMENT_STATUSES } from "../../constants/paymentStatuses.js";
+import { PAYMENT_METHODS, PAYER_TYPES } from "../../constants/paymentMethods.js";
+import { PAYMENT_PURPOSES } from "../../constants/paymentPurposes.js";
 
 import { integerAmount, integerMoney } from "../../utils/integerMoneySchema.js";
 

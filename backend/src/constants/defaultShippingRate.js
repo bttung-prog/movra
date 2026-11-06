@@ -1,4 +1,4 @@
-const DEFAULT_RATE = {
+export const DEFAULT_RATE = {
   name: "Bảng cước mặc định",
   serviceType: "standard",
   basePrice: 16500,
@@ -8,5 +8,3 @@ const DEFAULT_RATE = {
   extraDistancePrice: 2000,
   categorySurcharges: [],
 };
-
-export default DEFAULT_RATE;

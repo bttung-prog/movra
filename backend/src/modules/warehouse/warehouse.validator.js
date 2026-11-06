@@ -1,6 +1,6 @@
-import Joi from "joi";
+﻿import Joi from "joi";
 
-import WAREHOUSE_STATUSES from "../../constants/warehouseStatuses.js";
+import { WAREHOUSE_STATUSES } from "../../constants/warehouseStatuses.js";
 
 const objectIdPattern = /^[0-9a-fA-F]{24}$/;
 const validStatuses = Object.values(WAREHOUSE_STATUSES);

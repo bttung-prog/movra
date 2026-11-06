@@ -1,6 +1,6 @@
-import mongoose from "mongoose";
+﻿import mongoose from "mongoose";
 
-import RECEIPT_STATUSES from "../../constants/receiptStatuses.js";
+import { RECEIPT_STATUSES } from "../../constants/receiptStatuses.js";
 import { INVENTORY_CONDITIONS } from "../../constants/inventoryStatuses.js";
 
 const warehouseReceiptSchema = new mongoose.Schema(
