@@ -248,6 +248,7 @@ describe("orderService.create", () => {
 
     expect(result).toEqual({ _id: "order-1", orderCode: "ORD-0001" });
     expect(mocks.calculateFee).toHaveBeenCalledWith({
+      serviceType: "standard",
       weight: 2,
       volume: 1,
       quantity: 3,
@@ -281,6 +282,29 @@ describe("orderService.create", () => {
     );
     expect(transaction.commitTransaction).not.toHaveBeenCalled();
     expect(transaction.endSession).not.toHaveBeenCalled();
+  });
+
+  it("creates an express order and passes serviceType to pricing", async () => {
+    const result = await orderService.create(
+      { ...validCreatePayload, type: "express" },
+      transaction,
+    );
+
+    expect(result).toEqual({ _id: "order-1", orderCode: "ORD-0001" });
+    expect(mocks.calculateFee).toHaveBeenCalledWith({
+      serviceType: "express",
+      weight: 2,
+      volume: 1,
+      quantity: 1,
+      routeId: "route-1",
+      goodsCategoryId: "category-1",
+    });
+    expect(mocks.createOrder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "express",
+      }),
+      transaction,
+    );
   });
 
   it("rejects an invalid shipping fee before opening a transaction", async () => {
@@ -891,7 +915,7 @@ describe("orderService.getPublicTrackingByCode", () => {
       status: "delivered",
       weight: 2,
       volume: 1,
-      type: "normal",
+      type: "standard",
       deliveredAt,
       createdAt,
     });
@@ -904,7 +928,7 @@ describe("orderService.getPublicTrackingByCode", () => {
       status: "delivered",
       weight: 2,
       volume: 1,
-      type: "normal",
+      type: "standard",
       deliveredAt,
       createdAt,
       trackingLogs: logs,

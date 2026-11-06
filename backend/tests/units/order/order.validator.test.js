@@ -24,7 +24,7 @@ describe("orderValidator.createOrderSchema", () => {
 
     expect(error).toBeUndefined();
     expect(value.codAmount).toBe(0);
-    expect(value.type).toBe("normal");
+    expect(value.type).toBe("standard");
   });
 
   it.each([
@@ -55,6 +55,19 @@ describe("orderValidator.createOrderSchema", () => {
 
     expect(result.error).toBeUndefined();
   });
+
+  it.each(["standard", "express", "heavy", "same_day"])(
+    "accepts supported service type: %s",
+    (type) => {
+      const result = orderValidator.createOrderSchema.validate({
+        ...validOrderPayload,
+        type,
+      });
+
+      expect(result.error).toBeUndefined();
+      expect(result.value.type).toBe(type);
+    },
+  );
 });
 
 describe("Order pickup location schema", () => {

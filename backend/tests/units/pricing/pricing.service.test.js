@@ -74,6 +74,33 @@ describe("pricingService.calculateFee", () => {
     expect(result.totalShippingFee).toBe(47500);
   });
 
+  it("falls back to the express default rate when there is no active rate for express", async () => {
+    mocks.findActiveByServiceType.mockResolvedValue(null);
+
+    const result = await pricingService.calculateFee({
+      serviceType: "express",
+      weight: 3,
+      distance: 10,
+    });
+
+    expect(result).toMatchObject({
+      serviceType: "express",
+      rateName: "Bảng cước Hỏa tốc mặc định",
+      actualWeight: 3,
+      volumetricWeight: 0,
+      billableWeight: 3,
+      distance: 10,
+    });
+    expect(result.breakdown).toMatchObject({
+      basePrice: 25000,
+      weightFee: 7000,
+      distanceFee: 28000,
+      surchargeAmount: 0,
+      totalShippingFee: 60000,
+    });
+    expect(result.totalShippingFee).toBe(60000);
+  });
+
   it("uses route distance and applies matched category surcharge", async () => {
     mocks.findActiveByServiceType.mockResolvedValue({
       serviceType: "express",
