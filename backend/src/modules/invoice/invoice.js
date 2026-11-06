@@ -1,4 +1,4 @@
-﻿import mongoose from "mongoose";
+import mongoose from "mongoose";
 
 import { INVOICE_STATUSES } from "../../constants/invoiceStatuses.js";
 

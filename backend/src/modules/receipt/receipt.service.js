@@ -1,4 +1,4 @@
-﻿import mongoose from "mongoose";
+import mongoose from "mongoose";
 
 import { ROLES } from "../../constants/roles.js";
 import { RECEIPT_STATUSES } from "../../constants/receiptStatuses.js";

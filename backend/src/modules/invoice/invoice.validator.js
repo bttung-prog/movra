@@ -1,4 +1,4 @@
-﻿import Joi from "joi";
+import Joi from "joi";
 
 import { INVOICE_STATUSES } from "../../constants/invoiceStatuses.js";
 

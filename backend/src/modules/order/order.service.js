@@ -1,4 +1,4 @@
-﻿import mongoose from "mongoose";
+import mongoose from "mongoose";
 
 import { PAYMENT_METHODS } from "../../constants/paymentMethods.js";
 import {
