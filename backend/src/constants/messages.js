@@ -688,7 +688,10 @@ export const ORDER_MESSAGES = {
   ORDERS_NOT_FOUND: "Một hoặc nhiều đơn hàng không tìm thấy",
   CANNOT_ASSIGN_ORDER_STATUS: (orderCode, status) =>
     `Đơn hàng '${orderCode}' không thể gán vào chuyến khi đang ở trạng thái '${status}'`,
+  CANNOT_UNASSIGN_ORDER_STATUS: (orderCode, status) =>
+    `Đơn hàng '${orderCode}' không thể gỡ khỏi chuyến khi đang ở trạng thái '${status}'`,
   ORDER_ALREADY_ASSIGNED: "Đơn hàng đã được gán vào một chuyến khác",
+  ORDER_NOT_ASSIGNED: "Đơn hàng chưa được gán vào chuyến xe nào",
   ORDER_TRIP_TYPE_MISMATCH:
     "Đơn hàng chưa nhập kho phải được gán vào chuyến lấy hàng; đơn đã nhập kho chỉ được gán vào chuyến giao hoặc trung chuyển",
   PICKUP_TRIP_REQUIRED:

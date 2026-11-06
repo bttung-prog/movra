@@ -8,13 +8,16 @@ import {
 import { WALLET_TRANSACTION_STATUSES } from "../../constants/walletTransactionStatuses.js";
 import { ROLES } from "../../constants/roles.js";
 import { TRIP_TYPES } from "../../constants/tripTypes.js";
+import { TRIP_STATUSES } from "../../constants/tripStatuses.js";
 import {
+  CANCELLABLE_ORDER_STATUSES,
+  ORDER_STATUSES,
+  PICKUP_ASSIGNABLE_ORDER_STATUSES,
   SETTLEMENT_SENSITIVE_ORDER_FIELDS,
   TRACKING_STATUS_TRANSITIONS,
 } from "../../constants/orderStatuses.js";
 import {
   ORDER_MESSAGES,
-  PAYMENT_MESSAGES,
   WAREHOUSE_MESSAGES,
 } from "../../constants/messages.js";
 
@@ -389,7 +392,7 @@ const create = async (
         paymentStatus: "pending",
         paymentTime: null,
         notes,
-        status: "created",
+        status: ORDER_STATUSES.CREATED,
         deliveryAttempts: 0,
       },
       dbSession,
@@ -398,7 +401,7 @@ const create = async (
     await orderRepository.createTrackingLog(
       {
         orderId: newOrder._id,
-        status: "created",
+        status: ORDER_STATUSES.CREATED,
         notes: "Order created successfully",
         changedBy: createdBy,
       },
@@ -572,7 +575,11 @@ const updateById = async ({
     );
   }
 
-  const restrictedStatuses = ["delivered", "returned", "cancelled"];
+  const restrictedStatuses = [
+    ORDER_STATUSES.DELIVERED,
+    ORDER_STATUSES.RETURNED,
+    ORDER_STATUSES.CANCELLED,
+  ];
   if (restrictedStatuses.includes(existingOrder.status)) {
     const coreFields = [
       "goodCategory",
@@ -750,12 +757,14 @@ const markAsDelivered = async ({
 }) => {
   const order = await getById(orderId, true, user);
 
-  if (
-    order.status !== "delivery_scheduled" &&
-    order.status !== "transporting" &&
-    order.status !== "out_for_delivery" &&
-    order.status !== "picked_up"
-  ) {
+  const deliverableStatuses = [
+    ORDER_STATUSES.DELIVERY_SCHEDULED,
+    ORDER_STATUSES.TRANSPORTING,
+    ORDER_STATUSES.OUT_FOR_DELIVERY,
+    ORDER_STATUSES.PICKED_UP,
+  ];
+
+  if (!deliverableStatuses.includes(order.status)) {
     throw new ApiError(400, ORDER_MESSAGES.CANNOT_MARK_DELIVERED(order.status));
   }
 
@@ -812,7 +821,7 @@ const markAsDelivered = async ({
     const updatedOrder = await orderRepository.updateById(
       orderId,
       {
-        status: "delivered",
+        status: ORDER_STATUSES.DELIVERED,
         deliveredAt: now,
         podImageUrl: podImageUrl || order.podImageUrl,
         recipientReceivedName:
@@ -830,10 +839,10 @@ const markAsDelivered = async ({
       {
         status: {
           $in: [
-            "delivery_scheduled",
-            "transporting",
-            "out_for_delivery",
-            "picked_up",
+            ORDER_STATUSES.DELIVERY_SCHEDULED,
+            ORDER_STATUSES.TRANSPORTING,
+            ORDER_STATUSES.OUT_FOR_DELIVERY,
+            ORDER_STATUSES.PICKED_UP,
           ],
         },
         deletedAt: null,
@@ -865,7 +874,7 @@ const markAsDelivered = async ({
       {
         orderId,
         tripId: assignedTripId,
-        status: "delivered",
+        status: ORDER_STATUSES.DELIVERED,
         latitude,
         longitude,
         address,
@@ -988,12 +997,7 @@ const refundShippingFeeToWallet = async (order, amount, session, reason) => {
 const cancelOrder = async ({ orderId, reason, cancelledBy, user = null }) => {
   const order = await getById(orderId, true, user);
 
-  const cancellableStatuses = [
-    "created",
-    "driver_assigned",
-    "pickup_scheduled",
-  ];
-  if (!cancellableStatuses.includes(order.status)) {
+  if (!CANCELLABLE_ORDER_STATUSES.includes(order.status)) {
     throw new ApiError(400, ORDER_MESSAGES.CANNOT_CANCEL_STATUS(order.status));
   }
 
@@ -1010,12 +1014,12 @@ const cancelOrder = async ({ orderId, reason, cancelledBy, user = null }) => {
     let updatedOrder = await orderRepository.updateById(
       orderId,
       {
-        status: "cancelled",
+        status: ORDER_STATUSES.CANCELLED,
         tripId: null,
         notes: reason || order.notes,
       },
       session,
-      { status: { $in: cancellableStatuses }, deletedAt: null },
+      { status: { $in: CANCELLABLE_ORDER_STATUSES }, deletedAt: null },
     );
     if (!updatedOrder) {
       throw new ApiError(409, ORDER_MESSAGES.ORDER_ASSIGNMENT_CHANGED);
@@ -1039,7 +1043,7 @@ const cancelOrder = async ({ orderId, reason, cancelledBy, user = null }) => {
       {
         orderId,
         tripId: assignedTripId,
-        status: "cancelled",
+        status: ORDER_STATUSES.CANCELLED,
         notes: reason || "Order cancelled",
         changedBy: cancelledBy,
       },
@@ -1100,7 +1104,7 @@ const getByTripId = async ({
 
 const assignOrdersToTrip = async ({ tripId, orderIds = [] }, user = null) => {
   const trip = await tripService.getById(tripId, true, user);
-  if (trip.status !== "planned") {
+  if (trip.status !== TRIP_STATUSES.PLANNED) {
     throw new ApiError(400, ORDER_MESSAGES.TRIP_NOT_PLANNED);
   }
 
@@ -1118,11 +1122,10 @@ const assignOrdersToTrip = async ({ tripId, orderIds = [] }, user = null) => {
     throw new ApiError(404, ORDER_MESSAGES.ORDERS_NOT_FOUND);
   }
 
-  const pickupStatuses = ["created", "driver_assigned", "pickup_scheduled"];
   const isOrderAssignable = (order, targetTrip) =>
     targetTrip.type === TRIP_TYPES.PICKUP
-      ? pickupStatuses.includes(order.status)
-      : order.status === "stored";
+      ? PICKUP_ASSIGNABLE_ORDER_STATUSES.includes(order.status)
+      : order.status === ORDER_STATUSES.STORED;
   const invalidOrder = orders.find((order) => !isOrderAssignable(order, trip));
   if (invalidOrder) {
     throw new ApiError(400, ORDER_MESSAGES.ORDER_TRIP_TYPE_MISMATCH);
@@ -1165,18 +1168,18 @@ const assignOrdersToTrip = async ({ tripId, orderIds = [] }, user = null) => {
   await assertTripCapacity(trip, orders);
 
   const storedOrderIds = orders
-    .filter((o) => o.status === "stored")
+    .filter((o) => o.status === ORDER_STATUSES.STORED)
     .map((o) => o._id);
 
   const pickupOrderIds = orders
-    .filter((o) => o.status !== "stored")
+    .filter((o) => o.status !== ORDER_STATUSES.STORED)
     .map((o) => o._id);
 
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
     const currentTrip = await tripService.getById(tripId, true, user, session);
-    if (currentTrip.status !== "planned") {
+    if (currentTrip.status !== TRIP_STATUSES.PLANNED) {
       throw new ApiError(400, ORDER_MESSAGES.TRIP_NOT_PLANNED);
     }
     const currentTripWarehouseId =
@@ -1228,7 +1231,7 @@ const assignOrdersToTrip = async ({ tripId, orderIds = [] }, user = null) => {
       const result = await orderRepository.updateMany(
         {
           _id: { $in: storedOrderIds },
-          status: "stored",
+          status: ORDER_STATUSES.STORED,
           $or: [{ tripId: null }, { tripId }],
         },
         { tripId, warehouseId: currentTripWarehouseId },
@@ -1243,12 +1246,12 @@ const assignOrdersToTrip = async ({ tripId, orderIds = [] }, user = null) => {
       const result = await orderRepository.updateMany(
         {
           _id: { $in: pickupOrderIds },
-          status: { $in: ["created", "driver_assigned", "pickup_scheduled"] },
+          status: { $in: PICKUP_ASSIGNABLE_ORDER_STATUSES },
           $or: [{ tripId: null }, { tripId }],
         },
         {
           tripId,
-          status: "driver_assigned",
+          status: ORDER_STATUSES.DRIVER_ASSIGNED,
           warehouseId: currentTripWarehouseId,
         },
         session,
@@ -1263,7 +1266,10 @@ const assignOrdersToTrip = async ({ tripId, orderIds = [] }, user = null) => {
         {
           orderId: order._id,
           tripId,
-          status: order.status === "stored" ? "stored" : "driver_assigned",
+          status:
+            order.status === ORDER_STATUSES.STORED
+              ? ORDER_STATUSES.STORED
+              : ORDER_STATUSES.DRIVER_ASSIGNED,
           notes: `Đơn hàng được gán vào chuyến ${currentTrip.tripCode || tripId}`,
           changedBy: user?.userId || user?._id,
         },
@@ -1297,30 +1303,33 @@ const unassignOrdersFromTrip = async ({ orderIds = [] }, user = null) => {
   for (const order of orders) {
     await assertOrderWarehouseAccess(order, user);
     if (!order.tripId) {
-      throw new ApiError(400, ORDER_MESSAGES.ORDER_ALREADY_ASSIGNED);
+      throw new ApiError(400, ORDER_MESSAGES.ORDER_NOT_ASSIGNED);
     }
 
     const trip = await tripService.getById(order.tripId, false, user);
     const canReleaseFailedPickup =
       trip.type === TRIP_TYPES.PICKUP &&
-      ["completed", "cancelled"].includes(trip.status) &&
-      ["driver_assigned", "pickup_scheduled"].includes(order.status);
-    if (trip.status !== "planned" && !canReleaseFailedPickup) {
+      [TRIP_STATUSES.COMPLETED, TRIP_STATUSES.CANCELLED].includes(
+        trip.status,
+      ) &&
+      [
+        ORDER_STATUSES.DRIVER_ASSIGNED,
+        ORDER_STATUSES.PICKUP_SCHEDULED,
+      ].includes(order.status);
+    if (trip.status !== TRIP_STATUSES.PLANNED && !canReleaseFailedPickup) {
       throw new ApiError(400, ORDER_MESSAGES.TRIP_NOT_PLANNED);
     }
 
-    const orderRouteId = order.routeId?._id || order.routeId;
-    const tripRouteId = trip.routeId?._id || trip.routeId;
-    if (orderRouteId?.toString() !== tripRouteId?.toString()) {
-      throw new ApiError(400, ORDER_MESSAGES.ROUTE_TRIP_MISMATCH);
-    }
-
     if (
-      !["stored", "driver_assigned", "pickup_scheduled"].includes(order.status)
+      ![
+        ORDER_STATUSES.STORED,
+        ORDER_STATUSES.DRIVER_ASSIGNED,
+        ORDER_STATUSES.PICKUP_SCHEDULED,
+      ].includes(order.status)
     ) {
       throw new ApiError(
         400,
-        ORDER_MESSAGES.CANNOT_ASSIGN_ORDER_STATUS(
+        ORDER_MESSAGES.CANNOT_UNASSIGN_ORDER_STATUS(
           order.orderCode,
           order.status,
         ),
@@ -1343,16 +1352,18 @@ const unassignOrdersFromTrip = async ({ orderIds = [] }, user = null) => {
 
       const canReleaseFailedPickup =
         sourceTrip.type === TRIP_TYPES.PICKUP &&
-        ["completed", "cancelled"].includes(sourceTrip.status) &&
-        ["driver_assigned", "pickup_scheduled"].includes(order.status);
-      if (sourceTrip.status !== "planned" && !canReleaseFailedPickup) {
+        [TRIP_STATUSES.COMPLETED, TRIP_STATUSES.CANCELLED].includes(
+          sourceTrip.status,
+        ) &&
+        [
+          ORDER_STATUSES.DRIVER_ASSIGNED,
+          ORDER_STATUSES.PICKUP_SCHEDULED,
+        ].includes(order.status);
+      if (
+        sourceTrip.status !== TRIP_STATUSES.PLANNED &&
+        !canReleaseFailedPickup
+      ) {
         throw new ApiError(400, ORDER_MESSAGES.TRIP_NOT_PLANNED);
-      }
-
-      const tripRouteId = sourceTrip.routeId?._id || sourceTrip.routeId;
-      const orderRouteId = order.routeId?._id || order.routeId;
-      if (orderRouteId?.toString() !== tripRouteId?.toString()) {
-        throw new ApiError(400, ORDER_MESSAGES.ROUTE_TRIP_MISMATCH);
       }
 
       const tripWarehouseId =
@@ -1360,9 +1371,9 @@ const unassignOrdersFromTrip = async ({ orderIds = [] }, user = null) => {
         sourceTrip.driverId?.warehouseId?._id ||
         sourceTrip.driverId?.warehouseId;
       const updateData =
-        order.status === "stored"
+        order.status === ORDER_STATUSES.STORED
           ? { tripId: null }
-          : { tripId: null, status: "created" };
+          : { tripId: null, status: ORDER_STATUSES.CREATED };
       if (!order.warehouseId) {
         updateData.warehouseId = tripWarehouseId;
       }
@@ -1398,7 +1409,7 @@ const unassignOrdersFromTrip = async ({ orderIds = [] }, user = null) => {
 const deleteById = async ({ orderId, session = null, user = null }) => {
   const order = await getById(orderId, true, user, session);
 
-  if (order.status !== "created") {
+  if (order.status !== ORDER_STATUSES.CREATED) {
     throw new ApiError(400, ORDER_MESSAGES.CANNOT_DELETE_STATUS(order.status));
   }
 
@@ -1419,7 +1430,7 @@ const deleteById = async ({ orderId, session = null, user = null }) => {
           : {}),
       },
       dbSession,
-      { status: "created", deletedAt: null },
+      { status: ORDER_STATUSES.CREATED, deletedAt: null },
     );
     if (!deletedOrder) {
       throw new ApiError(409, ORDER_MESSAGES.CANCEL_STATUS_CHANGED);
@@ -1434,7 +1445,7 @@ const deleteById = async ({ orderId, session = null, user = null }) => {
       order,
       shippingFeeRefund,
       dbSession,
-      "xóa order",
+      "xóa đơn hàng",
     );
 
     if (isInternalSession) {
@@ -1515,11 +1526,11 @@ const addTrackingLog = async ({
     throw new ApiError(409, ORDER_MESSAGES.ORDER_ASSIGNMENT_CHANGED);
   }
 
-  if (user && status === "stored") {
+  if (user && status === ORDER_STATUSES.STORED) {
     throw new ApiError(400, ORDER_MESSAGES.STORAGE_REQUIRES_RECEIPT);
   }
 
-  if (user && status === "picked_up" && !allowPickupConfirmation) {
+  if (user && status === ORDER_STATUSES.PICKED_UP && !allowPickupConfirmation) {
     throw new ApiError(400, ORDER_MESSAGES.PICKUP_CONFIRMATION_REQUIRED);
   }
 
@@ -1627,20 +1638,27 @@ const confirmPickup = async ({
     throw new ApiError(400, ORDER_MESSAGES.PICKUP_TRIP_REQUIRED);
   }
 
-  if (trip.status !== "in_progress") {
+  if (trip.status !== TRIP_STATUSES.IN_PROGRESS) {
     throw new ApiError(400, ORDER_MESSAGES.PICKUP_TRIP_NOT_IN_PROGRESS);
   }
 
-  if (!["driver_assigned", "pickup_scheduled"].includes(order.status)) {
+  if (
+    ![ORDER_STATUSES.DRIVER_ASSIGNED, ORDER_STATUSES.PICKUP_SCHEDULED].includes(
+      order.status,
+    )
+  ) {
     throw new ApiError(
       400,
       ORDER_MESSAGES.PICKUP_ORDER_STATUS_INVALID(order.status),
     );
   }
 
-  const status = outcome === "picked_up" ? "picked_up" : order.status;
+  const status =
+    outcome === ORDER_STATUSES.PICKED_UP
+      ? ORDER_STATUSES.PICKED_UP
+      : order.status;
   const trackingNotes =
-    outcome === "failed" ? `Lấy hàng thất bại: ${notes}` : notes;
+    outcome === ORDER_STATUSES.FAILED ? `Lấy hàng thất bại: ${notes}` : notes;
 
   return addTrackingLog({
     orderId,
@@ -1651,7 +1669,7 @@ const confirmPickup = async ({
     user,
     expectedStatus: order.status,
     session,
-    allowPickupConfirmation: outcome === "picked_up",
+    allowPickupConfirmation: outcome === ORDER_STATUSES.PICKED_UP,
   });
 };
 

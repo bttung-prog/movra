@@ -617,6 +617,144 @@ describe("orderService.assignOrdersToTrip", () => {
   });
 });
 
+describe("orderService.unassignOrdersFromTrip", () => {
+  it("throws error when orderIds is empty", async () => {
+    await expect(
+      orderService.unassignOrdersFromTrip({ orderIds: [] }),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: ORDER_MESSAGES.ORDER_IDS_REQUIRED_UNASSIGN,
+    });
+  });
+
+  it("throws error when order is not assigned to any trip", async () => {
+    const order = {
+      _id: "order-1",
+      orderCode: "ORD-0001",
+      status: "created",
+      tripId: null,
+      warehouseId: "warehouse-1",
+    };
+    mocks.findByIds.mockResolvedValue([order]);
+
+    await expect(
+      orderService.unassignOrdersFromTrip({ orderIds: ["order-1"] }),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: ORDER_MESSAGES.ORDER_NOT_ASSIGNED,
+    });
+  });
+
+  it("throws error when order status cannot be unassigned", async () => {
+    const order = {
+      _id: "order-1",
+      orderCode: "ORD-0001",
+      status: "delivered",
+      tripId: "trip-1",
+      warehouseId: "warehouse-1",
+    };
+    const trip = {
+      _id: "trip-1",
+      status: "planned",
+      type: "delivery",
+    };
+    mocks.findByIds.mockResolvedValue([order]);
+    mocks.getTripById.mockResolvedValue(trip);
+
+    await expect(
+      orderService.unassignOrdersFromTrip({ orderIds: ["order-1"] }),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: ORDER_MESSAGES.CANNOT_UNASSIGN_ORDER_STATUS(
+        order.orderCode,
+        order.status,
+      ),
+    });
+  });
+
+  it("successfully unassigns orders even when trip route differs from order route", async () => {
+    const trip = {
+      _id: "trip-1",
+      tripCode: "TRIP-0001",
+      type: "delivery",
+      status: "planned",
+      routeId: "route-trip-changed",
+      warehouseId: "warehouse-1",
+    };
+    const order = {
+      _id: "order-1",
+      orderCode: "ORD-0001",
+      status: "stored",
+      tripId: "trip-1",
+      routeId: "route-order-original",
+      warehouseId: "warehouse-1",
+    };
+    mocks.findByIds.mockResolvedValue([order]);
+    mocks.getTripById.mockResolvedValue(trip);
+    mocks.updateById.mockResolvedValue({ ...order, tripId: null });
+
+    const result = await orderService.unassignOrdersFromTrip({
+      orderIds: ["order-1"],
+    });
+
+    expect(result).toEqual({ unassignedCount: 1 });
+    expect(mocks.updateById).toHaveBeenCalledWith(
+      "order-1",
+      { tripId: null },
+      transaction,
+      { tripId: "trip-1", status: "stored", deletedAt: null },
+    );
+    expect(mocks.syncTripTotalOrder).toHaveBeenCalledWith(
+      "trip-1",
+      transaction,
+    );
+    expect(transaction.commitTransaction).toHaveBeenCalled();
+  });
+
+  it("successfully unassigns pickup orders with null trip routeId", async () => {
+    const trip = {
+      _id: "trip-pickup",
+      tripCode: "TRIP-PICKUP-1",
+      type: "pickup",
+      status: "planned",
+      routeId: null,
+      warehouseId: "warehouse-1",
+    };
+    const order = {
+      _id: "order-pickup-1",
+      orderCode: "ORD-0002",
+      status: "driver_assigned",
+      tripId: "trip-pickup",
+      routeId: "route-order",
+      warehouseId: null,
+    };
+    mocks.findByIds.mockResolvedValue([order]);
+    mocks.getTripById.mockResolvedValue(trip);
+    mocks.updateById.mockResolvedValue({
+      ...order,
+      tripId: null,
+      status: "created",
+    });
+
+    const result = await orderService.unassignOrdersFromTrip({
+      orderIds: ["order-pickup-1"],
+    });
+
+    expect(result).toEqual({ unassignedCount: 1 });
+    expect(mocks.updateById).toHaveBeenCalledWith(
+      "order-pickup-1",
+      { tripId: null, status: "created", warehouseId: "warehouse-1" },
+      transaction,
+      { tripId: "trip-pickup", status: "driver_assigned", deletedAt: null },
+    );
+    expect(mocks.syncTripTotalOrder).toHaveBeenCalledWith(
+      "trip-pickup",
+      transaction,
+    );
+    expect(transaction.commitTransaction).toHaveBeenCalled();
+  });
+});
+
 describe("orderService.getTripLoadMetrics", () => {
   it("calculates total weight and volume excluding specified orders", async () => {
     mocks.findLoadsByTripId.mockResolvedValue([
