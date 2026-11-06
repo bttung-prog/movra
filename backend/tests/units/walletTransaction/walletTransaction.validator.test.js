@@ -1,4 +1,4 @@
-﻿import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { PAYMENT_METHODS } from "../../../src/constants/paymentMethods.js";
 import { WALLET_TRANSACTION_STATUSES } from "../../../src/constants/walletTransactionStatuses.js";

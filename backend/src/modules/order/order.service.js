@@ -1,4 +1,4 @@
-﻿import mongoose from "mongoose";
+import mongoose from "mongoose";
 
 import { PAYMENT_METHODS } from "../../constants/paymentMethods.js";
 import {
@@ -8,6 +8,10 @@ import {
 import { WALLET_TRANSACTION_STATUSES } from "../../constants/walletTransactionStatuses.js";
 import { ROLES } from "../../constants/roles.js";
 import { TRIP_TYPES } from "../../constants/tripTypes.js";
+import {
+  SETTLEMENT_SENSITIVE_ORDER_FIELDS,
+  TRACKING_STATUS_TRANSITIONS,
+} from "../../constants/orderStatuses.js";
 import {
   ORDER_MESSAGES,
   PAYMENT_MESSAGES,
@@ -30,32 +34,6 @@ import walletTransactionService from "../walletTransaction/walletTransaction.ser
 import warehouseService from "../warehouse/warehouse.service.js";
 
 import orderRepository from "./order.repository.js";
-
-const SETTLEMENT_SENSITIVE_ORDER_FIELDS = [
-  "customerId",
-  "codAmount",
-  "codCollected",
-  "codCollectedAmount",
-  "codRemittedAmount",
-  "shippingFee",
-  "shippingFeePaid",
-  "shippingFeePaidAmount",
-];
-
-const TRACKING_STATUS_TRANSITIONS = {
-  driver_assigned: ["pickup_scheduled", "picked_up"],
-  pickup_scheduled: ["picked_up"],
-  picked_up: [
-    "stored",
-    "transporting",
-    "out_for_delivery",
-    "delivery_scheduled",
-  ],
-  stored: ["transporting", "out_for_delivery", "delivery_scheduled"],
-  transporting: ["out_for_delivery", "delivery_scheduled"],
-  out_for_delivery: ["delivery_scheduled"],
-  delivery_scheduled: ["out_for_delivery"],
-};
 
 const validateOrder = (order, requireNotDeleted = true) => {
   if (!order) {

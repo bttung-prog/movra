@@ -1,4 +1,4 @@
-﻿import { PAYMENT_PURPOSES } from "../../constants/paymentPurposes.js";
+import { PAYMENT_PURPOSES } from "../../constants/paymentPurposes.js";
 
 import Payment from "./payment.js";
 

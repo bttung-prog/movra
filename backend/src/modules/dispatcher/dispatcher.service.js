@@ -1,4 +1,4 @@
-﻿import {
+import {
   DISPATCHER_MESSAGES,
   USER_MESSAGES,
 } from "../../constants/messages.js";

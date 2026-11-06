@@ -1,4 +1,4 @@
-﻿import Joi from "joi";
+import Joi from "joi";
 
 import { PAYMENT_STATUSES } from "../../constants/paymentStatuses.js";
 import { PAYMENT_METHODS, PAYER_TYPES } from "../../constants/paymentMethods.js";

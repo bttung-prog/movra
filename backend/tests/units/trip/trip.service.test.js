@@ -44,6 +44,14 @@ const mocks = vi.hoisted(() => ({
   generateCode: vi.fn(),
 }));
 
+vi.mock("mongoose", async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    default: { ...actual.default, startSession: mocks.startSession },
+  };
+});
+
 vi.mock("../../../src/modules/driver/driver.service.js", () => ({
   default: {
     getById: mocks.getDriverById,
@@ -115,7 +123,7 @@ vi.mock("../../../src/utils/generateCode.js", () => ({
 
 import { TRIP_MESSAGES } from "../../../src/constants/messages.js";
 import { COMMON_MESSAGES } from "../../../src/constants/messages.js";
-import ROLES from "../../../src/constants/roles.js";
+import { ROLES } from "../../../src/constants/roles.js";
 import tripService from "../../../src/modules/trip/trip.service.js";
 
 const warehouseId = "warehouse-1";
@@ -124,6 +132,14 @@ const vehicleId = "vehicle-1";
 const routeId = "route-1";
 const validStart = "2030-04-01T08:00:00.000Z";
 const validEnd = "2030-04-01T12:00:00.000Z";
+
+const transaction = {
+  startTransaction: vi.fn(),
+  commitTransaction: vi.fn().mockResolvedValue(undefined),
+  abortTransaction: vi.fn().mockResolvedValue(undefined),
+  endSession: vi.fn(),
+  withTransaction: vi.fn().mockImplementation((cb) => cb()),
+};
 
 const plannedTrip = {
   _id: "trip-1",
@@ -140,6 +156,8 @@ const plannedTrip = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.startSession.mockResolvedValue(transaction);
+  mocks.getLatestTrackingLogByTripId.mockResolvedValue(null);
   mocks.getDriverById.mockResolvedValue({
     _id: driverId,
     status: "active",
@@ -385,6 +403,16 @@ describe("tripService.updateById and deleteById", () => {
 });
 
 describe("tripService tracking logs and expenses", () => {
+  it("rejects tracking updates with status 'planned'", async () => {
+    await expect(
+      tripService.addTrackingLog("trip-1", { status: "planned" }),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: TRIP_MESSAGES.CANNOT_LOG_PLANNED_STATUS,
+    });
+    expect(mocks.createTrackingLog).not.toHaveBeenCalled();
+  });
+
   it("rejects tracking updates for a completed trip", async () => {
     mocks.findById.mockResolvedValue({ ...plannedTrip, status: "completed" });
 
@@ -395,6 +423,82 @@ describe("tripService tracking logs and expenses", () => {
       message: TRIP_MESSAGES.CANNOT_LOG_STATUS("completed"),
     });
     expect(mocks.createTrackingLog).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid tracking transition from planned to in_progress directly", async () => {
+    await expect(
+      tripService.addTrackingLog("trip-1", { status: "in_progress" }),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: TRIP_MESSAGES.INVALID_TRACKING_STATUS_TRANSITION(
+        "planned",
+        "in_progress",
+      ),
+    });
+    expect(mocks.createTrackingLog).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid backward tracking transition from in_progress to departed", async () => {
+    mocks.findById.mockResolvedValue({ ...plannedTrip, status: "in_progress" });
+    mocks.getLatestTrackingLogByTripId.mockResolvedValue({
+      status: "in_progress",
+    });
+
+    await expect(
+      tripService.addTrackingLog("trip-1", { status: "departed" }),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: TRIP_MESSAGES.INVALID_TRACKING_STATUS_TRANSITION(
+        "in_progress",
+        "departed",
+      ),
+    });
+    expect(mocks.createTrackingLog).not.toHaveBeenCalled();
+  });
+
+  it("successfully logs departure and transitions planned trip to in_progress", async () => {
+    mocks.findById.mockResolvedValue(plannedTrip);
+    mocks.getLatestTrackingLogByTripId.mockResolvedValue(null);
+    mocks.createTrackingLog.mockResolvedValue({
+      _id: "log-1",
+      status: "departed",
+    });
+
+    const result = await tripService.addTrackingLog("trip-1", {
+      status: "departed",
+      latitude: 10.762,
+      longitude: 106.66,
+      odometerReading: 120,
+    });
+
+    expect(result).toEqual({ _id: "log-1", status: "departed" });
+    expect(mocks.createUsageLog).toHaveBeenCalled();
+    expect(mocks.updateById).toHaveBeenCalledWith(
+      "trip-1",
+      expect.objectContaining({ status: "in_progress" }),
+      transaction,
+    );
+  });
+
+  it("successfully logs intermediate tracking updates during in_progress trip", async () => {
+    mocks.findById.mockResolvedValue({ ...plannedTrip, status: "in_progress" });
+    mocks.getLatestTrackingLogByTripId.mockResolvedValue({
+      status: "departed",
+    });
+    mocks.createTrackingLog.mockResolvedValue({
+      _id: "log-2",
+      status: "in_progress",
+    });
+
+    const result = await tripService.addTrackingLog("trip-1", {
+      status: "in_progress",
+      latitude: 10.8,
+      longitude: 106.7,
+      speed: 45,
+    });
+
+    expect(result).toEqual({ _id: "log-2", status: "in_progress" });
+    expect(mocks.updateById).not.toHaveBeenCalled();
   });
 
   it("returns paginated trip audit history", async () => {

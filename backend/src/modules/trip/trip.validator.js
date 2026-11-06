@@ -1,6 +1,6 @@
 import Joi from "joi";
 
-import TRIP_TYPES from "../../constants/tripTypes.js";
+import { TRIP_TYPES } from "../../constants/tripTypes.js";
 
 const objectIdPattern = /^[0-9a-fA-F]{24}$/;
 
@@ -167,7 +167,6 @@ const reassignSchema = Joi.object({
 const createTrackingLogSchema = Joi.object({
   status: Joi.string()
     .valid(
-      "planned",
       "departed",
       "in_progress",
       "arrived_destination",
@@ -179,7 +178,7 @@ const createTrackingLogSchema = Joi.object({
     .messages({
       "any.required": "Tracking status is required",
       "any.only":
-        "Status must be one of: planned, departed, in_progress, arrived_destination, completed, cancelled, incident",
+        "Status must be one of: departed, in_progress, arrived_destination, completed, cancelled, incident",
     }),
 
   latitude: Joi.number().min(-90).max(90).required().messages({

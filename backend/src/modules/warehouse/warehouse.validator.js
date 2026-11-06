@@ -1,4 +1,4 @@
-﻿import Joi from "joi";
+import Joi from "joi";
 
 import { WAREHOUSE_STATUSES } from "../../constants/warehouseStatuses.js";
 

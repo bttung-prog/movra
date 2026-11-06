@@ -1,4 +1,4 @@
-﻿import mongoose from "mongoose";
+import mongoose from "mongoose";
 
 import { WAREHOUSE_STATUSES } from "../../constants/warehouseStatuses.js";
 
