@@ -1,5 +1,8 @@
 import mongoose from "mongoose";
 
+import { ORDER_STATUSES } from "../../constants/orderStatuses.js";
+import { SERVICE_TYPES } from "../../constants/serviceTypes.js";
+
 const orderSchema = new mongoose.Schema(
   {
     orderCode: {
@@ -155,27 +158,14 @@ const orderSchema = new mongoose.Schema(
 
     type: {
       type: String,
-      enum: ["normal", "express"],
-      default: "normal",
+      enum: Object.values(SERVICE_TYPES),
+      default: SERVICE_TYPES.STANDARD,
     },
 
     status: {
       type: String,
-      enum: [
-        "created",
-        "driver_assigned",
-        "pickup_scheduled",
-        "picked_up",
-        "stored",
-        "transporting",
-        "out_for_delivery",
-        "delivery_scheduled",
-        "delivered",
-        "failed",
-        "returned",
-        "cancelled",
-      ],
-      default: "created",
+      enum: Object.values(ORDER_STATUSES),
+      default: ORDER_STATUSES.CREATED,
     },
 
     deliveryAttempts: {

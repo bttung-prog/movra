@@ -72,7 +72,7 @@ describe("Order API integration", () => {
       volume: 1,
       quantity: 1,
       codAmount: 500000,
-      type: "normal",
+      type: "standard",
     };
 
     const response = await request(app)

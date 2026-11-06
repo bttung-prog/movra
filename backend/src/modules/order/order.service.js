@@ -20,6 +20,7 @@ import {
   ORDER_MESSAGES,
   WAREHOUSE_MESSAGES,
 } from "../../constants/messages.js";
+import { SERVICE_TYPES } from "../../constants/serviceTypes.js";
 
 import ApiError from "../../utils/ApiError.js";
 import generateCode from "../../utils/generateCode.js";
@@ -266,7 +267,7 @@ const create = async (
     quantity,
     codAmount = 0,
     routeId,
-    type = "normal",
+    type = SERVICE_TYPES.STANDARD,
     notes,
     createdBy,
     warehouseId = null,
@@ -343,6 +344,7 @@ const create = async (
   }
 
   const feeResult = await pricingService.calculateFee({
+    serviceType: type,
     weight,
     volume,
     quantity,

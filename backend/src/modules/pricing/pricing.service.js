@@ -1,5 +1,8 @@
 import { PRICING_MESSAGES } from "../../constants/messages.js";
-import { DEFAULT_RATE } from "../../constants/defaultShippingRate.js";
+import {
+  DEFAULT_RATE,
+  DEFAULT_RATES_BY_SERVICE_TYPE,
+} from "../../constants/defaultShippingRate.js";
 
 import ApiError from "../../utils/ApiError.js";
 
@@ -39,7 +42,7 @@ const calculateFee = async ({
 
   let rate = await pricingRepository.findActiveByServiceType(serviceType);
   if (!rate) {
-    rate = DEFAULT_RATE;
+    rate = DEFAULT_RATES_BY_SERVICE_TYPE[serviceType] || DEFAULT_RATE;
   }
 
   const totalWeight = (Number(weight) || 1) * normalizedQuantity;

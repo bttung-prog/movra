@@ -1,5 +1,8 @@
 import Joi from "joi";
 
+import { ORDER_STATUSES } from "../../constants/orderStatuses.js";
+import { SERVICE_TYPES } from "../../constants/serviceTypes.js";
+
 const objectId = Joi.string()
   .regex(/^[0-9a-fA-F]{24}$/)
   .messages({
@@ -9,24 +12,11 @@ const objectId = Joi.string()
 
 const phonePattern = /^[0-9]{10,11}$/;
 
-const orderStatusEnum = [
-  "created",
-  "driver_assigned",
-  "pickup_scheduled",
-  "picked_up",
-  "stored",
-  "transporting",
-  "out_for_delivery",
-  "delivery_scheduled",
-  "delivered",
-  "failed",
-  "returned",
-  "cancelled",
-];
+const orderStatusEnum = Object.values(ORDER_STATUSES);
 
 const paymentStatusEnum = ["pending", "failed", "success"];
 
-const orderTypeEnum = ["normal", "express"];
+const orderTypeEnum = Object.values(SERVICE_TYPES);
 
 const createOrderSchema = Joi.object({
   customerId: objectId.optional(),
@@ -103,7 +93,7 @@ const createOrderSchema = Joi.object({
 
   type: Joi.string()
     .valid(...orderTypeEnum)
-    .default("normal"),
+    .default(SERVICE_TYPES.STANDARD),
 
   notes: Joi.string().trim().allow("").optional(),
 
