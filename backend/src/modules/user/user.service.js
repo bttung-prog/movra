@@ -1,7 +1,7 @@
-import mongoose from "mongoose";
+﻿import mongoose from "mongoose";
 
 import { USER_MESSAGES, COMMON_MESSAGES } from "../../constants/messages.js";
-import ROLES from "../../constants/roles.js";
+import { ROLES } from "../../constants/roles.js";
 
 import ApiError from "../../utils/ApiError.js";
 import { escapeRegex } from "../../utils/regexUtils.js";

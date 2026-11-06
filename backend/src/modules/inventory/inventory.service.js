@@ -1,4 +1,4 @@
-import ROLES from "../../constants/roles.js";
+﻿import { ROLES } from "../../constants/roles.js";
 import {
   INVENTORY_STATUSES,
   INVENTORY_CONDITIONS,

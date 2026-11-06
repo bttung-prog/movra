@@ -1,9 +1,7 @@
-import Joi from "joi";
+﻿import Joi from "joi";
 
-import PAYMENT_STATUSES from "../../constants/paymentStatuses.js";
-import PAYMENT_METHODS, {
-  PAYER_TYPES,
-} from "../../constants/paymentMethods.js";
+import { PAYMENT_STATUSES } from "../../constants/paymentStatuses.js";
+import { PAYMENT_METHODS, PAYER_TYPES } from "../../constants/paymentMethods.js";
 
 const objectId = Joi.string()
   .regex(/^[0-9a-fA-F]{24}$/)

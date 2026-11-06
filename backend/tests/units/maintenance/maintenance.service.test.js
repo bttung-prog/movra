@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+﻿import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   createSchedule: vi.fn(),
@@ -65,7 +65,7 @@ import {
   DRIVER_MESSAGES,
   MAINTENANCE_MESSAGES,
 } from "../../../src/constants/messages.js";
-import ROLES from "../../../src/constants/roles.js";
+import { ROLES } from "../../../src/constants/roles.js";
 import {
   MAINTENANCE_STATUSES,
   MAINTENANCE_TYPES,

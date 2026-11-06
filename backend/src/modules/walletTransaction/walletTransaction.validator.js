@@ -1,6 +1,6 @@
-import Joi from "joi";
+﻿import Joi from "joi";
 
-import PAYMENT_METHODS from "../../constants/paymentMethods.js";
+import { PAYMENT_METHODS } from "../../constants/paymentMethods.js";
 import { WALLET_TRANSACTION_TYPES } from "../../constants/walletTransactionTypes.js";
 import { WALLET_TRANSACTION_STATUSES } from "../../constants/walletTransactionStatuses.js";
 

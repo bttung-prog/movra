@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+﻿import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   create: vi.fn(),
@@ -75,8 +75,8 @@ import {
   DISPATCHER_MESSAGES,
   USER_MESSAGES,
 } from "../../../src/constants/messages.js";
-import ROLES from "../../../src/constants/roles.js";
-import USER_STATUSES from "../../../src/constants/userStatuses.js";
+import { ROLES } from "../../../src/constants/roles.js";
+import { USER_STATUSES } from "../../../src/constants/userStatuses.js";
 import dispatcherService from "../../../src/modules/dispatcher/dispatcher.service.js";
 
 const dispatcherId = "dispatcher-1";

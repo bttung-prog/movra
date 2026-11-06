@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+﻿import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   create: vi.fn(),
@@ -61,7 +61,7 @@ vi.mock("../../../src/utils/generateCode.js", () => ({
 }));
 
 import { COD_SETTLEMENT_MESSAGES } from "../../../src/constants/messages.js";
-import ROLES from "../../../src/constants/roles.js";
+import { ROLES } from "../../../src/constants/roles.js";
 import codSettlementService from "../../../src/modules/codSettlement/codSettlement.service.js";
 import {
   PAYOUT_METHODS,

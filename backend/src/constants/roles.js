@@ -1,4 +1,4 @@
-const ROLES = {
+export const ROLES = {
   ADMIN: "admin",
   DRIVER: "driver",
   DISPATCHER: "dispatcher",
@@ -6,5 +6,3 @@ const ROLES = {
   WAREHOUSE_STAFF: "warehouse_staff",
   CUSTOMER: "customer",
 };
-
-export default ROLES;

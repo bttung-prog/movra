@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+﻿import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   create: vi.fn(),
@@ -41,7 +41,7 @@ vi.mock("../../../src/utils/generateCode.js", () => ({
 }));
 
 import { WALLET_TRANSACTION_MESSAGES } from "../../../src/constants/messages.js";
-import ROLES from "../../../src/constants/roles.js";
+import { ROLES } from "../../../src/constants/roles.js";
 import walletTransactionService from "../../../src/modules/walletTransaction/walletTransaction.service.js";
 
 const customerId = "customer-1";

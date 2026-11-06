@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 
-import WAREHOUSE_STATUSES from "../../../src/constants/warehouseStatuses.js";
+import { WAREHOUSE_STATUSES } from "../../../src/constants/warehouseStatuses.js";
 import warehouseValidator from "../../../src/modules/warehouse/warehouse.validator.js";
 
 const warehouseId = "507f1f77bcf86cd799439011";

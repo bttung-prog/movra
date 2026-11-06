@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+﻿import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   startSession: vi.fn(),
@@ -92,8 +92,8 @@ import {
   USER_MESSAGES,
 } from "../../../src/constants/messages.js";
 import ApiError from "../../../src/utils/ApiError.js";
-import ROLES from "../../../src/constants/roles.js";
-import USER_STATUSES from "../../../src/constants/userStatuses.js";
+import { ROLES } from "../../../src/constants/roles.js";
+import { USER_STATUSES } from "../../../src/constants/userStatuses.js";
 import userService from "../../../src/modules/user/user.service.js";
 
 const userId = "user-1";

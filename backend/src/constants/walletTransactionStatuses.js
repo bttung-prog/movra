@@ -3,5 +3,3 @@ export const WALLET_TRANSACTION_STATUSES = {
   SUCCESS: "success",
   FAILED: "failed",
 };
-
-export default WALLET_TRANSACTION_STATUSES;

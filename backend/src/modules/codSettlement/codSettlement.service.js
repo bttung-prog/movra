@@ -1,6 +1,6 @@
-import mongoose from "mongoose";
+﻿import mongoose from "mongoose";
 
-import ROLES from "../../constants/roles.js";
+import { ROLES } from "../../constants/roles.js";
 import {
   WALLET_TRANSACTION_TYPES,
   WALLET_TRANSACTION_DIRECTIONS,

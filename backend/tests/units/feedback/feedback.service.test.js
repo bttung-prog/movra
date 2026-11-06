@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+﻿import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   startSession: vi.fn(),
@@ -60,7 +60,7 @@ vi.mock("../../../src/modules/driver/driver.service.js", () => ({
 }));
 
 import { FEEDBACK_MESSAGES } from "../../../src/constants/messages.js";
-import ROLES from "../../../src/constants/roles.js";
+import { ROLES } from "../../../src/constants/roles.js";
 import feedbackService from "../../../src/modules/feedback/feedback.service.js";
 
 const customerId = "507f1f77bcf86cd799439011";

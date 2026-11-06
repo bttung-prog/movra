@@ -10,8 +10,3 @@ export const MAINTENANCE_STATUSES = {
   COMPLETED: "completed",
   CANCELLED: "cancelled",
 };
-
-export default {
-  MAINTENANCE_TYPES,
-  MAINTENANCE_STATUSES,
-};

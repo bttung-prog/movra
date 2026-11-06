@@ -10,5 +10,3 @@ export const WALLET_TRANSACTION_DIRECTIONS = {
   CREDIT: "credit",
   DEBIT: "debit",
 };
-
-export default WALLET_TRANSACTION_TYPES;

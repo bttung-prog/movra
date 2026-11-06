@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+﻿import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   create: vi.fn(),
@@ -30,7 +30,7 @@ vi.mock("../../../src/modules/user/user.service.js", () => ({
 }));
 
 import { CUSTOMER_MESSAGES } from "../../../src/constants/messages.js";
-import ROLES from "../../../src/constants/roles.js";
+import { ROLES } from "../../../src/constants/roles.js";
 import customerService from "../../../src/modules/customer/customer.service.js";
 
 const customerId = "customer-1";

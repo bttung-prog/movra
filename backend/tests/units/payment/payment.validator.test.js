@@ -1,7 +1,7 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 
-import PAYMENT_METHODS from "../../../src/constants/paymentMethods.js";
-import PAYMENT_STATUSES from "../../../src/constants/paymentStatuses.js";
+import { PAYMENT_METHODS } from "../../../src/constants/paymentMethods.js";
+import { PAYMENT_STATUSES } from "../../../src/constants/paymentStatuses.js";
 import paymentValidator from "../../../src/modules/payment/payment.validator.js";
 
 const invoiceId = "507f1f77bcf86cd799439011";

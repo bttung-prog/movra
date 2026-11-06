@@ -1,6 +1,6 @@
-import mongoose from "mongoose";
+﻿import mongoose from "mongoose";
 
-import INVOICE_STATUSES from "../../constants/invoiceStatuses.js";
+import { INVOICE_STATUSES } from "../../constants/invoiceStatuses.js";
 
 import { integerMoney } from "../../utils/integerMoneySchema.js";
 

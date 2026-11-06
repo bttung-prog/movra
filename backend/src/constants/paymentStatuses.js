@@ -5,5 +5,3 @@ export const PAYMENT_STATUSES = {
   PARTIALLY_REFUNDED: "partially_refunded",
   REFUNDED: "refunded",
 };
-
-export default PAYMENT_STATUSES;

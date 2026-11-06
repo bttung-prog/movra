@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+﻿import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   createWithHashedPassword: vi.fn(),
@@ -119,8 +119,8 @@ import {
   AUTH_MESSAGES,
   USER_MESSAGES,
 } from "../../../src/constants/messages.js";
-import ROLES from "../../../src/constants/roles.js";
-import USER_STATUSES from "../../../src/constants/userStatuses.js";
+import { ROLES } from "../../../src/constants/roles.js";
+import { USER_STATUSES } from "../../../src/constants/userStatuses.js";
 import ApiError from "../../../src/utils/ApiError.js";
 import authService from "../../../src/modules/auth/auth.service.js";
 

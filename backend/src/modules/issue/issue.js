@@ -1,5 +1,5 @@
-import mongoose from "mongoose";
-import ISSUE_STATUSES from "../../constants/issueStatuses.js";
+﻿import mongoose from "mongoose";
+import { ISSUE_STATUSES } from "../../constants/issueStatuses.js";
 
 const warehouseIssueSchema = new mongoose.Schema(
   {
