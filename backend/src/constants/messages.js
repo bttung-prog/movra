@@ -573,6 +573,10 @@ export const TRIP_MESSAGES = {
   TOTAL_ORDER_SYSTEM_MANAGED: "Tổng số đơn của chuyến được hệ thống tự tính",
   CANNOT_LOG_STATUS: (status) =>
     `Không thể thêm nhật ký cho chuyến xe đã ở trạng thái ${status}`,
+  INVALID_TRACKING_STATUS_TRANSITION: (currentStatus, nextStatus) =>
+    `Không thể chuyển trạng thái hành trình từ '${currentStatus}' sang '${nextStatus}' qua nhật ký theo dõi`,
+  CANNOT_LOG_PLANNED_STATUS:
+    "Không thể tạo nhật ký hành trình với trạng thái đã lên kế hoạch",
   NOT_ASSIGNED_DRIVER: "Bạn không phải là tài xế được phân công cho chuyến này",
   CANNOT_COMPLETE_STATUS:
     "Không thể hoàn thành chuyến xe chưa khởi hành hoặc chưa chuyển sang trạng thái đang thực hiện",
@@ -920,34 +924,3 @@ export const PRICING_MESSAGES = {
   DELETE_RATE_SUCCESS: "Xóa bảng cước thành công",
   RATE_NOT_FOUND: "Không tìm thấy bảng cước",
 };
-
-const MESSAGES = {
-  COMMON: COMMON_MESSAGES,
-  AUTH: AUTH_MESSAGES,
-  USER: USER_MESSAGES,
-  ADMIN: ADMIN_MESSAGES,
-  WAREHOUSE: WAREHOUSE_MESSAGES,
-  VEHICLE: VEHICLE_MESSAGES,
-  DRIVER: DRIVER_MESSAGES,
-  CUSTOMER: CUSTOMER_MESSAGES,
-  ADDRESS: ADDRESS_MESSAGES,
-  MAINTENANCE: MAINTENANCE_MESSAGES,
-  STAFF: STAFF_MESSAGES,
-  INVENTORY: INVENTORY_MESSAGES,
-  RECEIPT: RECEIPT_MESSAGES,
-  ISSUE: ISSUE_MESSAGES,
-  GOODS_CATEGORY: GOODS_CATEGORY_MESSAGES,
-  ROUTE: ROUTE_MESSAGES,
-  TRIP: TRIP_MESSAGES,
-  FAILURE_REASON: FAILURE_REASON_MESSAGES,
-  ORDER: ORDER_MESSAGES,
-  DISPATCHER: DISPATCHER_MESSAGES,
-  INVOICE: INVOICE_MESSAGES,
-  PAYMENT: PAYMENT_MESSAGES,
-  WALLET_TRANSACTION: WALLET_TRANSACTION_MESSAGES,
-  COD_SETTLEMENT: COD_SETTLEMENT_MESSAGES,
-  NOTIFICATION: NOTIFICATION_MESSAGES,
-  PRICING: PRICING_MESSAGES,
-};
-
-export default MESSAGES;

@@ -1,7 +1,14 @@
 import mongoose from "mongoose";
 
-import TRIP_TYPES from "../../constants/tripTypes.js";
-import ROLES from "../../constants/roles.js";
+import { TRIP_TYPES } from "../../constants/tripTypes.js";
+import { ROLES } from "../../constants/roles.js";
+import {
+  TRIP_STATUSES,
+  TRACKING_STATUSES,
+  TRIP_TRACKING_TRANSITIONS,
+} from "../../constants/tripStatuses.js";
+import { VEHICLE_STATUSES } from "../../constants/vehicleStatuses.js";
+import { USER_STATUSES } from "../../constants/userStatuses.js";
 import {
   COMMON_MESSAGES,
   TRIP_MESSAGES,
@@ -236,7 +243,7 @@ const create = async ({
     throw new ApiError(400, TRIP_MESSAGES.ROUTE_REQUIRED);
   }
 
-  if (driver.status !== "active") {
+  if (driver.status !== USER_STATUSES.ACTIVE) {
     throw new ApiError(400, TRIP_MESSAGES.DRIVER_NOT_ACTIVE);
   }
   driverService.ensureLicenseIsValid(driver.licenseExpiryDate);
@@ -256,7 +263,10 @@ const create = async ({
     throw new ApiError(400, TRIP_MESSAGES.VEHICLE_WAREHOUSE_MISMATCH);
   }
 
-  if (vehicle.status === "maintenance" || vehicle.status === "retired") {
+  if (
+    vehicle.status === VEHICLE_STATUSES.MAINTENANCE ||
+    vehicle.status === VEHICLE_STATUSES.RETIRED
+  ) {
     throw new ApiError(
       400,
       TRIP_MESSAGES.VEHICLE_STATUS_INVALID(vehicle.status),
@@ -307,7 +317,7 @@ const create = async ({
           type,
           plannedStart: startDate,
           plannedEnd: endDate,
-          status: "planned",
+          status: TRIP_STATUSES.PLANNED,
           totalOrder: 0,
         },
         session,
@@ -568,7 +578,7 @@ const updateById = async (tripId, updateData, user = null) => {
 const deleteById = async (tripId, user = null) => {
   const trip = await getById(tripId, true, user);
 
-  if (trip.status === "in_progress") {
+  if (trip.status === TRIP_STATUSES.IN_PROGRESS) {
     throw new ApiError(400, TRIP_MESSAGES.CANNOT_DELETE_IN_PROGRESS);
   }
 
@@ -590,7 +600,7 @@ const deleteById = async (tripId, user = null) => {
       const currentTrip = validateTrip(
         await tripRepository.findById(tripId, session),
       );
-      if (currentTrip.status === "in_progress") {
+      if (currentTrip.status === TRIP_STATUSES.IN_PROGRESS) {
         throw new ApiError(400, TRIP_MESSAGES.CANNOT_DELETE_IN_PROGRESS);
       }
       const deletedTrip = validateTrip(
@@ -622,7 +632,7 @@ const restoreById = async (tripId, user = null) => {
   const driver = await driverService.getById(
     trip.driverId?._id || trip.driverId,
   );
-  if (driver.status !== "active") {
+  if (driver.status !== USER_STATUSES.ACTIVE) {
     throw new ApiError(400, TRIP_MESSAGES.DRIVER_NOT_ACTIVE);
   }
   driverService.ensureLicenseIsValid(driver.licenseExpiryDate);
@@ -700,11 +710,17 @@ const reassign = async (
 ) => {
   const trip = await getById(tripId, true, user);
 
-  if (trip.status === "completed" || trip.status === "cancelled") {
+  if (
+    trip.status === TRIP_STATUSES.COMPLETED ||
+    trip.status === TRIP_STATUSES.CANCELLED
+  ) {
     throw new ApiError(400, TRIP_MESSAGES.CANNOT_REASSIGN_STATUS(trip.status));
   }
 
-  if (trip.status === "in_progress" && (newVehicleId || newDriverId)) {
+  if (
+    trip.status === TRIP_STATUSES.IN_PROGRESS &&
+    (newVehicleId || newDriverId)
+  ) {
     throw new ApiError(400, TRIP_MESSAGES.CANNOT_REASSIGN_IN_PROGRESS);
   }
 
@@ -743,7 +759,7 @@ const reassign = async (
     const route = await routeService.getById(routeId);
     validateRouteOriginWarehouse(route, driverWarehouseId);
 
-    if (driver.status !== "active") {
+    if (driver.status !== USER_STATUSES.ACTIVE) {
       throw new ApiError(400, TRIP_MESSAGES.NEW_DRIVER_NOT_ACTIVE);
     }
     driverService.ensureLicenseIsValid(driver.licenseExpiryDate);
@@ -768,7 +784,10 @@ const reassign = async (
       throw new ApiError(400, TRIP_MESSAGES.VEHICLE_WAREHOUSE_MISMATCH);
     }
 
-    if (vehicle.status === "maintenance" || vehicle.status === "retired") {
+    if (
+      vehicle.status === VEHICLE_STATUSES.MAINTENANCE ||
+      vehicle.status === VEHICLE_STATUSES.RETIRED
+    ) {
       throw new ApiError(
         400,
         TRIP_MESSAGES.NEW_VEHICLE_NOT_AVAILABLE(vehicle.status),
@@ -919,7 +938,7 @@ const handleTripDeparture = async ({
     });
   }
 
-  return { status: "in_progress", actualStart };
+  return { status: TRIP_STATUSES.IN_PROGRESS, actualStart };
 };
 
 const handleTripCompletion = async ({
@@ -959,10 +978,14 @@ const handleTripCompletion = async ({
       session,
     );
 
-    await vehicleService.changeStatus(targetVehicleId, "available", session);
+    await vehicleService.changeStatus(
+      targetVehicleId,
+      VEHICLE_STATUSES.AVAILABLE,
+      session,
+    );
   }
 
-  return { status: "completed", actualEnd };
+  return { status: TRIP_STATUSES.COMPLETED, actualEnd };
 };
 
 const handleTripCancellation = async ({ tripId, targetVehicleId, session }) => {
@@ -990,10 +1013,14 @@ const handleTripCancellation = async ({ tripId, targetVehicleId, session }) => {
       session,
     );
 
-    await vehicleService.changeStatus(targetVehicleId, "available", session);
+    await vehicleService.changeStatus(
+      targetVehicleId,
+      VEHICLE_STATUSES.AVAILABLE,
+      session,
+    );
   }
 
-  return { status: "cancelled" };
+  return { status: TRIP_STATUSES.CANCELLED };
 };
 
 const addTrackingLog = async (
@@ -1012,8 +1039,15 @@ const addTrackingLog = async (
 ) => {
   const trip = await getById(tripId, true, user);
 
-  if (trip.status === "completed" || trip.status === "cancelled") {
+  if (
+    trip.status === TRIP_STATUSES.COMPLETED ||
+    trip.status === TRIP_STATUSES.CANCELLED
+  ) {
     throw new ApiError(400, TRIP_MESSAGES.CANNOT_LOG_STATUS(trip.status));
+  }
+
+  if (status === TRACKING_STATUSES.PLANNED) {
+    throw new ApiError(400, TRIP_MESSAGES.CANNOT_LOG_PLANNED_STATUS);
   }
 
   if (user && user.role === ROLES.DRIVER) {
@@ -1023,11 +1057,28 @@ const addTrackingLog = async (
     }
   }
 
-  if (status === "departed" || status === "in_progress") {
+  const latestTrackingLog =
+    await tripRepository.getLatestTrackingLogByTripId(tripId);
+  const currentTrackingStatus = latestTrackingLog?.status || trip.status;
+
+  if (!TRIP_TRACKING_TRANSITIONS[currentTrackingStatus]?.includes(status)) {
+    throw new ApiError(
+      400,
+      TRIP_MESSAGES.INVALID_TRACKING_STATUS_TRANSITION(
+        currentTrackingStatus,
+        status,
+      ),
+    );
+  }
+
+  if (
+    status === TRACKING_STATUSES.DEPARTED ||
+    status === TRACKING_STATUSES.IN_PROGRESS
+  ) {
     const driver = await driverService.getById(
       trip.driverId?._id || trip.driverId,
     );
-    if (driver.status !== "active") {
+    if (driver.status !== USER_STATUSES.ACTIVE) {
       throw new ApiError(400, TRIP_MESSAGES.DRIVER_NOT_ACTIVE);
     }
     driverService.ensureLicenseIsValid(driver.licenseExpiryDate);
@@ -1060,13 +1111,8 @@ const addTrackingLog = async (
       session,
     );
 
-    if (
-      status === "departed" ||
-      status === "in_progress" ||
-      status === "arrived_destination" ||
-      status === "incident"
-    ) {
-      if (trip.status === "planned") {
+    if (status === TRACKING_STATUSES.DEPARTED) {
+      if (trip.status === TRIP_STATUSES.PLANNED) {
         tripStatusUpdates = await handleTripDeparture({
           trip,
           targetVehicleId,
@@ -1075,18 +1121,14 @@ const addTrackingLog = async (
           session,
         });
       }
-    } else if (status === "completed") {
-      if (trip.status === "planned") {
-        throw new ApiError(400, TRIP_MESSAGES.CANNOT_COMPLETE_STATUS);
-      }
-
+    } else if (status === TRACKING_STATUSES.COMPLETED) {
       tripStatusUpdates = await handleTripCompletion({
         trip,
         targetVehicleId,
         odometerReading,
         session,
       });
-    } else if (status === "cancelled") {
+    } else if (status === TRACKING_STATUSES.CANCELLED) {
       tripStatusUpdates = await handleTripCancellation({
         tripId,
         targetVehicleId,

@@ -277,11 +277,16 @@ const countTrackingLogsByTripId = (tripId) => {
   return TripTrackingLog.countDocuments({ tripId });
 };
 
-const getLatestTrackingLogByTripId = (tripId) => {
-  return TripTrackingLog.findOne({ tripId })
+const getLatestTrackingLogByTripId = (tripId, session = null) => {
+  const query = TripTrackingLog.findOne({ tripId })
     .sort({ createdAt: -1 })
-    .populate(TRACKING_LOG_POPULATE)
-    .lean();
+    .populate(TRACKING_LOG_POPULATE);
+
+  if (session) {
+    query.session(session);
+  }
+
+  return query.lean();
 };
 
 const createAuditLog = (logData, session = null) => {

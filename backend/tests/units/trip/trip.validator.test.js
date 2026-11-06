@@ -128,6 +128,14 @@ describe("tripValidator tracking and expense schemas", () => {
         longitude: 181,
       }).error,
     ).toBeDefined();
+
+    expect(
+      tripValidator.createTrackingLogSchema.validate({
+        status: "planned",
+        latitude: 10,
+        longitude: 106,
+      }).error,
+    ).toBeDefined();
   });
 
   it("accepts valid expense details and rejects non-positive amounts", () => {
