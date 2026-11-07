@@ -1,4 +1,6 @@
 import { PAYMENT_PURPOSES } from "../../constants/paymentPurposes.js";
+import { PAYMENT_STATUSES } from "../../constants/paymentStatuses.js";
+import { PAYER_TYPES } from "../../constants/paymentMethods.js";
 
 import Payment from "./payment.js";
 
@@ -112,6 +114,23 @@ const findTopUpByReference = (paymentMethod, transactionReference) => {
   });
 };
 
+const findPendingRemittanceByOrderIds = (orderIds = [], session = null) => {
+  const query = Payment.findOne({
+    paymentStatus: PAYMENT_STATUSES.PENDING,
+    payerType: PAYER_TYPES.DRIVER,
+    $or: [
+      { orderId: { $in: orderIds } },
+      { "codOrders.orderId": { $in: orderIds } },
+    ],
+  });
+
+  if (session) {
+    query.session(session);
+  }
+
+  return query;
+};
+
 const deleteById = (id, session = null) => {
   return Payment.findByIdAndDelete(id, { session });
 };
@@ -153,6 +172,7 @@ export default {
   findByCode,
   updateById,
   findTopUpByReference,
+  findPendingRemittanceByOrderIds,
   deleteById,
   getStats,
 };

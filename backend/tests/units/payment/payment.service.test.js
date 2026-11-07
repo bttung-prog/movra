@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   findByCode: vi.fn(),
   updateById: vi.fn(),
   findTopUpByReference: vi.fn(),
+  findPendingRemittanceByOrderIds: vi.fn(),
   getStats: vi.fn(),
   getByOrderId: vi.fn(),
   getInvoiceById: vi.fn(),
@@ -47,6 +48,7 @@ vi.mock("../../../src/modules/payment/payment.repository.js", () => ({
     findByCode: mocks.findByCode,
     updateById: mocks.updateById,
     findTopUpByReference: mocks.findTopUpByReference,
+    findPendingRemittanceByOrderIds: mocks.findPendingRemittanceByOrderIds,
     getStats: mocks.getStats,
   },
 }));
@@ -97,7 +99,10 @@ vi.mock("../../../src/utils/generateCode.js", () => ({
   default: mocks.generateCode,
 }));
 
-import { PAYMENT_METHODS, PAYER_TYPES } from "../../../src/constants/paymentMethods.js";
+import {
+  PAYMENT_METHODS,
+  PAYER_TYPES,
+} from "../../../src/constants/paymentMethods.js";
 import { PAYMENT_STATUSES } from "../../../src/constants/paymentStatuses.js";
 import {
   INVOICE_MESSAGES,
@@ -145,6 +150,7 @@ beforeEach(() => {
   mocks.countAll.mockResolvedValue(0);
   mocks.findById.mockResolvedValue(null);
   mocks.updateById.mockResolvedValue(null);
+  mocks.findPendingRemittanceByOrderIds.mockResolvedValue(null);
 });
 
 afterEach(() => {
@@ -777,6 +783,123 @@ describe("paymentService.getAll", () => {
     expect(result).toEqual({
       data: payments,
       pagination: { page: 2, limit: 10, total: 21, totalPages: 3 },
+    });
+  });
+});
+
+describe("paymentService.createDriverRemittance", () => {
+  const driverUser = { driverId: "driver-1" };
+  const deliveredCodOrder = {
+    _id: orderId,
+    status: "delivered",
+    codSettled: false,
+    codAmount: 5000,
+    codCollected: true,
+    codCollectedAmount: 5000,
+    codRemittedAmount: 0,
+    tripId: {
+      _id: "trip-1",
+      driverId: { _id: "driver-1" },
+    },
+  };
+
+  it("rejects remittance when an order already has a pending remittance payment", async () => {
+    mocks.getOrderById.mockResolvedValue(deliveredCodOrder);
+    mocks.findPendingRemittanceByOrderIds.mockResolvedValue({
+      _id: "existing-payment-id",
+      paymentCode: "PAY-PENDING-01",
+    });
+
+    await expect(
+      paymentService.createDriverRemittance(
+        {
+          orderIds: [orderId],
+          paymentAmount: 5000,
+          paymentMethod: PAYMENT_METHODS.CASH,
+        },
+        driverUser,
+      ),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      message: PAYMENT_MESSAGES.PENDING_REMITTANCE_EXISTS("PAY-PENDING-01"),
+    });
+
+    expect(mocks.findPendingRemittanceByOrderIds).toHaveBeenCalledWith([
+      orderId,
+    ]);
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects remittance when paymentAmount does not match total expected COD", async () => {
+    mocks.getOrderById.mockResolvedValue(deliveredCodOrder);
+    mocks.findPendingRemittanceByOrderIds.mockResolvedValue(null);
+
+    await expect(
+      paymentService.createDriverRemittance(
+        {
+          orderIds: [orderId],
+          paymentAmount: 3000,
+          paymentMethod: PAYMENT_METHODS.CASH,
+        },
+        driverUser,
+      ),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: PAYMENT_MESSAGES.REMITTANCE_AMOUNT_MISMATCH(5000),
+    });
+
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects remittance when an order is already fully remitted", async () => {
+    mocks.getOrderById.mockResolvedValue({
+      ...deliveredCodOrder,
+      codRemittedAmount: 5000,
+    });
+
+    await expect(
+      paymentService.createDriverRemittance(
+        {
+          orderIds: [orderId],
+          paymentAmount: 5000,
+          paymentMethod: PAYMENT_METHODS.CASH,
+        },
+        driverUser,
+      ),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: PAYMENT_MESSAGES.COD_ALREADY_REMITTED,
+    });
+
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  it("creates a pending remittance when no pending remittance exists", async () => {
+    mocks.getOrderById.mockResolvedValue(deliveredCodOrder);
+    mocks.findPendingRemittanceByOrderIds.mockResolvedValue(null);
+
+    const result = await paymentService.createDriverRemittance(
+      {
+        orderIds: [orderId],
+        paymentAmount: 5000,
+        paymentMethod: PAYMENT_METHODS.CASH,
+      },
+      driverUser,
+    );
+
+    expect(mocks.findPendingRemittanceByOrderIds).toHaveBeenCalledWith([
+      orderId,
+    ]);
+    expect(mocks.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        paymentStatus: PAYMENT_STATUSES.PENDING,
+        payerType: PAYER_TYPES.DRIVER,
+        paymentAmount: 5000,
+      }),
+    );
+    expect(result).toMatchObject({
+      paymentStatus: PAYMENT_STATUSES.PENDING,
+      paymentAmount: 5000,
     });
   });
 });
