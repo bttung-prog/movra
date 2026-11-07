@@ -18,6 +18,9 @@ const mocks = vi.hoisted(() => ({
   countRouteMismatchesByTripId: vi.fn(),
   countOrdersByTripId: vi.fn(),
   countAllOrders: vi.fn(),
+  countUnfinishedOrdersByTrip: vi.fn(),
+  handleOrdersOnTripCompletion: vi.fn(),
+  handleOrdersOnTripCancellation: vi.fn(),
   findByCode: vi.fn(),
   findOverlappingTrip: vi.fn(),
   lockScheduleResources: vi.fn(),
@@ -86,6 +89,9 @@ vi.mock("../../../src/modules/order/order.service.js", () => ({
     countRouteMismatchesByTripId: mocks.countRouteMismatchesByTripId,
     countAll: mocks.countAllOrders,
     countByTripId: mocks.countOrdersByTripId,
+    countUnfinishedOrdersByTrip: mocks.countUnfinishedOrdersByTrip,
+    handleOrdersOnTripCompletion: mocks.handleOrdersOnTripCompletion,
+    handleOrdersOnTripCancellation: mocks.handleOrdersOnTripCancellation,
   },
 }));
 
@@ -183,6 +189,9 @@ beforeEach(() => {
   mocks.countAll.mockResolvedValue(0);
   mocks.countRouteMismatchesByTripId.mockResolvedValue(0);
   mocks.countAllOrders.mockResolvedValue(0);
+  mocks.countUnfinishedOrdersByTrip.mockResolvedValue(0);
+  mocks.handleOrdersOnTripCompletion.mockResolvedValue();
+  mocks.handleOrdersOnTripCancellation.mockResolvedValue();
   mocks.findById.mockResolvedValue(plannedTrip);
   mocks.updateById.mockResolvedValue(plannedTrip);
   mocks.createTrackingLog.mockResolvedValue({ _id: "log-1" });
@@ -499,6 +508,87 @@ describe("tripService tracking logs and expenses", () => {
 
     expect(result).toEqual({ _id: "log-2", status: "in_progress" });
     expect(mocks.updateById).not.toHaveBeenCalled();
+  });
+
+  it("rejects completion if trip has unfinished orders", async () => {
+    mocks.findById.mockResolvedValue({ ...plannedTrip, status: "in_progress" });
+    mocks.getLatestTrackingLogByTripId.mockResolvedValue({
+      status: "in_progress",
+    });
+    mocks.countUnfinishedOrdersByTrip.mockResolvedValue(2);
+
+    await expect(
+      tripService.addTrackingLog("trip-1", { status: "completed" }),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: TRIP_MESSAGES.CANNOT_COMPLETE_ACTIVE_ORDERS(2),
+    });
+
+    expect(transaction.abortTransaction).toHaveBeenCalled();
+  });
+
+  it("completes trip successfully and reconciles orders when all orders are finished", async () => {
+    mocks.findById.mockResolvedValue({ ...plannedTrip, status: "in_progress" });
+    mocks.getLatestTrackingLogByTripId.mockResolvedValue({
+      status: "in_progress",
+    });
+    mocks.countUnfinishedOrdersByTrip.mockResolvedValue(0);
+    mocks.getUsageLogsByTripId.mockResolvedValue([
+      { _id: "usage-1", startOdo: 100, endOdo: null, notes: "departed" },
+    ]);
+    mocks.createTrackingLog.mockResolvedValue({
+      _id: "log-complete",
+      status: "completed",
+    });
+
+    const result = await tripService.addTrackingLog("trip-1", {
+      status: "completed",
+      odometerReading: 150,
+    });
+
+    expect(result).toEqual({ _id: "log-complete", status: "completed" });
+    expect(mocks.handleOrdersOnTripCompletion).toHaveBeenCalled();
+    expect(mocks.changeVehicleStatus).toHaveBeenCalledWith(
+      vehicleId,
+      "available",
+      transaction,
+    );
+    expect(mocks.updateById).toHaveBeenCalledWith(
+      "trip-1",
+      expect.objectContaining({ status: "completed" }),
+      transaction,
+    );
+  });
+
+  it("cancels trip successfully and reconciles orders", async () => {
+    mocks.findById.mockResolvedValue({ ...plannedTrip, status: "in_progress" });
+    mocks.getLatestTrackingLogByTripId.mockResolvedValue({
+      status: "in_progress",
+    });
+    mocks.getUsageLogsByTripId.mockResolvedValue([
+      { _id: "usage-1", startOdo: 100, endOdo: null, notes: "departed" },
+    ]);
+    mocks.createTrackingLog.mockResolvedValue({
+      _id: "log-cancel",
+      status: "cancelled",
+    });
+
+    const result = await tripService.addTrackingLog("trip-1", {
+      status: "cancelled",
+    });
+
+    expect(result).toEqual({ _id: "log-cancel", status: "cancelled" });
+    expect(mocks.handleOrdersOnTripCancellation).toHaveBeenCalled();
+    expect(mocks.changeVehicleStatus).toHaveBeenCalledWith(
+      vehicleId,
+      "available",
+      transaction,
+    );
+    expect(mocks.updateById).toHaveBeenCalledWith(
+      "trip-1",
+      expect.objectContaining({ status: "cancelled" }),
+      transaction,
+    );
   });
 
   it("returns paginated trip audit history", async () => {

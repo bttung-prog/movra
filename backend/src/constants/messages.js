@@ -571,6 +571,8 @@ export const TRIP_MESSAGES = {
   ROUTE_REQUIRED: "Chuyến giao hoặc trung chuyển phải có tuyến đường",
   ROUTE_HAS_ORDERS: "Không thể đổi tuyến vì chuyến đã có đơn hàng khác tuyến",
   TOTAL_ORDER_SYSTEM_MANAGED: "Tổng số đơn của chuyến được hệ thống tự tính",
+  CANNOT_COMPLETE_ACTIVE_ORDERS: (count) =>
+    `Không thể hoàn thành chuyến xe: Còn ${count} đơn hàng chưa được cập nhật kết quả`,
   CANNOT_LOG_STATUS: (status) =>
     `Không thể thêm nhật ký cho chuyến xe đã ở trạng thái ${status}`,
   INVALID_TRACKING_STATUS_TRANSITION: (currentStatus, nextStatus) =>
