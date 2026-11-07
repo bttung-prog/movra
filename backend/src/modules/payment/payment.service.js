@@ -1,9 +1,13 @@
 import mongoose from "mongoose";
 
 import { PAYMENT_STATUSES } from "../../constants/paymentStatuses.js";
-import { PAYMENT_METHODS, PAYER_TYPES } from "../../constants/paymentMethods.js";
+import {
+  PAYMENT_METHODS,
+  PAYER_TYPES,
+} from "../../constants/paymentMethods.js";
 import { PAYMENT_PURPOSES } from "../../constants/paymentPurposes.js";
 import { INVOICE_STATUSES } from "../../constants/invoiceStatuses.js";
+import { ORDER_STATUSES } from "../../constants/orderStatuses.js";
 import { ROLES } from "../../constants/roles.js";
 import {
   PAYMENT_MESSAGES,
@@ -264,7 +268,7 @@ const syncCompletedPaymentEffects = async ({
 
     const shouldAwardPointsNow =
       !order ||
-      (order.status === "delivered" &&
+      (order.status === ORDER_STATUSES.DELIVERED &&
         isOrderFullyPaid &&
         !order.loyaltyPointsAwarded);
 
@@ -632,7 +636,7 @@ const createDriverRemittance = async (payload, driverUser, actor = null) => {
     seenOrderIds.add(orderId.toString());
 
     const orderDoc = await orderService.getById(orderId, true, actor);
-    if (orderDoc.status !== "delivered") {
+    if (orderDoc.status !== ORDER_STATUSES.DELIVERED) {
       throw new ApiError(400, PAYMENT_MESSAGES.COD_ORDER_NOT_DELIVERED);
     }
     if (orderDoc.codSettled) {
@@ -660,50 +664,41 @@ const createDriverRemittance = async (payload, driverUser, actor = null) => {
     if (expectedCod <= 0) {
       throw new ApiError(400, PAYMENT_MESSAGES.ORDER_HAS_NO_COD);
     }
-    const collectedSoFar = Number(orderDoc.codCollectedAmount || 0);
     const remittedSoFar = Number(orderDoc.codRemittedAmount || 0);
-    const remainingToCollect = Math.max(0, expectedCod - collectedSoFar);
-    const unremittedAmount = Math.max(0, collectedSoFar - remittedSoFar);
-    const collectedAmount =
-      requestedOrder.collectedAmount !== undefined
-        ? Number(requestedOrder.collectedAmount)
-        : unremittedAmount > 0
-          ? 0
-          : remainingToCollect;
-
-    if (
-      !Number.isFinite(collectedAmount) ||
-      collectedAmount < 0 ||
-      collectedAmount > remainingToCollect
-    ) {
-      throw new ApiError(400, PAYMENT_MESSAGES.INVALID_COD_COLLECTED_AMOUNT);
+    if (remittedSoFar >= expectedCod) {
+      throw new ApiError(400, PAYMENT_MESSAGES.COD_ALREADY_REMITTED);
     }
 
-    const availableToRemit = unremittedAmount + collectedAmount;
+    const availableToRemit = expectedCod - remittedSoFar;
     expectedRemittanceAmount += availableToRemit;
     codOrders.push({
       orderId,
       expectedCod,
-      collectedAmount,
-      availableToRemit,
-      remittedAmount: 0,
+      collectedAmount: 0,
+      remittedAmount: availableToRemit,
       shortfallAmount: 0,
     });
   }
 
-  let remainingPaymentAmount = Number(paymentAmount);
-  for (const codOrder of codOrders) {
-    codOrder.remittedAmount = Math.min(
-      codOrder.availableToRemit,
-      remainingPaymentAmount,
+  if (Number(paymentAmount) !== expectedRemittanceAmount) {
+    throw new ApiError(
+      400,
+      PAYMENT_MESSAGES.REMITTANCE_AMOUNT_MISMATCH(expectedRemittanceAmount),
     );
-    codOrder.shortfallAmount =
-      codOrder.availableToRemit - codOrder.remittedAmount;
-    remainingPaymentAmount -= codOrder.remittedAmount;
-    delete codOrder.availableToRemit;
   }
 
-  const discrepancyAmount = paymentAmount - expectedRemittanceAmount;
+  const pendingRemittance =
+    await paymentRepository.findPendingRemittanceByOrderIds(
+      Array.from(seenOrderIds),
+    );
+  if (pendingRemittance) {
+    throw new ApiError(
+      409,
+      PAYMENT_MESSAGES.PENDING_REMITTANCE_EXISTS(pendingRemittance.paymentCode),
+    );
+  }
+
+  const discrepancyAmount = 0;
 
   const paymentData = {
     paymentCode,
@@ -897,7 +892,7 @@ const verifyPayment = async (paymentId, payload, verifierUser) => {
           verifierUser,
           session,
         );
-        if (order.status !== "delivered") {
+        if (order.status !== ORDER_STATUSES.DELIVERED) {
           throw new ApiError(409, PAYMENT_MESSAGES.ORDER_NOT_DELIVERED);
         }
 

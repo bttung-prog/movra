@@ -1,7 +1,10 @@
 import mongoose from "mongoose";
 
 import { PAYMENT_STATUSES } from "../../constants/paymentStatuses.js";
-import { PAYMENT_METHODS, PAYER_TYPES } from "../../constants/paymentMethods.js";
+import {
+  PAYMENT_METHODS,
+  PAYER_TYPES,
+} from "../../constants/paymentMethods.js";
 import { PAYMENT_PURPOSES } from "../../constants/paymentPurposes.js";
 
 import { integerAmount, integerMoney } from "../../utils/integerMoneySchema.js";
@@ -38,12 +41,15 @@ const paymentsSchema = new mongoose.Schema(
         expectedCod: integerMoney({
           default: 0,
         }),
+
         collectedAmount: integerMoney({
           default: 0,
         }),
+
         remittedAmount: integerMoney({
           default: 0,
         }),
+
         shortfallAmount: integerMoney({
           default: 0,
         }),

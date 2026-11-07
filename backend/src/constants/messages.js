@@ -812,7 +812,14 @@ export const PAYMENT_MESSAGES = {
   VIETQR_CONFIGURATION_MISSING: "Cấu hình tài khoản nhận VietQR chưa đầy đủ",
   CUSTOMER_REQUIRED_FOR_WALLET: "Không xác định được khách hàng để trừ tiền ví",
   DUPLICATE_COD_ORDER: "Không thể khai báo trùng đơn hàng nộp COD",
+  PENDING_REMITTANCE_EXISTS: (paymentCode) =>
+    paymentCode
+      ? `Đã tồn tại phiếu nộp COD đang chờ duyệt (${paymentCode}) cho đơn hàng này`
+      : "Đã tồn tại phiếu nộp COD đang chờ duyệt cho đơn hàng này",
   COD_ORDER_NOT_DELIVERED: "Chỉ có thể nộp COD của đơn đã giao thành công",
+  COD_ALREADY_REMITTED: "Tiền COD của đơn hàng này đã được nộp đủ trước đó",
+  REMITTANCE_AMOUNT_MISMATCH: (expected) =>
+    `Số tiền nộp phải bằng đúng tổng tiền COD của các đơn hàng (${expected})`,
   COD_ALREADY_SETTLED: "COD của đơn hàng đã được đối soát",
   ORDER_INVOICE_REQUIRED:
     "Đơn hàng cần có hóa đơn hợp lệ trước khi tạo thanh toán",
