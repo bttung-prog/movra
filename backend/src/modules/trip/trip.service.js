@@ -933,7 +933,7 @@ const handleTripDeparture = async ({
       tripId: trip._id,
       startOdo,
       startTime: actualStart,
-      notes: "Auto-created upon trip departure",
+      notes: "Tự động tạo khi chuyến xe khởi hành",
       session,
     });
   }
@@ -946,7 +946,22 @@ const handleTripCompletion = async ({
   targetVehicleId,
   odometerReading,
   session,
+  user = null,
 }) => {
+  const unfinishedOrdersCount = await orderService.countUnfinishedOrdersByTrip(
+    trip,
+    session,
+  );
+
+  if (unfinishedOrdersCount > 0) {
+    throw new ApiError(
+      400,
+      TRIP_MESSAGES.CANNOT_COMPLETE_ACTIVE_ORDERS(unfinishedOrdersCount),
+    );
+  }
+
+  await orderService.handleOrdersOnTripCompletion(trip, session, user);
+
   const actualEnd = new Date();
   const existingUsageLogs = await vehicleService.getUsageLogsByTripId({
     tripId: trip._id,
@@ -972,8 +987,8 @@ const handleTripCompletion = async ({
         endOdo,
         endTime: actualEnd,
         notes: activeLog.notes
-          ? `${activeLog.notes} | Auto-completed with trip`
-          : "Auto-completed with trip",
+          ? `${activeLog.notes} | Tự động hoàn thành theo chuyến xe`
+          : "Tự động hoàn thành theo chuyến xe",
       },
       session,
     );
@@ -988,9 +1003,27 @@ const handleTripCompletion = async ({
   return { status: TRIP_STATUSES.COMPLETED, actualEnd };
 };
 
-const handleTripCancellation = async ({ tripId, targetVehicleId, session }) => {
+const handleTripCancellation = async ({
+  trip,
+  tripId,
+  targetVehicleId,
+  session,
+  user = null,
+}) => {
+  const resolvedTripId = tripId || trip?._id;
+  const resolvedTrip =
+    trip || (await tripRepository.findById(resolvedTripId, session));
+
+  if (resolvedTrip) {
+    await orderService.handleOrdersOnTripCancellation(
+      resolvedTrip,
+      session,
+      user,
+    );
+  }
+
   const existingUsageLogs = await vehicleService.getUsageLogsByTripId({
-    tripId,
+    tripId: resolvedTripId,
   });
 
   const activeLog = existingUsageLogs.find(
@@ -1007,8 +1040,8 @@ const handleTripCancellation = async ({ tripId, targetVehicleId, session }) => {
         endOdo,
         endTime: new Date(),
         notes: activeLog.notes
-          ? `${activeLog.notes} | Cancelled with trip`
-          : "Cancelled with trip",
+          ? `${activeLog.notes} | Tự động hủy theo chuyến xe`
+          : "Tự động hủy theo chuyến xe",
       },
       session,
     );
@@ -1090,8 +1123,8 @@ const addTrackingLog = async (
 
   let tripStatusUpdates = {};
 
-  const targetVehicleId = trip.vehicleId?._id;
-  const targetDriverId = trip.driverId?._id;
+  const targetVehicleId = trip.vehicleId?._id || trip.vehicleId;
+  const targetDriverId = trip.driverId?._id || trip.driverId;
 
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -1127,12 +1160,15 @@ const addTrackingLog = async (
         targetVehicleId,
         odometerReading,
         session,
+        user,
       });
     } else if (status === TRACKING_STATUSES.CANCELLED) {
       tripStatusUpdates = await handleTripCancellation({
+        trip,
         tripId,
         targetVehicleId,
         session,
+        user,
       });
     }
 

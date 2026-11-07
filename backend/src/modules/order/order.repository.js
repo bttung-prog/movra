@@ -1,5 +1,7 @@
 import mongoose from "mongoose";
 
+import { ORDER_STATUSES } from "../../constants/orderStatuses.js";
+import { TRIP_TYPES } from "../../constants/tripTypes.js";
 import Order from "./order.js";
 import OrderTrackingLog from "./order_tracking_log.js";
 
@@ -147,6 +149,42 @@ const findLoadsByTripId = (tripId, session = null) => {
     { tripId, deletedAt: null },
     "_id weight volume",
   ).lean();
+  if (session) query.session(session);
+  return query;
+};
+
+const findRawByFilter = (filter, session = null) => {
+  const query = Order.find(filter).lean();
+  if (session) query.session(session);
+  return query;
+};
+
+const countUnfinishedOrdersByTrip = (tripId, tripType, session = null) => {
+  const filter = {
+    tripId,
+    deletedAt: null,
+  };
+
+  if (tripType === TRIP_TYPES.PICKUP) {
+    filter.status = {
+      $in: [
+        ORDER_STATUSES.CREATED,
+        ORDER_STATUSES.DRIVER_ASSIGNED,
+        ORDER_STATUSES.PICKUP_SCHEDULED,
+      ],
+    };
+  } else {
+    filter.status = {
+      $nin: [
+        ORDER_STATUSES.DELIVERED,
+        ORDER_STATUSES.FAILED,
+        ORDER_STATUSES.RETURNED,
+        ORDER_STATUSES.CANCELLED,
+      ],
+    };
+  }
+
+  const query = Order.countDocuments(filter);
   if (session) query.session(session);
   return query;
 };
@@ -346,6 +384,8 @@ export default {
   findByTripId,
   countByTripId,
   findLoadsByTripId,
+  findRawByFilter,
+  countUnfinishedOrdersByTrip,
   updateById,
   recordFailureAttempt,
   updateMany,

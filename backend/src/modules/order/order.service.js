@@ -1309,16 +1309,22 @@ const unassignOrdersFromTrip = async ({ orderIds = [] }, user = null) => {
     }
 
     const trip = await tripService.getById(order.tripId, false, user);
-    const canReleaseFailedPickup =
-      trip.type === TRIP_TYPES.PICKUP &&
+    const canReleaseResolvedOrder =
       [TRIP_STATUSES.COMPLETED, TRIP_STATUSES.CANCELLED].includes(
         trip.status,
       ) &&
-      [
-        ORDER_STATUSES.DRIVER_ASSIGNED,
-        ORDER_STATUSES.PICKUP_SCHEDULED,
-      ].includes(order.status);
-    if (trip.status !== TRIP_STATUSES.PLANNED && !canReleaseFailedPickup) {
+      (trip.type === TRIP_TYPES.PICKUP
+        ? [
+            ORDER_STATUSES.DRIVER_ASSIGNED,
+            ORDER_STATUSES.PICKUP_SCHEDULED,
+            ORDER_STATUSES.FAILED,
+          ].includes(order.status)
+        : [
+            ORDER_STATUSES.STORED,
+            ORDER_STATUSES.FAILED,
+            ORDER_STATUSES.RETURNED,
+          ].includes(order.status));
+    if (trip.status !== TRIP_STATUSES.PLANNED && !canReleaseResolvedOrder) {
       throw new ApiError(400, ORDER_MESSAGES.TRIP_NOT_PLANNED);
     }
 
@@ -1327,6 +1333,8 @@ const unassignOrdersFromTrip = async ({ orderIds = [] }, user = null) => {
         ORDER_STATUSES.STORED,
         ORDER_STATUSES.DRIVER_ASSIGNED,
         ORDER_STATUSES.PICKUP_SCHEDULED,
+        ORDER_STATUSES.FAILED,
+        ORDER_STATUSES.RETURNED,
       ].includes(order.status)
     ) {
       throw new ApiError(
@@ -1352,18 +1360,24 @@ const unassignOrdersFromTrip = async ({ orderIds = [] }, user = null) => {
         session,
       );
 
-      const canReleaseFailedPickup =
-        sourceTrip.type === TRIP_TYPES.PICKUP &&
+      const canReleaseResolvedOrder =
         [TRIP_STATUSES.COMPLETED, TRIP_STATUSES.CANCELLED].includes(
           sourceTrip.status,
         ) &&
-        [
-          ORDER_STATUSES.DRIVER_ASSIGNED,
-          ORDER_STATUSES.PICKUP_SCHEDULED,
-        ].includes(order.status);
+        (sourceTrip.type === TRIP_TYPES.PICKUP
+          ? [
+              ORDER_STATUSES.DRIVER_ASSIGNED,
+              ORDER_STATUSES.PICKUP_SCHEDULED,
+              ORDER_STATUSES.FAILED,
+            ].includes(order.status)
+          : [
+              ORDER_STATUSES.STORED,
+              ORDER_STATUSES.FAILED,
+              ORDER_STATUSES.RETURNED,
+            ].includes(order.status));
       if (
         sourceTrip.status !== TRIP_STATUSES.PLANNED &&
-        !canReleaseFailedPickup
+        !canReleaseResolvedOrder
       ) {
         throw new ApiError(400, ORDER_MESSAGES.TRIP_NOT_PLANNED);
       }
@@ -1375,7 +1389,11 @@ const unassignOrdersFromTrip = async ({ orderIds = [] }, user = null) => {
       const updateData =
         order.status === ORDER_STATUSES.STORED
           ? { tripId: null }
-          : { tripId: null, status: ORDER_STATUSES.CREATED };
+          : [ORDER_STATUSES.FAILED, ORDER_STATUSES.RETURNED].includes(
+                order.status,
+              )
+            ? { tripId: null, status: ORDER_STATUSES.STORED }
+            : { tripId: null, status: ORDER_STATUSES.CREATED };
       if (!order.warehouseId) {
         updateData.warehouseId = tripWarehouseId;
       }
@@ -1727,11 +1745,135 @@ const releaseCodSettlement = (orderIds, session = null) => {
   return orderRepository.releaseCodSettlement(orderIds, session);
 };
 
+const countUnfinishedOrdersByTrip = async (trip, session = null) => {
+  const tripId = trip._id || trip;
+  const tripType = trip.type;
+  return orderRepository.countUnfinishedOrdersByTrip(tripId, tripType, session);
+};
+
+const handleOrdersOnTripCompletion = async (
+  trip,
+  session = null,
+  user = null,
+) => {
+  const tripId = trip._id || trip;
+  const tripType = trip.type;
+  const actorId = user?.userId || user?._id;
+
+  if (tripType === TRIP_TYPES.PICKUP) {
+    const failedOrders = await orderRepository.findRawByFilter(
+      {
+        tripId,
+        status: ORDER_STATUSES.FAILED,
+        deletedAt: null,
+      },
+      session,
+    );
+
+    for (const order of failedOrders) {
+      await orderRepository.updateById(
+        order._id,
+        { tripId: null, status: ORDER_STATUSES.CREATED },
+        session,
+      );
+      await orderRepository.createTrackingLog(
+        {
+          orderId: order._id,
+          tripId,
+          status: ORDER_STATUSES.CREATED,
+          notes:
+            "Chuyến xe kết thúc, đơn lấy hàng thất bại được hoàn về trạng thái chờ điều phối",
+          changedBy: actorId,
+        },
+        session,
+      );
+    }
+  } else {
+    const failedOrders = await orderRepository.findRawByFilter(
+      {
+        tripId,
+        status: { $in: [ORDER_STATUSES.FAILED, ORDER_STATUSES.RETURNED] },
+        deletedAt: null,
+      },
+      session,
+    );
+
+    for (const order of failedOrders) {
+      const nextStatus =
+        order.status === ORDER_STATUSES.RETURNED
+          ? ORDER_STATUSES.RETURNED
+          : ORDER_STATUSES.STORED;
+
+      await orderRepository.updateById(
+        order._id,
+        { tripId: null, status: nextStatus },
+        session,
+      );
+
+      await orderRepository.createTrackingLog(
+        {
+          orderId: order._id,
+          tripId,
+          status: nextStatus,
+          notes:
+            nextStatus === ORDER_STATUSES.RETURNED
+              ? "Chuyến xe kết thúc, đơn hàng chuyển trạng thái chuyển hoàn"
+              : "Chuyến xe kết thúc, đơn hàng chưa giao thành công được trả về kho",
+          changedBy: actorId,
+        },
+        session,
+      );
+    }
+  }
+};
+
+const handleOrdersOnTripCancellation = async (
+  trip,
+  session = null,
+  user = null,
+) => {
+  const tripId = trip._id || trip;
+  const tripType = trip.type;
+  const actorId = user?.userId || user?._id;
+
+  const orders = await orderRepository.findRawByFilter(
+    { tripId, deletedAt: null },
+    session,
+  );
+
+  for (const order of orders) {
+    const nextStatus =
+      tripType === TRIP_TYPES.PICKUP
+        ? ORDER_STATUSES.CREATED
+        : ORDER_STATUSES.STORED;
+
+    await orderRepository.updateById(
+      order._id,
+      { tripId: null, status: nextStatus },
+      session,
+    );
+
+    await orderRepository.createTrackingLog(
+      {
+        orderId: order._id,
+        tripId,
+        status: nextStatus,
+        notes: "Chuyến xe bị hủy, đơn hàng được gỡ khỏi chuyến xe",
+        changedBy: actorId,
+      },
+      session,
+    );
+  }
+};
+
 export default {
   create,
   getAll,
   getIdsByWarehouseId,
   countByTripId,
+  countUnfinishedOrdersByTrip,
+  handleOrdersOnTripCompletion,
+  handleOrdersOnTripCancellation,
   getTripLoadMetrics,
   countRouteMismatchesByTripId,
   getMyOrders,

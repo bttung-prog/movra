@@ -28,6 +28,8 @@ const mocks = vi.hoisted(() => ({
   updateMany: vi.fn(),
   findLoadsByTripId: vi.fn(),
   findPublicTrackingLogsByOrderId: vi.fn(),
+  findRawByFilter: vi.fn(),
+  countUnfinishedOrdersByTrip: vi.fn(),
   generateCode: vi.fn(),
   loggerError: vi.fn(),
 }));
@@ -105,6 +107,8 @@ vi.mock("../../../src/modules/order/order.repository.js", () => ({
     updateMany: mocks.updateMany,
     findLoadsByTripId: mocks.findLoadsByTripId,
     findPublicTrackingLogsByOrderId: mocks.findPublicTrackingLogsByOrderId,
+    findRawByFilter: mocks.findRawByFilter,
+    countUnfinishedOrdersByTrip: mocks.countUnfinishedOrdersByTrip,
   },
 }));
 
@@ -177,6 +181,8 @@ beforeEach(() => {
   mocks.generateCode.mockReturnValue("ORD-0001");
   mocks.findLoadsByTripId.mockResolvedValue([]);
   mocks.updateMany.mockResolvedValue({ modifiedCount: 1 });
+  mocks.findRawByFilter.mockResolvedValue([]);
+  mocks.countUnfinishedOrdersByTrip.mockResolvedValue(0);
 });
 
 describe("orderService.create", () => {
@@ -1273,5 +1279,97 @@ describe("orderService.markAsDelivered", () => {
       expect.any(Object),
     );
     expect(mocks.updateCustomerById).not.toHaveBeenCalled();
+  });
+
+  describe("Trip Completion and Cancellation Order Management", () => {
+    it("counts unfinished orders by calling repository", async () => {
+      mocks.countUnfinishedOrdersByTrip.mockResolvedValue(2);
+      const count = await orderService.countUnfinishedOrdersByTrip(
+        { _id: "trip-1", type: "delivery" },
+        transaction,
+      );
+      expect(count).toBe(2);
+      expect(mocks.countUnfinishedOrdersByTrip).toHaveBeenCalledWith(
+        "trip-1",
+        "delivery",
+        transaction,
+      );
+    });
+
+    it("reconciles failed delivery orders back to stored on trip completion", async () => {
+      mocks.findRawByFilter.mockResolvedValue([
+        { _id: "order-failed-1", status: "failed" },
+        { _id: "order-returned-1", status: "returned" },
+      ]);
+
+      await orderService.handleOrdersOnTripCompletion(
+        { _id: "trip-1", type: "delivery" },
+        transaction,
+        { userId: "user-admin" },
+      );
+
+      expect(mocks.updateById).toHaveBeenCalledWith(
+        "order-failed-1",
+        { tripId: null, status: "stored" },
+        transaction,
+      );
+      expect(mocks.updateById).toHaveBeenCalledWith(
+        "order-returned-1",
+        { tripId: null, status: "returned" },
+        transaction,
+      );
+      expect(mocks.createTrackingLog).toHaveBeenCalledTimes(2);
+    });
+
+    it("reconciles failed pickup orders back to created on trip completion", async () => {
+      mocks.findRawByFilter.mockResolvedValue([
+        { _id: "order-failed-pickup", status: "failed" },
+      ]);
+
+      await orderService.handleOrdersOnTripCompletion(
+        { _id: "trip-1", type: "pickup" },
+        transaction,
+        { userId: "user-admin" },
+      );
+
+      expect(mocks.updateById).toHaveBeenCalledWith(
+        "order-failed-pickup",
+        { tripId: null, status: "created" },
+        transaction,
+      );
+      expect(mocks.createTrackingLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderId: "order-failed-pickup",
+          status: "created",
+        }),
+        transaction,
+      );
+    });
+
+    it("resets orders to warehouse/created on trip cancellation", async () => {
+      mocks.findRawByFilter.mockResolvedValue([
+        { _id: "order-1", status: "transporting" },
+      ]);
+
+      await orderService.handleOrdersOnTripCancellation(
+        { _id: "trip-1", type: "delivery" },
+        transaction,
+        { userId: "user-admin" },
+      );
+
+      expect(mocks.updateById).toHaveBeenCalledWith(
+        "order-1",
+        { tripId: null, status: "stored" },
+        transaction,
+      );
+      expect(mocks.createTrackingLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderId: "order-1",
+          status: "stored",
+          notes: expect.stringContaining("bị hủy"),
+        }),
+        transaction,
+      );
+    });
   });
 });
