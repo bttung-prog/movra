@@ -2,6 +2,7 @@ import express from "express";
 
 import authorize from "../../middlewares/authorize.middleware.js";
 import validate from "../../middlewares/validate.middleware.js";
+import idempotency from "../../middlewares/idempotency.middleware.js";
 
 import { ROLES } from "../../constants/roles.js";
 
@@ -13,6 +14,7 @@ const codSettlementRouter = express.Router();
 codSettlementRouter.post(
   "/generate",
   authorize(ROLES.ADMIN, ROLES.ACCOUNTANT),
+  idempotency({ required: true }),
   validate(codSettlementValidator.generateSettlementSchema),
   codSettlementController.generate,
 );
@@ -27,6 +29,7 @@ codSettlementRouter.patch(
 codSettlementRouter.post(
   "/:id/complete",
   authorize(ROLES.ADMIN, ROLES.ACCOUNTANT),
+  idempotency({ required: true }),
   validate(codSettlementValidator.paramIdSchema, "params"),
   validate(codSettlementValidator.completeSettlementSchema),
   codSettlementController.complete,

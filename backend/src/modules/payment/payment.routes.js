@@ -2,6 +2,7 @@ import express from "express";
 
 import authorize from "../../middlewares/authorize.middleware.js";
 import validate from "../../middlewares/validate.middleware.js";
+import idempotency from "../../middlewares/idempotency.middleware.js";
 
 import { ROLES } from "../../constants/roles.js";
 
@@ -13,6 +14,7 @@ const paymentRouter = express.Router();
 paymentRouter.post(
   "/",
   authorize(ROLES.ADMIN, ROLES.ACCOUNTANT, ROLES.CUSTOMER),
+  idempotency({ required: true }),
   validate(paymentValidator.createPaymentSchema),
   paymentController.create,
 );
@@ -20,6 +22,7 @@ paymentRouter.post(
 paymentRouter.post(
   "/driver-remit",
   authorize(ROLES.DRIVER),
+  idempotency({ required: true }),
   validate(paymentValidator.driverRemitSchema),
   paymentController.driverRemit,
 );

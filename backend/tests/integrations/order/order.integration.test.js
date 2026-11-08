@@ -22,6 +22,19 @@ vi.mock("../../../src/modules/order/order.service.js", () => ({
   default: orderServiceMock,
 }));
 
+vi.mock("../../../src/modules/idempotency/idempotency.repository.js", () => ({
+  default: {
+    findByUserAndKey: vi.fn().mockResolvedValue(null),
+    create: vi
+      .fn()
+      .mockImplementation((data) =>
+        Promise.resolve({ ...data, _id: "idemp-1" }),
+      ),
+    updateById: vi.fn().mockResolvedValue({}),
+    deleteById: vi.fn().mockResolvedValue({}),
+  },
+}));
+
 vi.mock("../../../src/middlewares/auth.middleware.js", () => ({
   default: (req, res, next) => {
     req.user = authState.user;
@@ -78,6 +91,7 @@ describe("Order API integration", () => {
     const response = await request(app)
       .post("/api/v1/orders")
       .set("Origin", "http://localhost:5173")
+      .set("Idempotency-Key", "test-order-key-1")
       .send(payload);
 
     expect(response.status).toBe(201);
@@ -101,10 +115,21 @@ describe("Order API integration", () => {
     );
   });
 
+  it("rejects order creation when Idempotency-Key header is missing", async () => {
+    const response = await request(app)
+      .post("/api/v1/orders")
+      .set("Origin", "http://localhost:5173")
+      .send({ senderName: "Nguyen Van A" });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toContain("Idempotency-Key");
+  });
+
   it("rejects invalid order payload before calling the service", async () => {
     const response = await request(app)
       .post("/api/v1/orders")
       .set("Origin", "http://localhost:5173")
+      .set("Idempotency-Key", "test-order-key-invalid")
       .send({
         senderName: "Nguyen Van A",
         senderPhone: "123",
@@ -146,6 +171,7 @@ describe("Order API integration", () => {
     const response = await request(app)
       .post("/api/v1/orders")
       .set("Origin", "http://localhost:5173")
+      .set("Idempotency-Key", "test-order-key-1")
       .send(payload);
 
     expect(response.status).toBe(403);

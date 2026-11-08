@@ -936,3 +936,11 @@ export const PRICING_MESSAGES = {
   DELETE_RATE_SUCCESS: "Xóa bảng cước thành công",
   RATE_NOT_FOUND: "Không tìm thấy bảng cước",
 };
+
+export const IDEMPOTENCY_MESSAGES = {
+  KEY_REQUIRED: "Idempotency-Key header là bắt buộc cho thao tác này",
+  KEY_INVALID: "Idempotency-Key không hợp lệ",
+  REQUEST_IN_PROGRESS:
+    "Yêu cầu tương tự đang được xử lý, vui lòng thử lại sau giây lát",
+  PAYLOAD_MISMATCH: "Idempotency-Key đã được sử dụng với dữ liệu yêu cầu khác",
+};
