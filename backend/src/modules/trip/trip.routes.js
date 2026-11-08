@@ -2,6 +2,7 @@ import express from "express";
 
 import authorize from "../../middlewares/authorize.middleware.js";
 import validate from "../../middlewares/validate.middleware.js";
+import idempotency from "../../middlewares/idempotency.middleware.js";
 
 import { ROLES } from "../../constants/roles.js";
 
@@ -110,6 +111,7 @@ tripRouter.get(
 tripRouter.post(
   "/:tripId/expenses",
   authorize(ROLES.ADMIN, ROLES.DISPATCHER, ROLES.DRIVER),
+  idempotency({ required: true }),
   validate(tripValidator.tripIdParamSchema, "params"),
   validate(tripValidator.createExpenseSchema),
   tripController.addExpense,
@@ -117,12 +119,7 @@ tripRouter.post(
 
 tripRouter.get(
   "/:tripId/expenses",
-  authorize(
-    ROLES.ADMIN,
-    ROLES.DISPATCHER,
-    ROLES.ACCOUNTANT,
-    ROLES.DRIVER,
-  ),
+  authorize(ROLES.ADMIN, ROLES.DISPATCHER, ROLES.ACCOUNTANT, ROLES.DRIVER),
   validate(tripValidator.tripIdParamSchema, "params"),
   validate(tripValidator.paginationQuerySchema, "query"),
   tripController.getExpensesByTripId,

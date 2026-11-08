@@ -2,6 +2,7 @@ import express from "express";
 
 import authorize from "../../middlewares/authorize.middleware.js";
 import validate from "../../middlewares/validate.middleware.js";
+import idempotency from "../../middlewares/idempotency.middleware.js";
 import {
   uploadPod,
   validatePodImage,
@@ -29,6 +30,7 @@ orderRouter.get(
 orderRouter.post(
   "/",
   authorize(ROLES.ADMIN, ROLES.CUSTOMER),
+  idempotency({ required: true }),
   validate(orderValidator.createOrderSchema),
   orderController.create,
 );

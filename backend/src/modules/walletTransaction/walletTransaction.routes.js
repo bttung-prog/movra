@@ -2,6 +2,7 @@ import express from "express";
 
 import authorize from "../../middlewares/authorize.middleware.js";
 import validate from "../../middlewares/validate.middleware.js";
+import idempotency from "../../middlewares/idempotency.middleware.js";
 
 import { ROLES } from "../../constants/roles.js";
 
@@ -13,6 +14,7 @@ const walletTransactionRouter = express.Router();
 walletTransactionRouter.post(
   "/top-up",
   authorize(ROLES.CUSTOMER),
+  idempotency({ required: true }),
   validate(walletTransactionValidator.topUpSchema),
   walletTransactionController.topUp,
 );
@@ -20,6 +22,7 @@ walletTransactionRouter.post(
 walletTransactionRouter.post(
   "/adjustment",
   authorize(ROLES.ADMIN, ROLES.ACCOUNTANT),
+  idempotency({ required: true }),
   validate(walletTransactionValidator.adjustmentSchema),
   walletTransactionController.adjustWallet,
 );

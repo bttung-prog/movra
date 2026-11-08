@@ -21,6 +21,19 @@ vi.mock("../../../src/modules/payment/payment.service.js", () => ({
   default: paymentServiceMock,
 }));
 
+vi.mock("../../../src/modules/idempotency/idempotency.repository.js", () => ({
+  default: {
+    findByUserAndKey: vi.fn().mockResolvedValue(null),
+    create: vi
+      .fn()
+      .mockImplementation((data) =>
+        Promise.resolve({ ...data, _id: "idemp-pay-1" }),
+      ),
+    updateById: vi.fn().mockResolvedValue({}),
+    deleteById: vi.fn().mockResolvedValue({}),
+  },
+}));
+
 vi.mock("../../../src/middlewares/auth.middleware.js", () => ({
   default: (req, res, next) => {
     req.user = authState.user;
@@ -61,6 +74,7 @@ describe("Payment API integration", () => {
     const response = await request(app)
       .post("/api/v1/payments")
       .set("Origin", "http://localhost:5173")
+      .set("Idempotency-Key", "test-pay-key-1")
       .send({
         invoiceId: "507f1f77bcf86cd799439015",
         orderId: "507f1f77bcf86cd799439013",
@@ -92,10 +106,21 @@ describe("Payment API integration", () => {
     );
   });
 
+  it("rejects payment creation when Idempotency-Key header is missing", async () => {
+    const response = await request(app)
+      .post("/api/v1/payments")
+      .set("Origin", "http://localhost:5173")
+      .send({ paymentAmount: 250000 });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toContain("Idempotency-Key");
+  });
+
   it("rejects invalid payment payload before calling the service", async () => {
     const response = await request(app)
       .post("/api/v1/payments")
       .set("Origin", "http://localhost:5173")
+      .set("Idempotency-Key", "test-pay-key-2")
       .send({
         paymentAmount: 0,
         paymentMethod: "bank",
@@ -110,6 +135,7 @@ describe("Payment API integration", () => {
     const response = await request(app)
       .post("/api/v1/payments")
       .set("Origin", "http://localhost:5173")
+      .set("Idempotency-Key", "test-pay-key-3")
       .send({
         orderId: "507f1f77bcf86cd799439013",
         payerType: "customer",

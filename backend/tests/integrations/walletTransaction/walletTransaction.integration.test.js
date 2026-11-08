@@ -19,8 +19,24 @@ const authState = vi.hoisted(() => ({
   },
 }));
 
-vi.mock("../../../src/modules/walletTransaction/walletTransaction.service.js", () => ({
-  default: walletTransactionServiceMock,
+vi.mock(
+  "../../../src/modules/walletTransaction/walletTransaction.service.js",
+  () => ({
+    default: walletTransactionServiceMock,
+  }),
+);
+
+vi.mock("../../../src/modules/idempotency/idempotency.repository.js", () => ({
+  default: {
+    findByUserAndKey: vi.fn().mockResolvedValue(null),
+    create: vi
+      .fn()
+      .mockImplementation((data) =>
+        Promise.resolve({ ...data, _id: "idemp-wtrx-1" }),
+      ),
+    updateById: vi.fn().mockResolvedValue({}),
+    deleteById: vi.fn().mockResolvedValue({}),
+  },
 }));
 
 vi.mock("../../../src/middlewares/auth.middleware.js", () => ({
@@ -31,12 +47,14 @@ vi.mock("../../../src/middlewares/auth.middleware.js", () => ({
 }));
 
 vi.mock("../../../src/middlewares/authorize.middleware.js", () => ({
-  default: (...allowedRoles) => (req, res, next) => {
-    if (!req.user || !allowedRoles.includes(req.user.role)) {
-      return next(new ApiError(403, "Forbidden"));
-    }
-    next();
-  },
+  default:
+    (...allowedRoles) =>
+    (req, res, next) => {
+      if (!req.user || !allowedRoles.includes(req.user.role)) {
+        return next(new ApiError(403, "Forbidden"));
+      }
+      next();
+    },
 }));
 
 import app from "../../../src/app.js";
@@ -62,6 +80,7 @@ describe("Wallet transaction API integration", () => {
     const response = await request(app)
       .post("/api/v1/wallet-transactions/top-up")
       .set("Origin", "http://localhost:5173")
+      .set("Idempotency-Key", "test-wtrx-key-1")
       .send({
         amount: 500000,
         paymentMethod: "bank",
@@ -90,10 +109,21 @@ describe("Wallet transaction API integration", () => {
     );
   });
 
+  it("rejects top-up when Idempotency-Key header is missing", async () => {
+    const response = await request(app)
+      .post("/api/v1/wallet-transactions/top-up")
+      .set("Origin", "http://localhost:5173")
+      .send({ amount: 500000 });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toContain("Idempotency-Key");
+  });
+
   it("rejects invalid top-up payload before calling the service", async () => {
     const response = await request(app)
       .post("/api/v1/wallet-transactions/top-up")
       .set("Origin", "http://localhost:5173")
+      .set("Idempotency-Key", "test-wtrx-key-2")
       .send({
         amount: 0,
         paymentMethod: "bank",

@@ -2,6 +2,7 @@ import express from "express";
 
 import authorize from "../../middlewares/authorize.middleware.js";
 import validate from "../../middlewares/validate.middleware.js";
+import idempotency from "../../middlewares/idempotency.middleware.js";
 
 import { ROLES } from "../../constants/roles.js";
 
@@ -13,6 +14,7 @@ const invoiceRouter = express.Router();
 invoiceRouter.post(
   "/",
   authorize(ROLES.ADMIN, ROLES.ACCOUNTANT),
+  idempotency({ required: true }),
   validate(invoiceValidator.createInvoiceSchema),
   invoiceController.create,
 );
