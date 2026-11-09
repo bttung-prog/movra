@@ -767,6 +767,7 @@ export const INVOICE_MESSAGES = {
   ISSUE_SUCCESS: "Phát hành hóa đơn thành công",
   CANCEL_SUCCESS: "Hủy hóa đơn thành công",
   GET_STATS_SUCCESS: "Lấy thống kê hóa đơn thành công",
+  PROCESS_OVERDUE_SUCCESS: "Quét và cập nhật hóa đơn quá hạn thành công",
   NOT_FOUND: "Không tìm thấy hóa đơn",
   CUSTOMER_REQUIRED: "Mã khách hàng là bắt buộc để lập hóa đơn",
   DISPATCHER_ORDER_REQUIRED:

@@ -14,6 +14,9 @@ const mocks = vi.hoisted(() => ({
   getOrderIdsByWarehouseId: vi.fn(),
   getCustomerById: vi.fn(),
   generateCode: vi.fn(),
+  findOverdueCandidates: vi.fn(),
+  markOverdueInvoices: vi.fn(),
+  createNotification: vi.fn(),
 }));
 
 vi.mock("../../../src/modules/invoice/invoice.repository.js", () => ({
@@ -27,6 +30,14 @@ vi.mock("../../../src/modules/invoice/invoice.repository.js", () => ({
     findByOrderId: mocks.findByOrderId,
     updateById: mocks.updateById,
     getStats: mocks.getStats,
+    findOverdueCandidates: mocks.findOverdueCandidates,
+    markOverdueInvoices: mocks.markOverdueInvoices,
+  },
+}));
+
+vi.mock("../../../src/modules/notification/notification.service.js", () => ({
+  default: {
+    create: mocks.createNotification,
   },
 }));
 
@@ -542,6 +553,126 @@ describe("invoiceService issue, update and cancel", () => {
     ).rejects.toMatchObject({
       statusCode: 400,
       message: INVOICE_MESSAGES.CANNOT_CANCEL_PENDING,
+    });
+  });
+
+  describe("processOverdueInvoices", () => {
+    it("returns early when no candidates are found", async () => {
+      mocks.findOverdueCandidates.mockResolvedValue([]);
+
+      const result = await invoiceService.processOverdueInvoices();
+
+      expect(result).toEqual({
+        scannedCount: 0,
+        updatedCount: 0,
+        invoices: [],
+      });
+      expect(mocks.updateById).not.toHaveBeenCalled();
+      expect(mocks.createNotification).not.toHaveBeenCalled();
+    });
+
+    it("processes overdue invoices and notifies customers", async () => {
+      const candidate = {
+        _id: "inv-overdue-1",
+        invoiceCode: "INV-OD-001",
+        status: INVOICE_STATUSES.ISSUED,
+        dueDate: new Date("2026-01-01"),
+        remainingAmount: 50000,
+        orderId: "order-1",
+        customerId: {
+          _id: "cust-1",
+          userId: { _id: "user-cust-1" },
+        },
+      };
+
+      mocks.findOverdueCandidates.mockResolvedValue([candidate]);
+      mocks.updateById.mockResolvedValue({
+        ...candidate,
+        status: INVOICE_STATUSES.OVERDUE,
+      });
+
+      const result = await invoiceService.processOverdueInvoices();
+
+      expect(result.scannedCount).toBe(1);
+      expect(result.updatedCount).toBe(1);
+      expect(result.invoices[0].status).toBe(INVOICE_STATUSES.OVERDUE);
+
+      expect(mocks.updateById).toHaveBeenCalledWith(
+        candidate._id,
+        { status: INVOICE_STATUSES.OVERDUE },
+        null,
+        {
+          status: {
+            $in: [INVOICE_STATUSES.ISSUED, INVOICE_STATUSES.PARTIALLY_PAID],
+          },
+        },
+      );
+
+      expect(mocks.createNotification).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: "user-cust-1",
+          type: "PAYMENT",
+          title: "Hóa đơn quá hạn thanh toán",
+          data: expect.objectContaining({
+            invoiceId: candidate._id,
+            invoiceCode: candidate.invoiceCode,
+            orderId: candidate.orderId,
+          }),
+        }),
+      );
+    });
+
+    it("handles notification error gracefully without failing the batch", async () => {
+      const candidate = {
+        _id: "inv-overdue-2",
+        invoiceCode: "INV-OD-002",
+        status: INVOICE_STATUSES.PARTIALLY_PAID,
+        dueDate: new Date("2026-01-01"),
+        remainingAmount: 30000,
+        customerId: {
+          _id: "cust-2",
+          userId: "user-cust-2",
+        },
+      };
+
+      mocks.findOverdueCandidates.mockResolvedValue([candidate]);
+      mocks.updateById.mockResolvedValue({
+        ...candidate,
+        status: INVOICE_STATUSES.OVERDUE,
+      });
+      mocks.createNotification.mockRejectedValue(
+        new Error("Notification failed"),
+      );
+
+      const result = await invoiceService.processOverdueInvoices();
+
+      expect(result.scannedCount).toBe(1);
+      expect(result.updatedCount).toBe(1);
+    });
+
+    it("handles candidate customer without userId gracefully", async () => {
+      const candidate = {
+        _id: "inv-overdue-3",
+        invoiceCode: "INV-OD-003",
+        status: INVOICE_STATUSES.ISSUED,
+        dueDate: new Date("2026-01-01"),
+        remainingAmount: 20000,
+        customerId: {
+          _id: "cust-3",
+        },
+      };
+
+      mocks.findOverdueCandidates.mockResolvedValue([candidate]);
+      mocks.updateById.mockResolvedValue({
+        ...candidate,
+        status: INVOICE_STATUSES.OVERDUE,
+      });
+
+      const result = await invoiceService.processOverdueInvoices();
+
+      expect(result.scannedCount).toBe(1);
+      expect(result.updatedCount).toBe(1);
+      expect(mocks.createNotification).not.toHaveBeenCalled();
     });
   });
 });

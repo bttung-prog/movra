@@ -1,3 +1,5 @@
+import logger from "../../configs/logger.js";
+
 import { INVOICE_STATUSES } from "../../constants/invoiceStatuses.js";
 import { ROLES } from "../../constants/roles.js";
 import { INVOICE_MESSAGES, ORDER_MESSAGES } from "../../constants/messages.js";
@@ -7,6 +9,7 @@ import generateCode from "../../utils/generateCode.js";
 
 import orderService from "../order/order.service.js";
 import customerService from "../customer/customer.service.js";
+import notificationService from "../notification/notification.service.js";
 
 import invoiceRepository from "./invoice.repository.js";
 
@@ -513,6 +516,71 @@ const updatePaymentProgress = async (
   );
 };
 
+const processOverdueInvoices = async (cutoffDate = new Date()) => {
+  const candidates = await invoiceRepository.findOverdueCandidates(cutoffDate);
+  if (!candidates || candidates.length === 0) {
+    return {
+      scannedCount: 0,
+      updatedCount: 0,
+      invoices: [],
+    };
+  }
+
+  const updatedInvoices = [];
+
+  for (const candidate of candidates) {
+    const updated = await invoiceRepository.updateById(
+      candidate._id,
+      { status: INVOICE_STATUSES.OVERDUE },
+      null,
+      {
+        status: {
+          $in: [INVOICE_STATUSES.ISSUED, INVOICE_STATUSES.PARTIALLY_PAID],
+        },
+      },
+    );
+
+    if (updated) {
+      updatedInvoices.push(updated);
+
+      const targetUserId =
+        candidate.customerId?.userId?._id || candidate.customerId?.userId;
+      if (targetUserId) {
+        try {
+          const formattedDueDate = candidate.dueDate
+            ? new Date(candidate.dueDate).toLocaleDateString("vi-VN")
+            : "";
+          const formattedAmount = Number(
+            candidate.remainingAmount || 0,
+          ).toLocaleString("vi-VN");
+
+          await notificationService.create({
+            userId: targetUserId,
+            title: "Hóa đơn quá hạn thanh toán",
+            message: `Hóa đơn ${candidate.invoiceCode} đã quá hạn thanh toán vào ngày ${formattedDueDate}. Vui lòng thanh toán số tiền còn lại (${formattedAmount} VND).`,
+            type: "PAYMENT",
+            data: {
+              invoiceId: candidate._id,
+              invoiceCode: candidate.invoiceCode,
+              orderId: candidate.orderId?._id || candidate.orderId,
+            },
+          });
+        } catch (notifError) {
+          logger.error(
+            `[OverdueJob] Lỗi gửi thông báo cho hóa đơn ${candidate.invoiceCode}: ${notifError.message}`,
+          );
+        }
+      }
+    }
+  }
+
+  return {
+    scannedCount: candidates.length,
+    updatedCount: updatedInvoices.length,
+    invoices: updatedInvoices,
+  };
+};
+
 export default {
   create,
   getAll,
@@ -527,4 +595,5 @@ export default {
   updatePaymentProgress,
   cancelInvoice,
   getStats,
+  processOverdueInvoices,
 };

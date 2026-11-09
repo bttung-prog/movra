@@ -93,6 +93,27 @@ const getStats = async (filter = {}) => {
   return result;
 };
 
+const findOverdueCandidates = (cutoffDate = new Date()) => {
+  return Invoice.find({
+    status: {
+      $in: [INVOICE_STATUSES.ISSUED, INVOICE_STATUSES.PARTIALLY_PAID],
+    },
+    dueDate: { $lt: cutoffDate },
+  }).populate(INVOICE_POPULATE);
+};
+
+const markOverdueInvoices = (cutoffDate = new Date()) => {
+  return Invoice.updateMany(
+    {
+      status: {
+        $in: [INVOICE_STATUSES.ISSUED, INVOICE_STATUSES.PARTIALLY_PAID],
+      },
+      dueDate: { $lt: cutoffDate },
+    },
+    { $set: { status: INVOICE_STATUSES.OVERDUE } },
+  );
+};
+
 export default {
   create,
   findAll,
@@ -104,4 +125,6 @@ export default {
   updateById,
   deleteById,
   getStats,
+  findOverdueCandidates,
+  markOverdueInvoices,
 };

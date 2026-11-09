@@ -25,6 +25,12 @@ invoiceRouter.get(
   invoiceController.getStats,
 );
 
+invoiceRouter.post(
+  "/trigger-overdue-check",
+  authorize(ROLES.ADMIN, ROLES.ACCOUNTANT),
+  invoiceController.triggerOverdueCheck,
+);
+
 invoiceRouter.get(
   "/my-invoices",
   authorize(ROLES.CUSTOMER),

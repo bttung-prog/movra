@@ -53,6 +53,16 @@ const notificationSchema = new mongoose.Schema(
         type: mongoose.Schema.Types.ObjectId,
         ref: "Vehicle",
       },
+
+      invoiceId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Invoice",
+      },
+
+      invoiceCode: {
+        type: String,
+        trim: true,
+      },
     },
 
     isRead: {
