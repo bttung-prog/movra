@@ -1237,6 +1237,39 @@ describe("orderService.markAsDelivered", () => {
     );
   });
 
+  it("sends delivery update and feedback request notifications when customer user exists", async () => {
+    mocks.findById.mockResolvedValue({
+      ...deliveryOrder,
+      codAmount: 0,
+    });
+    mocks.getTripById.mockResolvedValue({ _id: "trip-1" });
+    mocks.updateById.mockResolvedValue({
+      ...deliveryOrder,
+      codAmount: 0,
+      status: "delivered",
+    });
+    mocks.createTrackingLog.mockResolvedValue({ _id: "log-1" });
+
+    await orderService.markAsDelivered({
+      orderId: "order-1",
+      user: { role: ROLES.ADMIN },
+    });
+
+    expect(mocks.createNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: "user-1",
+        type: "ORDER_UPDATE",
+      }),
+    );
+    expect(mocks.createNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: "user-1",
+        type: "FEEDBACK_REQUEST",
+        data: expect.objectContaining({ orderId: "order-1" }),
+      }),
+    );
+  });
+
   it("marks as delivered and awards loyalty points and totalSpent when shippingFee is paid", async () => {
     mocks.findById.mockResolvedValue({
       ...deliveryOrder,
@@ -1407,6 +1440,20 @@ describe("orderService.markAsDelivered", () => {
           status: "stored",
           notes: expect.stringContaining("bị hủy"),
         }),
+        transaction,
+      );
+    });
+  });
+
+  describe("orderService.markOrderAsFeedbacked", () => {
+    it("updates order isFeedbacked to true", async () => {
+      mocks.updateById.mockResolvedValue({ _id: "order-1", isFeedbacked: true });
+
+      await orderService.markOrderAsFeedbacked("order-1", transaction);
+
+      expect(mocks.updateById).toHaveBeenCalledWith(
+        "order-1",
+        { isFeedbacked: true },
         transaction,
       );
     });

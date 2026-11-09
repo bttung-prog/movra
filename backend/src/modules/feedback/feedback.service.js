@@ -19,29 +19,27 @@ const createFeedback = async (payload, actor) => {
   }
 
   const order = await orderService.getById(orderId);
-  if (!order) {
-    throw new ApiError(404, FEEDBACK_MESSAGES.ORDER_NOT_FOUND);
-  }
 
   if (order.status !== "delivered") {
     throw new ApiError(400, FEEDBACK_MESSAGES.ORDER_NOT_DELIVERED);
   }
 
-  const orderCustomerId = (
-    order.customerId._id || order.customerId
-  ).toString();
+  if (order.isFeedbacked) {
+    throw new ApiError(400, FEEDBACK_MESSAGES.ALREADY_EXISTS);
+  }
+
+  const orderCustomerId = (order.customerId._id || order.customerId).toString();
   if (!actor.customerId || orderCustomerId !== actor.customerId.toString()) {
     throw new ApiError(403, FEEDBACK_MESSAGES.CREATE_ACCESS_DENIED);
   }
 
   let driverId = null;
   const tripId = order.tripId?._id || order.tripId || null;
+  const warehouseId = order.warehouseId?._id || order.warehouseId || null;
 
   if (tripId) {
     const trip = await tripService.getById(tripId);
-    if (trip) {
-      driverId = trip.driverId?._id || trip.driverId || null;
-    }
+    driverId = trip.driverId?._id || trip.driverId || null;
   }
 
   const feedbackData = {
@@ -49,6 +47,7 @@ const createFeedback = async (payload, actor) => {
     customerId: actor.customerId || order.customerId._id || order.customerId,
     driverId,
     tripId,
+    warehouseId,
     rating,
     tags,
     comment,
@@ -66,7 +65,12 @@ const createFeedback = async (payload, actor) => {
         throw new ApiError(400, FEEDBACK_MESSAGES.ALREADY_EXISTS);
       }
 
-      const newFeedback = await feedbackRepository.create(feedbackData, session);
+      const newFeedback = await feedbackRepository.create(
+        feedbackData,
+        session,
+      );
+
+      await orderService.markOrderAsFeedbacked(orderId, session);
 
       if (driverId) {
         const stats = await feedbackRepository.getDriverStats(
@@ -136,25 +140,20 @@ const getAll = async ({
     if (!user.customerId) {
       throw new ApiError(403, FEEDBACK_MESSAGES.VIEW_ACCESS_DENIED);
     }
+
     queryFilter.customerId = user.customerId;
   } else if (user?.role === ROLES.DRIVER) {
     if (!user.driverId) {
       throw new ApiError(403, FEEDBACK_MESSAGES.VIEW_ACCESS_DENIED);
     }
+
     queryFilter.driverId = user.driverId;
   } else if (user?.role === ROLES.DISPATCHER) {
     if (!user.warehouseId) {
       throw new ApiError(403, FEEDBACK_MESSAGES.VIEW_ACCESS_DENIED);
     }
-    const [orderIds, tripIds] = await Promise.all([
-      orderService.getIdsByWarehouseId(user.warehouseId),
-      tripService.getIdsByWarehouseId(user.warehouseId),
-    ]);
-    queryFilter.$and = [
-      ...(queryFilter.$and || []),
-      { orderId: { $in: orderIds } },
-      { tripId: { $in: tripIds } },
-    ];
+
+    queryFilter.warehouseId = user.warehouseId;
   }
 
   const [feedbacks, total] = await Promise.all([
@@ -224,7 +223,7 @@ const getById = async (id, user = null) => {
 };
 
 const getByOrderId = async (orderId, user = null) => {
-  const order = await orderService.getById(orderId, true, user);
+  await orderService.getById(orderId, true, user);
   const filter = user?.role === ROLES.ADMIN ? {} : { status: "visible" };
   const feedback = await feedbackRepository.findByOrderId(orderId, filter);
   if (!feedback) {
@@ -257,15 +256,6 @@ const getByOrderId = async (orderId, user = null) => {
       false,
       user,
     );
-  }
-
-  if (user?.role === ROLES.CUSTOMER) {
-    const orderCustomerId = (
-      order.customerId?._id || order.customerId
-    )?.toString();
-    if (!user.customerId || orderCustomerId !== user.customerId.toString()) {
-      throw new ApiError(403, FEEDBACK_MESSAGES.VIEW_ONE_ACCESS_DENIED);
-    }
   }
 
   return feedback;
