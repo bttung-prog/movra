@@ -246,6 +246,23 @@ describe("orderService.create", () => {
     expect(result).toEqual({ _id: "order-1", orderCode: "ORD-0001" });
   });
 
+  it("requires a warehouse or pickup location for admin order creation", async () => {
+    await expect(
+      orderService.create(
+        {
+          ...validCreatePayload,
+          warehouseId: null,
+          pickupLocation: null,
+        },
+        transaction,
+        { role: ROLES.ADMIN },
+      ),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: ORDER_MESSAGES.WAREHOUSE_REQUIRED,
+    });
+  });
+
   it("creates the order as unpaid without charging the wallet", async () => {
     const result = await orderService.create(
       { ...validCreatePayload, quantity: 3 },
@@ -908,6 +925,28 @@ describe("orderService.getAll and getMyOrders", () => {
     ).rejects.toMatchObject({ statusCode: 403 });
 
     expect(mocks.findAll).not.toHaveBeenCalled();
+  });
+
+  it("scopes a dispatcher's order list directly to their assigned warehouse", async () => {
+    mocks.findAll.mockResolvedValue([existingOrder]);
+    mocks.countAll.mockResolvedValue(1);
+
+    await orderService.getAll({
+      filter: { status: "created" },
+      user: { role: ROLES.DISPATCHER, warehouseId: "warehouse-1" },
+    });
+
+    expect(mocks.findAll).toHaveBeenCalledWith({
+      filter: {
+        deletedAt: null,
+        status: "created",
+        warehouseId: "warehouse-1",
+      },
+      skip: 0,
+      limit: 10,
+      sort: { createdAt: -1 },
+    });
+    expect(mocks.getTripIdsByWarehouseId).not.toHaveBeenCalled();
   });
 });
 
