@@ -1,4 +1,5 @@
 import { INVOICE_MESSAGES } from "../../constants/messages.js";
+import { INVOICE_STATUSES } from "../../constants/invoiceStatuses.js";
 
 import ApiResponse from "../../utils/ApiResponse.js";
 import { escapeRegex } from "../../utils/regexUtils.js";
@@ -62,8 +63,15 @@ const getAll = async (req, res, next) => {
     }
 
     if (isOverdue === "true" || isOverdue === true) {
-      filter.status = { $in: ["issued", "partially_paid"] };
-      filter.dueDate = { $lt: new Date() };
+      filter.$or = [
+        { status: INVOICE_STATUSES.OVERDUE },
+        {
+          status: {
+            $in: [INVOICE_STATUSES.ISSUED, INVOICE_STATUSES.PARTIALLY_PAID],
+          },
+          dueDate: { $lt: new Date() },
+        },
+      ];
     }
 
     const result = await invoiceService.getAll({
@@ -93,8 +101,15 @@ const getMyInvoices = async (req, res, next) => {
     }
 
     if (isOverdue === "true" || isOverdue === true) {
-      filter.status = { $in: ["issued", "partially_paid"] };
-      filter.dueDate = { $lt: new Date() };
+      filter.$or = [
+        { status: INVOICE_STATUSES.OVERDUE },
+        {
+          status: {
+            $in: [INVOICE_STATUSES.ISSUED, INVOICE_STATUSES.PARTIALLY_PAID],
+          },
+          dueDate: { $lt: new Date() },
+        },
+      ];
     }
 
     const result = await invoiceService.getAll({ filter, page, limit });
@@ -177,6 +192,19 @@ const getStats = async (req, res, next) => {
   }
 };
 
+const triggerOverdueCheck = async (req, res, next) => {
+  try {
+    const result = await invoiceService.processOverdueInvoices();
+    return ApiResponse.success(
+      res,
+      result,
+      INVOICE_MESSAGES.PROCESS_OVERDUE_SUCCESS,
+    );
+  } catch (error) {
+    next(error);
+  }
+};
+
 export default {
   create,
   getAll,
@@ -187,4 +215,5 @@ export default {
   updateById,
   cancel,
   getStats,
+  triggerOverdueCheck,
 };
