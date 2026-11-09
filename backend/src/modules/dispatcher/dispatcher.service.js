@@ -199,6 +199,10 @@ const countActiveByWarehouseId = (warehouseId) => {
   return dispatcherRepository.countActiveByWarehouseId(warehouseId);
 };
 
+const getActiveByWarehouseId = (warehouseId) => {
+  return dispatcherRepository.findActiveByWarehouseId(warehouseId);
+};
+
 const getDashboardStats = async (userId, user = null) => {
   const dispatcher = await dispatcherRepository.findByUserId(userId);
   if (!dispatcher) {
@@ -319,6 +323,7 @@ export default {
   transferWarehouse,
   updateStatus,
   countActiveByWarehouseId,
+  getActiveByWarehouseId,
   getDashboardStats,
   getResources,
 };

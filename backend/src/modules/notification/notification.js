@@ -38,13 +38,20 @@ const notificationSchema = new mongoose.Schema(
         type: mongoose.Schema.Types.ObjectId,
         ref: "Order",
       },
+
       orderCode: {
         type: String,
         trim: true,
       },
+
       tripId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "Trip",
+      },
+
+      vehicleId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Vehicle",
       },
     },
 
