@@ -404,6 +404,14 @@ const countActiveByDriverId = (driverId) => {
   return tripRepository.countActiveByDriverId(driverId);
 };
 
+const countActiveByVehicleId = (vehicleId, session = null) => {
+  return tripRepository.countActiveByVehicleId(vehicleId, session);
+};
+
+const findActiveByVehicleId = (vehicleId, session = null) => {
+  return tripRepository.findActiveByVehicleId(vehicleId, session);
+};
+
 const getIdsByWarehouseId = async (warehouseId) => {
   const [driverIds, vehicleIds] = await Promise.all([
     driverService.getIdsByWarehouseId(warehouseId),
@@ -1395,6 +1403,8 @@ export default {
   getByCode,
   countAll,
   countActiveByDriverId,
+  countActiveByVehicleId,
+  findActiveByVehicleId,
   getIdsByWarehouseId,
   syncTotalOrder,
   updateById,

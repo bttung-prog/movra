@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  startSession: vi.fn(),
   createSchedule: vi.fn(),
   findAllSchedules: vi.fn(),
   countAllSchedules: vi.fn(),
@@ -23,7 +24,22 @@ const mocks = vi.hoisted(() => ({
   changeVehicleStatus: vi.fn(),
   updateOdometer: vi.fn(),
   getDriverByUserId: vi.fn(),
+  tripFindActiveByVehicleId: vi.fn(),
+  tripCountActiveByVehicleId: vi.fn(),
+  dispatcherGetActiveByWarehouseId: vi.fn(),
+  notificationCreate: vi.fn(),
 }));
+
+vi.mock("mongoose", async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    default: {
+      ...actual.default,
+      startSession: mocks.startSession,
+    },
+  };
+});
 
 vi.mock("../../../src/modules/maintenance/maintenance.repository.js", () => ({
   default: {
@@ -60,6 +76,25 @@ vi.mock("../../../src/modules/driver/driver.service.js", () => ({
   default: { getByUserId: mocks.getDriverByUserId },
 }));
 
+vi.mock("../../../src/modules/trip/trip.service.js", () => ({
+  default: {
+    findActiveByVehicleId: mocks.tripFindActiveByVehicleId,
+    countActiveByVehicleId: mocks.tripCountActiveByVehicleId,
+  },
+}));
+
+vi.mock("../../../src/modules/dispatcher/dispatcher.service.js", () => ({
+  default: {
+    getActiveByWarehouseId: mocks.dispatcherGetActiveByWarehouseId,
+  },
+}));
+
+vi.mock("../../../src/modules/notification/notification.service.js", () => ({
+  default: {
+    create: mocks.notificationCreate,
+  },
+}));
+
 import {
   COMMON_MESSAGES,
   DRIVER_MESSAGES,
@@ -78,6 +113,8 @@ const logId = "507f1f77bcf86cd799439013";
 const warehouseId = "warehouse-1";
 const vehicle = {
   _id: vehicleId,
+  plateNumber: "29A-12345",
+  warehouseId,
   currentOdometer: 1000,
   status: "available",
 };
@@ -103,8 +140,17 @@ const log = {
   odometerReading: 1200,
   status: MAINTENANCE_STATUSES.SCHEDULED,
 };
+
+const session = {
+  startTransaction: vi.fn(),
+  commitTransaction: vi.fn(),
+  abortTransaction: vi.fn(),
+  endSession: vi.fn(),
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.startSession.mockResolvedValue(session);
   mocks.createSchedule.mockResolvedValue(schedule);
   mocks.findAllSchedules.mockResolvedValue([schedule]);
   mocks.countAllSchedules.mockResolvedValue(11);
@@ -133,6 +179,12 @@ beforeEach(() => {
     _id: "driver-1",
     currentVehicleId: vehicleId,
   });
+  mocks.tripFindActiveByVehicleId.mockResolvedValue([]);
+  mocks.tripCountActiveByVehicleId.mockResolvedValue(0);
+  mocks.dispatcherGetActiveByWarehouseId.mockResolvedValue([
+    { _id: "dispatcher-1", userId: "user-disp-1" },
+  ]);
+  mocks.notificationCreate.mockResolvedValue({ _id: "notif-1" });
 });
 
 describe("maintenanceService.createSchedule", () => {
@@ -312,6 +364,27 @@ describe("maintenanceService.createLog", () => {
     });
     expect(mocks.createLog).not.toHaveBeenCalled();
   });
+
+  it("rejects creating maintenance log for a vehicle currently running a trip", async () => {
+    mocks.tripFindActiveByVehicleId.mockResolvedValueOnce([
+      { _id: "trip-active-1", tripCode: "TRIP-001", status: "in_progress" },
+    ]);
+
+    await expect(
+      maintenanceService.createLog({
+        vehicleId,
+        scheduleId,
+        type: MAINTENANCE_TYPES.REPAIR,
+        description: "Repair",
+        cost: 250,
+        odometerReading: 1200,
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: MAINTENANCE_MESSAGES.VEHICLE_IN_USE,
+    });
+    expect(mocks.createLog).not.toHaveBeenCalled();
+  });
 });
 
 describe("maintenanceService log access and cost queries", () => {
@@ -423,5 +496,96 @@ describe("maintenanceService.createLogEvent", () => {
       statusCode: 403,
       message: MAINTENANCE_MESSAGES.UPDATE_LOG_OWN_VEHICLE_ONLY,
     });
+  });
+
+  it("transitions to in_progress, changes vehicle status to maintenance and warns dispatchers of planned trips", async () => {
+    mocks.tripFindActiveByVehicleId.mockResolvedValueOnce([
+      { _id: "trip-2", tripCode: "TRIP-PLANNED-1", status: "planned" },
+    ]);
+    mocks.createLog.mockResolvedValueOnce({
+      ...log,
+      status: MAINTENANCE_STATUSES.IN_PROGRESS,
+    });
+
+    const result = await maintenanceService.createLogEvent(logId, {
+      status: MAINTENANCE_STATUSES.IN_PROGRESS,
+    });
+
+    expect(mocks.changeVehicleStatus).toHaveBeenCalledWith(
+      vehicleId,
+      "maintenance",
+      session,
+    );
+    expect(mocks.notificationCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: "user-disp-1",
+        title: expect.stringContaining("Cảnh báo"),
+        message: expect.stringContaining("TRIP-PLANNED-1"),
+        type: "SYSTEM",
+      }),
+    );
+    expect(session.commitTransaction).toHaveBeenCalled();
+    expect(result.status).toBe(MAINTENANCE_STATUSES.IN_PROGRESS);
+  });
+
+  it("rejects transition to in_progress if vehicle is in use or running a trip", async () => {
+    mocks.tripFindActiveByVehicleId.mockResolvedValueOnce([
+      { _id: "trip-1", tripCode: "TRIP-RUNNING-1", status: "in_progress" },
+    ]);
+
+    await expect(
+      maintenanceService.createLogEvent(logId, {
+        status: MAINTENANCE_STATUSES.IN_PROGRESS,
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: MAINTENANCE_MESSAGES.VEHICLE_IN_USE,
+    });
+
+    expect(mocks.changeVehicleStatus).not.toHaveBeenCalled();
+    expect(session.abortTransaction).toHaveBeenCalled();
+  });
+
+  it("syncs vehicle status back to available and notifies dispatchers upon completion", async () => {
+    const inProgressLog = {
+      ...log,
+      status: MAINTENANCE_STATUSES.IN_PROGRESS,
+    };
+    mocks.findLogById.mockResolvedValueOnce(inProgressLog);
+    mocks.findLatestLogByVehicle
+      .mockResolvedValueOnce(inProgressLog)
+      .mockResolvedValueOnce({
+        ...log,
+        status: MAINTENANCE_STATUSES.COMPLETED,
+      });
+
+    mocks.getVehicleById
+      .mockResolvedValueOnce(vehicle)
+      .mockResolvedValueOnce({ ...vehicle, status: "maintenance" })
+      .mockResolvedValueOnce({ ...vehicle, status: "maintenance" });
+
+    mocks.createLog.mockResolvedValueOnce({
+      ...log,
+      status: MAINTENANCE_STATUSES.COMPLETED,
+      endDate: new Date(),
+    });
+
+    await maintenanceService.createLogEvent(logId, {
+      status: MAINTENANCE_STATUSES.COMPLETED,
+    });
+
+    expect(mocks.changeVehicleStatus).toHaveBeenCalledWith(
+      vehicleId,
+      "available",
+      session,
+    );
+    expect(mocks.notificationCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: "user-disp-1",
+        title: "Phương tiện hoàn tất bảo dưỡng",
+        type: "SYSTEM",
+      }),
+    );
+    expect(session.commitTransaction).toHaveBeenCalled();
   });
 });

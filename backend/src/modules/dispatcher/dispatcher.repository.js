@@ -31,6 +31,12 @@ const countActiveByWarehouseId = (warehouseId) => {
   return Dispatcher.countDocuments({ warehouseId, status: "active" });
 };
 
+const findActiveByWarehouseId = (warehouseId) => {
+  return Dispatcher.find({ warehouseId, status: "active" })
+    .populate(POPULATE_FIELDS)
+    .lean();
+};
+
 const findById = (dispatcherId) => {
   return Dispatcher.findById(dispatcherId).populate(POPULATE_FIELDS).lean();
 };
@@ -62,6 +68,7 @@ export default {
   findAll,
   countAll,
   countActiveByWarehouseId,
+  findActiveByWarehouseId,
   findById,
   findByUserId,
   findByCode,

@@ -2,6 +2,8 @@ import mongoose from "mongoose";
 
 import { ROLES } from "../../constants/roles.js";
 import { MAINTENANCE_STATUSES } from "../../constants/maintenanceStatuses.js";
+import { VEHICLE_STATUSES } from "../../constants/vehicleStatuses.js";
+import { TRIP_STATUSES } from "../../constants/tripStatuses.js";
 import {
   MAINTENANCE_MESSAGES,
   COMMON_MESSAGES,
@@ -12,6 +14,9 @@ import ApiError from "../../utils/ApiError.js";
 
 import vehicleService from "../vehicle/vehicle.service.js";
 import driverService from "../driver/driver.service.js";
+import tripService from "../trip/trip.service.js";
+import dispatcherService from "../dispatcher/dispatcher.service.js";
+import notificationService from "../notification/notification.service.js";
 
 import maintenanceRepository from "./maintenance.repository.js";
 
@@ -292,17 +297,86 @@ const processMaintenanceComplete = async (
   );
 };
 
-const handleMaintenanceInProgress = async (targetVehicleId, session) => {
-  const vehicle = await vehicleService.getById(targetVehicleId);
-  if (vehicle.status === "in_use") {
-    throw new ApiError(400, MAINTENANCE_MESSAGES.VEHICLE_IN_USE);
+const notifyDispatchersVehicleMaintenance = async ({
+  vehicle,
+  activeTrips = [],
+  action = "ENTER_MAINTENANCE",
+  session = null,
+}) => {
+  const warehouseId = vehicle.warehouseId?._id || vehicle.warehouseId;
+  if (!warehouseId) return;
+
+  const dispatchers =
+    await dispatcherService.getActiveByWarehouseId(warehouseId);
+  if (!dispatchers || dispatchers.length === 0) return;
+
+  const plannedTrips = (activeTrips || []).filter(
+    (t) => t.status === TRIP_STATUSES.PLANNED,
+  );
+  const tripCodes = plannedTrips.map((t) => t.tripCode).join(", ");
+
+  let title = "Thông báo bảo dưỡng phương tiện";
+  let message = `Phương tiện ${vehicle.plateNumber} đã được đưa vào bảo dưỡng.`;
+
+  if (action === "ENTER_MAINTENANCE") {
+    if (plannedTrips.length > 0) {
+      title = "Cảnh báo: Phương tiện vào bảo dưỡng có chuyến đã lên lịch";
+      message = `Phương tiện ${vehicle.plateNumber} đã được đưa vào bảo dưỡng. Phương tiện này đang được gán cho các chuyến xe đã lên kế hoạch (${tripCodes}). Vui lòng điều phối phương tiện thay thế.`;
+    }
+  } else if (action === "EXIT_MAINTENANCE") {
+    title = "Phương tiện hoàn tất bảo dưỡng";
+    message = `Phương tiện ${vehicle.plateNumber} đã hoàn tất bảo dưỡng và sẵn sàng hoạt động.`;
   }
 
-  if (vehicle.status === "retired") {
+  await Promise.all(
+    dispatchers.map((disp) => {
+      const userId = disp.userId?._id || disp.userId;
+      if (!userId) return Promise.resolve();
+      return notificationService.create({
+        userId,
+        title,
+        message,
+        type: "SYSTEM",
+        data: {
+          vehicleId: vehicle._id,
+          tripId: plannedTrips[0]?._id || null,
+        },
+        session,
+      });
+    }),
+  );
+};
+
+const handleMaintenanceInProgress = async (targetVehicleId, session) => {
+  const vehicle = await vehicleService.getById(targetVehicleId);
+  if (vehicle.status === VEHICLE_STATUSES.RETIRED) {
     throw new ApiError(400, MAINTENANCE_MESSAGES.VEHICLE_RETIRED);
   }
 
-  await vehicleService.changeStatus(targetVehicleId, "maintenance", session);
+  const activeTrips = await tripService.findActiveByVehicleId(
+    targetVehicleId,
+    session,
+  );
+  const hasRunningTrip =
+    vehicle.status === VEHICLE_STATUSES.IN_USE ||
+    activeTrips.some((t) => t.status === TRIP_STATUSES.IN_PROGRESS);
+
+  if (hasRunningTrip) {
+    throw new ApiError(400, MAINTENANCE_MESSAGES.VEHICLE_IN_USE);
+  }
+
+  await vehicleService.changeStatus(
+    targetVehicleId,
+    VEHICLE_STATUSES.MAINTENANCE,
+    session,
+  );
+
+  await notifyDispatchersVehicleMaintenance({
+    vehicle,
+    activeTrips,
+    action: "ENTER_MAINTENANCE",
+    session,
+  });
 };
 
 const handleMaintenanceCompletion = async ({
@@ -335,10 +409,17 @@ const handleMaintenanceCompletion = async ({
 
 const validateLogStatusTransition = (currentStatus, nextStatus) => {
   const allowedTransitions = {
-    scheduled: ["in_progress", "completed", "cancelled"],
-    in_progress: ["completed", "cancelled"],
-    completed: [],
-    cancelled: [],
+    [MAINTENANCE_STATUSES.SCHEDULED]: [
+      MAINTENANCE_STATUSES.IN_PROGRESS,
+      MAINTENANCE_STATUSES.COMPLETED,
+      MAINTENANCE_STATUSES.CANCELLED,
+    ],
+    [MAINTENANCE_STATUSES.IN_PROGRESS]: [
+      MAINTENANCE_STATUSES.COMPLETED,
+      MAINTENANCE_STATUSES.CANCELLED,
+    ],
+    [MAINTENANCE_STATUSES.COMPLETED]: [],
+    [MAINTENANCE_STATUSES.CANCELLED]: [],
   };
 
   if (!allowedTransitions[currentStatus]?.includes(nextStatus)) {
@@ -356,12 +437,21 @@ const syncVehicleStatusFromLatestLog = async (targetVehicleId, session) => {
   }
 
   const vehicle = await vehicleService.getById(targetVehicleId);
-  if (vehicle.status === "retired") return;
+  if (vehicle.status === VEHICLE_STATUSES.RETIRED) return;
 
   const targetStatus =
-    latestLog.status === "in_progress" ? "maintenance" : "available";
+    latestLog.status === MAINTENANCE_STATUSES.IN_PROGRESS
+      ? VEHICLE_STATUSES.MAINTENANCE
+      : VEHICLE_STATUSES.AVAILABLE;
   if (vehicle.status !== targetStatus) {
     await vehicleService.changeStatus(targetVehicleId, targetStatus, session);
+    if (targetStatus === VEHICLE_STATUSES.AVAILABLE) {
+      await notifyDispatchersVehicleMaintenance({
+        vehicle,
+        action: "EXIT_MAINTENANCE",
+        session,
+      });
+    }
   }
 };
 
@@ -396,8 +486,17 @@ const createLog = async (
   }
 
   const vehicle = await vehicleService.getById(vehicleId, user);
-  if (vehicle.status === "retired") {
+  if (vehicle.status === VEHICLE_STATUSES.RETIRED) {
     throw new ApiError(400, MAINTENANCE_MESSAGES.VEHICLE_RETIRED);
+  }
+
+  const activeTrips = await tripService.findActiveByVehicleId(vehicleId);
+  const hasRunningTrip =
+    vehicle.status === VEHICLE_STATUSES.IN_USE ||
+    activeTrips.some((t) => t.status === TRIP_STATUSES.IN_PROGRESS);
+
+  if (hasRunningTrip) {
+    throw new ApiError(400, MAINTENANCE_MESSAGES.VEHICLE_IN_USE);
   }
 
   const schedule = await getScheduleById(scheduleId, true, user);
@@ -537,18 +636,22 @@ const createLogEvent = async (logId, eventData, user = null) => {
       description: log.description,
       cost: cost ?? log.cost,
       startDate: log.startDate,
-      endDate: status === "completed" ? new Date() : log.endDate,
+      endDate:
+        status === MAINTENANCE_STATUSES.COMPLETED ? new Date() : log.endDate,
       odometerReading: odometerReading ?? log.odometerReading,
       status,
     };
 
-    if (status === "in_progress" && log.status !== "in_progress") {
+    if (
+      status === MAINTENANCE_STATUSES.IN_PROGRESS &&
+      log.status !== MAINTENANCE_STATUSES.IN_PROGRESS
+    ) {
       await handleMaintenanceInProgress(targetVehicleId, session);
     }
 
     const newLog = await maintenanceRepository.createLog(payload, session);
 
-    if (status === "completed") {
+    if (status === MAINTENANCE_STATUSES.COMPLETED) {
       await handleMaintenanceCompletion({
         targetVehicleId,
         scheduleId: log.scheduleId,
@@ -558,7 +661,7 @@ const createLogEvent = async (logId, eventData, user = null) => {
       });
     }
 
-    if (status === "cancelled") {
+    if (status === MAINTENANCE_STATUSES.CANCELLED) {
       await handleMaintenanceCancellation(targetVehicleId, session);
     }
 

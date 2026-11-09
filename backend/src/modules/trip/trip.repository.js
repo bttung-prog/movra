@@ -65,6 +65,26 @@ const countActiveByDriverId = (driverId) => {
   });
 };
 
+const countActiveByVehicleId = (vehicleId, session = null) => {
+  const query = Trip.countDocuments({
+    vehicleId,
+    deletedAt: null,
+    status: { $in: ["planned", "in_progress"] },
+  });
+  if (session) query.session(session);
+  return query;
+};
+
+const findActiveByVehicleId = (vehicleId, session = null) => {
+  const query = Trip.find({
+    vehicleId,
+    deletedAt: null,
+    status: { $in: ["planned", "in_progress"] },
+  }).select("tripCode status plannedStart plannedEnd warehouseId");
+  if (session) query.session(session);
+  return query.lean();
+};
+
 const findIdsByWarehouseId = (warehouseId, driverIds = [], vehicleIds = []) => {
   return Trip.distinct("_id", {
     deletedAt: null,
@@ -441,6 +461,8 @@ export default {
   findAll,
   countAll,
   countActiveByDriverId,
+  countActiveByVehicleId,
+  findActiveByVehicleId,
   findIdsByWarehouseId,
   findById,
   findByCode,
