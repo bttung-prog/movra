@@ -223,6 +223,8 @@ const orderSchema = new mongoose.Schema(
 orderSchema.index({ customerId: 1 });
 orderSchema.index({ tripId: 1 });
 orderSchema.index({ warehouseId: 1 });
+orderSchema.index({ warehouseId: 1, deletedAt: 1, createdAt: -1 });
+orderSchema.index({ warehouseId: 1, status: 1 });
 orderSchema.index({ status: 1 });
 orderSchema.index({ paymentStatus: 1 });
 orderSchema.index({ codSettled: 1, status: 1 });

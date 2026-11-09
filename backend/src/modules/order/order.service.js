@@ -209,34 +209,14 @@ const scopeOrderFilter = async (filter, user) => {
     throw new ApiError(403, WAREHOUSE_MESSAGES.DISPATCHER_NOT_ASSIGNED);
   }
 
-  const tripIds = await tripService.getIdsByWarehouseId(user.warehouseId);
   return {
-    $and: [
-      filter,
-      {
-        $and: [
-          {
-            $or: [
-              { warehouseId: user.warehouseId },
-              {
-                tripId: { $in: tripIds },
-                $or: [
-                  { warehouseId: null },
-                  { warehouseId: { $exists: false } },
-                ],
-              },
-            ],
-          },
-          { $or: [{ tripId: null }, { tripId: { $in: tripIds } }] },
-        ],
-      },
-    ],
+    ...filter,
+    warehouseId: user.warehouseId,
   };
 };
 
 const getIdsByWarehouseId = async (warehouseId) => {
-  const tripIds = await tripService.getIdsByWarehouseId(warehouseId);
-  return orderRepository.findIdsByWarehouseId(warehouseId, tripIds);
+  return orderRepository.findIdsByWarehouseId(warehouseId);
 };
 
 const countByTripId = (tripId, session = null) => {
@@ -293,20 +273,14 @@ const create = async (
     await routeService.getById(routeId);
   }
 
-  if (user && user.role !== ROLES.ADMIN) {
-    warehouseId = null;
-  }
-
   let pickupDistanceKm;
+  const hasPickupLocation = Boolean(
+    pickupLocation?.latitude !== undefined &&
+    pickupLocation?.longitude !== undefined,
+  );
+
   if (user?.role === ROLES.CUSTOMER) {
-    if (
-      !Number.isFinite(pickupLocation?.latitude) ||
-      !Number.isFinite(pickupLocation?.longitude) ||
-      pickupLocation.latitude < -90 ||
-      pickupLocation.latitude > 90 ||
-      pickupLocation.longitude < -180 ||
-      pickupLocation.longitude > 180
-    ) {
+    if (!hasPickupLocation) {
       throw new ApiError(400, ORDER_MESSAGES.PICKUP_LOCATION_REQUIRED);
     }
 
@@ -316,10 +290,17 @@ const create = async (
     );
     warehouseId = nearest.warehouse._id;
     pickupDistanceKm = nearest.distanceKm;
-  }
-
-  if (warehouseId && user?.role === ROLES.ADMIN) {
+  } else if (warehouseId) {
     await warehouseService.getById(warehouseId, true, true);
+  } else if (hasPickupLocation) {
+    const nearest = await warehouseService.getNearestActiveWarehouse(
+      pickupLocation.latitude,
+      pickupLocation.longitude,
+    );
+    warehouseId = nearest.warehouse._id;
+    pickupDistanceKm = nearest.distanceKm;
+  } else {
+    throw new ApiError(400, ORDER_MESSAGES.WAREHOUSE_REQUIRED);
   }
 
   if (createdBy) {

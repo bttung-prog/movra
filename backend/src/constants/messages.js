@@ -657,6 +657,8 @@ export const ORDER_MESSAGES = {
   CUSTOMER_REQUIRED: "Thông tin khách hàng là bắt buộc",
   CUSTOMER_ROUTE_NOT_ALLOWED:
     "Khách hàng không cần chọn tuyến kho-kho khi tạo đơn",
+  WAREHOUSE_REQUIRED:
+    "Vui lòng chọn kho phụ trách hoặc cung cấp tọa độ điểm lấy hàng để tự động chọn kho",
   PICKUP_LOCATION_REQUIRED:
     "Cần tọa độ điểm lấy hàng để tự động chọn kho gần nhất",
   CODE_GEN_FAILED: "Không thể tạo mã đơn hàng duy nhất. Vui lòng thử lại",

@@ -81,21 +81,10 @@ const countAll = ({ filter = {} } = {}) => {
   return Order.countDocuments(filter);
 };
 
-const findIdsByWarehouseId = (warehouseId, tripIds = []) => {
+const findIdsByWarehouseId = (warehouseId) => {
   return Order.distinct("_id", {
     deletedAt: null,
-    $and: [
-      {
-        $or: [
-          { warehouseId },
-          {
-            tripId: { $in: tripIds },
-            $or: [{ warehouseId: null }, { warehouseId: { $exists: false } }],
-          },
-        ],
-      },
-      { $or: [{ tripId: null }, { tripId: { $in: tripIds } }] },
-    ],
+    warehouseId,
   });
 };
 
