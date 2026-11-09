@@ -27,6 +27,12 @@ const feedbackSchema = new mongoose.Schema(
       default: null,
     },
 
+    warehouseId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Warehouse",
+      default: null,
+    },
+
     rating: {
       type: Number,
       required: true,
@@ -61,6 +67,7 @@ const feedbackSchema = new mongoose.Schema(
 );
 
 feedbackSchema.index({ driverId: 1, rating: -1 });
+feedbackSchema.index({ warehouseId: 1, createdAt: -1 });
 feedbackSchema.index({ customerId: 1, createdAt: -1 });
 feedbackSchema.index({ createdAt: -1 });
 

@@ -212,6 +212,11 @@ const orderSchema = new mongoose.Schema(
       default: null,
     },
 
+    isFeedbacked: {
+      type: Boolean,
+      default: false,
+    },
+
     deletedAt: {
       type: Date,
       default: null,
@@ -221,6 +226,7 @@ const orderSchema = new mongoose.Schema(
 );
 
 orderSchema.index({ customerId: 1 });
+orderSchema.index({ customerId: 1, isFeedbacked: 1 });
 orderSchema.index({ tripId: 1 });
 orderSchema.index({ warehouseId: 1 });
 orderSchema.index({ warehouseId: 1, deletedAt: 1, createdAt: -1 });

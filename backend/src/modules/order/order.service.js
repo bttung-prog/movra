@@ -884,6 +884,18 @@ const markAsDelivered = async ({
             orderCode: order.orderCode,
           },
         });
+
+        await notificationService.create({
+          userId: customerUserId,
+          title: "Đánh giá dịch vụ giao hàng",
+          message: `Đơn hàng #${order.orderCode} đã hoàn tất. Bạn có hài lòng với chuyến giao hàng này không? Vui lòng gửi đánh giá để giúp chúng tôi nâng cao chất lượng dịch vụ!`,
+          type: "FEEDBACK_REQUEST",
+          data: {
+            orderId: order._id,
+            orderCode: order.orderCode,
+            tripId: assignedTripId,
+          },
+        });
       } catch (error) {
         logger.error("Failed to create delivery notification", {
           orderId: order._id,
@@ -1847,10 +1859,19 @@ const handleOrdersOnTripCancellation = async (
   }
 };
 
+const markOrderAsFeedbacked = (orderId, session = null) => {
+  return orderRepository.updateById(
+    orderId,
+    { isFeedbacked: true },
+    session,
+  );
+};
+
 export default {
   create,
   getAll,
   getIdsByWarehouseId,
+  markOrderAsFeedbacked,
   countByTripId,
   countUnfinishedOrdersByTrip,
   handleOrdersOnTripCompletion,

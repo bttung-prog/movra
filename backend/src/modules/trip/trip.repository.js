@@ -213,8 +213,6 @@ const getTopDriverPerformance = ({ limit = 5, warehouseId = null } = {}) => {
         completedTrips: { $sum: 1 },
       },
     },
-    { $sort: { completedTrips: -1 } },
-    { $limit: limit },
     {
       $lookup: {
         from: "drivers",
@@ -234,12 +232,20 @@ const getTopDriverPerformance = ({ limit = 5, warehouseId = null } = {}) => {
     },
     { $unwind: { path: "$user", preserveNullAndEmptyArrays: true } },
     {
+      $sort: {
+        completedTrips: -1,
+        "driver.rating": -1,
+      },
+    },
+    { $limit: limit },
+    {
       $project: {
         _id: 1,
         driverCode: "$driver.driverCode",
         name: "$user.fullName",
         phone: "$user.phone",
         rating: "$driver.rating",
+        totalReviews: "$driver.totalReviews",
         completedTrips: 1,
       },
     },

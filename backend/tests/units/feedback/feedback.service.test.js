@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   getDriverStats: vi.fn(),
   orderGetById: vi.fn(),
   orderGetIdsByWarehouseId: vi.fn(),
+  orderMarkOrderAsFeedbacked: vi.fn(),
   tripGetById: vi.fn(),
   tripGetIdsByWarehouseId: vi.fn(),
   driverUpdateById: vi.fn(),
@@ -45,6 +46,7 @@ vi.mock("../../../src/modules/order/order.service.js", () => ({
   default: {
     getById: mocks.orderGetById,
     getIdsByWarehouseId: mocks.orderGetIdsByWarehouseId,
+    markOrderAsFeedbacked: mocks.orderMarkOrderAsFeedbacked,
   },
 }));
 
@@ -117,6 +119,10 @@ beforeEach(() => {
     customerId,
     tripId,
   });
+  mocks.orderMarkOrderAsFeedbacked.mockResolvedValue({
+    _id: orderId,
+    isFeedbacked: true,
+  });
   mocks.tripGetById.mockResolvedValue({
     _id: tripId,
     driverId,
@@ -175,6 +181,65 @@ describe("feedbackService.createFeedback", () => {
     ).rejects.toMatchObject({
       statusCode: 400,
       message: FEEDBACK_MESSAGES.ORDER_NOT_DELIVERED,
+    });
+    expect(mocks.startSession).not.toHaveBeenCalled();
+  });
+
+  it("creates a feedback, links warehouse and marks order as feedbacked", async () => {
+    mocks.orderGetById.mockResolvedValue({
+      _id: orderId,
+      status: "delivered",
+      customerId,
+      tripId,
+      warehouseId: "warehouse-1",
+      isFeedbacked: false,
+    });
+
+    const result = await feedbackService.createFeedback(
+      { orderId, rating: 5, tags: ["friendly"], comment: "Great service" },
+      { role: ROLES.CUSTOMER, customerId },
+    );
+
+    expect(result).toMatchObject({ _id: feedbackId, rating: 5 });
+    expect(mocks.createFeedback).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderId,
+        customerId,
+        driverId,
+        tripId,
+        warehouseId: "warehouse-1",
+        rating: 5,
+      }),
+      session,
+    );
+    expect(mocks.orderMarkOrderAsFeedbacked).toHaveBeenCalledWith(
+      orderId,
+      session,
+    );
+    expect(mocks.driverUpdateById).toHaveBeenCalledWith(
+      driverId,
+      { rating: 4.7, totalReviews: 8 },
+      session,
+    );
+  });
+
+  it("rejects feedback creation if order was already feedbacked", async () => {
+    mocks.orderGetById.mockResolvedValue({
+      _id: orderId,
+      status: "delivered",
+      customerId,
+      tripId,
+      isFeedbacked: true,
+    });
+
+    await expect(
+      feedbackService.createFeedback(
+        { orderId, rating: 5 },
+        { role: ROLES.CUSTOMER, customerId },
+      ),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: FEEDBACK_MESSAGES.ALREADY_EXISTS,
     });
     expect(mocks.startSession).not.toHaveBeenCalled();
   });
@@ -252,6 +317,21 @@ describe("feedbackService.getAll", () => {
       statusCode: 403,
       message: FEEDBACK_MESSAGES.VIEW_ACCESS_DENIED,
     });
+  });
+
+  it("scopes dispatcher queries directly by warehouseId", async () => {
+    await feedbackService.getAll({
+      user: { role: ROLES.DISPATCHER, warehouseId: "warehouse-1" },
+    });
+
+    expect(mocks.findAllFeedback).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filter: expect.objectContaining({
+          status: "visible",
+          warehouseId: "warehouse-1",
+        }),
+      }),
+    );
   });
 });
 
