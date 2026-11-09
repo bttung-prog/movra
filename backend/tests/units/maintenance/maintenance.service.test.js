@@ -105,6 +105,7 @@ import {
   MAINTENANCE_STATUSES,
   MAINTENANCE_TYPES,
 } from "../../../src/constants/maintenanceStatuses.js";
+import { VEHICLE_STATUSES } from "../../../src/constants/vehicleStatuses.js";
 import maintenanceService from "../../../src/modules/maintenance/maintenance.service.js";
 
 const vehicleId = "507f1f77bcf86cd799439011";
@@ -559,10 +560,10 @@ describe("maintenanceService.createLogEvent", () => {
         status: MAINTENANCE_STATUSES.COMPLETED,
       });
 
-    mocks.getVehicleById
-      .mockResolvedValueOnce(vehicle)
-      .mockResolvedValueOnce({ ...vehicle, status: "maintenance" })
-      .mockResolvedValueOnce({ ...vehicle, status: "maintenance" });
+    mocks.getVehicleById.mockResolvedValue({
+      ...vehicle,
+      status: VEHICLE_STATUSES.MAINTENANCE,
+    });
 
     mocks.createLog.mockResolvedValueOnce({
       ...log,
