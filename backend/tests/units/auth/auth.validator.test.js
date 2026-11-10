@@ -14,22 +14,64 @@ describe("authValidator.registerSchema", () => {
     expect(result.error).toBeUndefined();
   });
 
+  it("normalizes email to lowercase and trims whitespace from email, phone, and full name", () => {
+    const result = authValidator.registerSchema.validate({
+      email: "  CUSTOMER@EXAMPLE.COM  ",
+      password: "secure123",
+      phone: " 0123456789 ",
+      fullName: "  Test Customer  ",
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.value.email).toBe("customer@example.com");
+    expect(result.value.phone).toBe("0123456789");
+    expect(result.value.fullName).toBe("Test Customer");
+  });
+
   it.each([
     [
       "email",
-      { email: "not-an-email", password: "secure123", phone: "0123456789", fullName: "Test" },
+      {
+        email: "not-an-email",
+        password: "secure123",
+        phone: "0123456789",
+        fullName: "Test",
+      },
     ],
     [
       "password shorter than six characters",
-      { email: "customer@example.com", password: "12345", phone: "0123456789", fullName: "Test" },
+      {
+        email: "customer@example.com",
+        password: "12345",
+        phone: "0123456789",
+        fullName: "Test",
+      },
     ],
     [
       "phone number with the wrong length",
-      { email: "customer@example.com", password: "secure123", phone: "12345", fullName: "Test" },
+      {
+        email: "customer@example.com",
+        password: "secure123",
+        phone: "12345",
+        fullName: "Test",
+      },
     ],
     [
       "missing full name",
-      { email: "customer@example.com", password: "secure123", phone: "0123456789" },
+      {
+        email: "customer@example.com",
+        password: "secure123",
+        phone: "0123456789",
+      },
+    ],
+    [
+      "whitespace-only full name",
+      {
+        email: "customer@example.com",
+        password: "secure123",
+        phone: "0123456789",
+        fullName: "   ",
+      },
     ],
   ])("rejects invalid %s", (_case, input) => {
     expect(authValidator.registerSchema.validate(input).error).toBeDefined();
@@ -37,13 +79,14 @@ describe("authValidator.registerSchema", () => {
 });
 
 describe("authValidator.loginSchema", () => {
-  it("accepts valid login details", () => {
+  it("accepts valid login details and normalizes email", () => {
     const result = authValidator.loginSchema.validate({
-      email: "customer@example.com",
+      email: "  CUSTOMER@EXAMPLE.COM  ",
       password: "secure123",
     });
 
     expect(result.error).toBeUndefined();
+    expect(result.value.email).toBe("customer@example.com");
   });
 
   it("rejects a missing password", () => {
@@ -57,13 +100,15 @@ describe("authValidator.loginSchema", () => {
 });
 
 describe("auth OTP validators", () => {
-  it("accepts a valid registration OTP payload", () => {
+  it("accepts a valid registration OTP payload and trims inputs", () => {
     const result = authValidator.verifyRegisterOtpSchema.validate({
-      email: "customer@example.com",
-      otp: "12345678",
+      email: "  CUSTOMER@EXAMPLE.COM  ",
+      otp: " 12345678 ",
     });
 
     expect(result.error).toBeUndefined();
+    expect(result.value.email).toBe("customer@example.com");
+    expect(result.value.otp).toBe("12345678");
   });
 
   it("rejects registration OTPs that are not eight digits", () => {
@@ -104,7 +149,9 @@ describe("authValidator.changePasswordSchema", () => {
       { oldPassword: "old-password", newPassword: "12345" },
       { oldPassword: "old-password", newPassword: "x".repeat(25) },
     ]) {
-      expect(authValidator.changePasswordSchema.validate(payload).error).toBeDefined();
+      expect(
+        authValidator.changePasswordSchema.validate(payload).error,
+      ).toBeDefined();
     }
   });
 });
