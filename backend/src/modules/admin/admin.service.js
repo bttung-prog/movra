@@ -24,22 +24,8 @@ const searchUsers = async (keyword) => {
   return userService.search(keyword);
 };
 
-// updateData: {email, phone, fullName, role, status}
+// updateData: {email, phone, fullName}
 const updateUser = async (userId, updateData) => {
-  if (updateData.role) {
-    const validRoles = Object.values(ROLES);
-    if (!validRoles.includes(updateData.role)) {
-      throw new ApiError(400, ADMIN_MESSAGES.INVALID_ROLE);
-    }
-  }
-
-  if (updateData.status) {
-    const validStatuses = Object.values(USER_STATUSES);
-    if (!validStatuses.includes(updateData.status)) {
-      throw new ApiError(400, ADMIN_MESSAGES.INVALID_STATUS);
-    }
-  }
-
   return userService.updateById(userId, updateData);
 };
 
@@ -55,11 +41,6 @@ const changeRoleUser = async (targetUserId, roleData = {}, currentAdminId) => {
     throw new ApiError(400, ADMIN_MESSAGES.CANNOT_DEMOTE_SELF);
   }
 
-  const validRoles = Object.values(ROLES);
-  if (!validRoles.includes(role)) {
-    throw new ApiError(400, ADMIN_MESSAGES.INVALID_ROLE);
-  }
-
   return userService.updateRole(targetUserId, role, payload);
 };
 
@@ -71,11 +52,6 @@ const changeStatusUser = async (targetUserId, status, currentAdminId) => {
     status !== USER_STATUSES.ACTIVE
   ) {
     throw new ApiError(400, ADMIN_MESSAGES.CANNOT_DEACTIVATE_SELF);
-  }
-
-  const validStatuses = Object.values(USER_STATUSES);
-  if (!validStatuses.includes(status)) {
-    throw new ApiError(400, ADMIN_MESSAGES.INVALID_STATUS);
   }
 
   return userService.updateStatus(targetUserId, status);

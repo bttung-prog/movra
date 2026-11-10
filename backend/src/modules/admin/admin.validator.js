@@ -1,5 +1,8 @@
 import Joi from "joi";
 
+import { ROLES } from "../../constants/roles.js";
+import { USER_STATUSES } from "../../constants/userStatuses.js";
+
 const objectIdPattern = /^[0-9a-fA-F]{24}$/;
 
 const createUserSchema = Joi.object({
@@ -18,14 +21,7 @@ const createUserSchema = Joi.object({
     }),
   fullName: Joi.string().required(),
   role: Joi.string()
-    .valid(
-      "admin",
-      "driver",
-      "dispatcher",
-      "accountant",
-      "warehouse_staff",
-      "customer",
-    )
+    .valid(...Object.values(ROLES))
     .required(),
   driverData: Joi.object({
     warehouseId: Joi.string().pattern(objectIdPattern).required().messages({
@@ -104,14 +100,7 @@ const updateUserSchema = Joi.object({
 
 const changeRoleUserSchema = Joi.object({
   role: Joi.string()
-    .valid(
-      "admin",
-      "driver",
-      "dispatcher",
-      "accountant",
-      "warehouse_staff",
-      "customer",
-    )
+    .valid(...Object.values(ROLES))
     .required(),
   driverData: Joi.object({
     warehouseId: Joi.string().pattern(objectIdPattern).required().messages({
@@ -156,7 +145,9 @@ const changeRoleUserSchema = Joi.object({
 });
 
 const changeStatusUserSchema = Joi.object({
-  status: Joi.string().valid("active", "inactive", "locked").required(),
+  status: Joi.string()
+    .valid(...Object.values(USER_STATUSES))
+    .required(),
 });
 
 const resetPasswordSchema = Joi.object({
@@ -178,15 +169,8 @@ const queryUserSchema = Joi.object({
   page: Joi.number().integer().min(1).default(1),
   limit: Joi.number().integer().min(1).max(100).default(10),
   keyword: Joi.string().trim().allow(""),
-  role: Joi.string().valid(
-    "admin",
-    "driver",
-    "dispatcher",
-    "accountant",
-    "warehouse_staff",
-    "customer",
-  ),
-  status: Joi.string().valid("active", "inactive", "locked"),
+  role: Joi.string().valid(...Object.values(ROLES)),
+  status: Joi.string().valid(...Object.values(USER_STATUSES)),
 });
 
 export default {
