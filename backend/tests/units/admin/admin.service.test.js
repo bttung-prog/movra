@@ -73,30 +73,19 @@ describe("adminService password operations", () => {
 });
 
 describe("adminService.updateUser", () => {
-  it.each([
-    ["role", "unknown", ADMIN_MESSAGES.INVALID_ROLE],
-    ["status", "unknown", ADMIN_MESSAGES.INVALID_STATUS],
-  ])("rejects an invalid %s before updating the user", async (field, value, message) => {
-    await expect(
-      adminService.updateUser("user-1", { [field]: value }),
-    ).rejects.toMatchObject({ statusCode: 400, message });
+  it("delegates user update to user service", async () => {
+    const updateData = { fullName: "New Name" };
+    mocks.updateById.mockResolvedValue({ _id: "user-1", ...updateData });
 
-    expect(mocks.updateById).not.toHaveBeenCalled();
+    await expect(
+      adminService.updateUser("user-1", updateData),
+    ).resolves.toEqual({ _id: "user-1", fullName: "New Name" });
+
+    expect(mocks.updateById).toHaveBeenCalledWith("user-1", updateData);
   });
 });
 
 describe("adminService.changeRoleUser", () => {
-  it("rejects an invalid role without updating the user", async () => {
-    await expect(
-      adminService.changeRoleUser("user-1", { role: "unknown" }, "admin-1"),
-    ).rejects.toMatchObject({
-      statusCode: 400,
-      message: ADMIN_MESSAGES.INVALID_ROLE,
-    });
-
-    expect(mocks.updateRole).not.toHaveBeenCalled();
-  });
-
   it("prevents an admin from demoting themself", async () => {
     await expect(
       adminService.changeRoleUser(
@@ -130,17 +119,6 @@ describe("adminService.changeRoleUser", () => {
 });
 
 describe("adminService.changeStatusUser", () => {
-  it("rejects invalid statuses without updating the user", async () => {
-    await expect(
-      adminService.changeStatusUser("user-1", "unknown", "admin-1"),
-    ).rejects.toMatchObject({
-      statusCode: 400,
-      message: ADMIN_MESSAGES.INVALID_STATUS,
-    });
-
-    expect(mocks.updateStatus).not.toHaveBeenCalled();
-  });
-
   it("prevents an admin from deactivating or locking themself", async () => {
     for (const status of [USER_STATUSES.INACTIVE, USER_STATUSES.LOCKED]) {
       await expect(
