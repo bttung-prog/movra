@@ -38,6 +38,7 @@ orderRouter.post(
 orderRouter.get(
   "/stats",
   authorize(ROLES.ADMIN, ROLES.DISPATCHER),
+  validate(orderValidator.statsQuerySchema, "query"),
   orderController.getStatsByStatus,
 );
 

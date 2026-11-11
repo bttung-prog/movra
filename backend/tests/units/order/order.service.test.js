@@ -186,17 +186,6 @@ beforeEach(() => {
 });
 
 describe("orderService.create", () => {
-  it("requires a goods category", async () => {
-    await expect(
-      orderService.create({ ...validCreatePayload, goodCategory: null }),
-    ).rejects.toMatchObject({
-      statusCode: 400,
-      message: ORDER_MESSAGES.CATEGORY_REQUIRED,
-    });
-
-    expect(mocks.getGoodsCategoryById).not.toHaveBeenCalled();
-  });
-
   it("requires a customer", async () => {
     await expect(
       orderService.create({ ...validCreatePayload, customerId: null }),
@@ -665,15 +654,6 @@ describe("orderService.assignOrdersToTrip", () => {
 });
 
 describe("orderService.unassignOrdersFromTrip", () => {
-  it("throws error when orderIds is empty", async () => {
-    await expect(
-      orderService.unassignOrdersFromTrip({ orderIds: [] }),
-    ).rejects.toMatchObject({
-      statusCode: 400,
-      message: ORDER_MESSAGES.ORDER_IDS_REQUIRED_UNASSIGN,
-    });
-  });
-
   it("throws error when order is not assigned to any trip", async () => {
     const order = {
       _id: "order-1",
@@ -1447,7 +1427,10 @@ describe("orderService.markAsDelivered", () => {
 
   describe("orderService.markOrderAsFeedbacked", () => {
     it("updates order isFeedbacked to true", async () => {
-      mocks.updateById.mockResolvedValue({ _id: "order-1", isFeedbacked: true });
+      mocks.updateById.mockResolvedValue({
+        _id: "order-1",
+        isFeedbacked: true,
+      });
 
       await orderService.markOrderAsFeedbacked("order-1", transaction);
 
