@@ -1,6 +1,7 @@
 import logger from "../../configs/logger.js";
 
 import { INVOICE_STATUSES } from "../../constants/invoiceStatuses.js";
+import { PAYMENT_TERMS } from "../../constants/paymentTerms.js";
 import { ROLES } from "../../constants/roles.js";
 import { INVOICE_MESSAGES, ORDER_MESSAGES } from "../../constants/messages.js";
 
@@ -16,13 +17,13 @@ import invoiceRepository from "./invoice.repository.js";
 const calculateDueDate = (paymentTerms) => {
   const date = new Date();
   switch (paymentTerms) {
-    case "net_15":
+    case PAYMENT_TERMS.NET_15:
       date.setDate(date.getDate() + 15);
       break;
-    case "net_30":
+    case PAYMENT_TERMS.NET_30:
       date.setDate(date.getDate() + 30);
       break;
-    case "immediate":
+    case PAYMENT_TERMS.IMMEDIATE:
     default:
       date.setDate(date.getDate() + 3);
       break;
@@ -48,19 +49,6 @@ const sumInvoiceItems = (items) => {
   return subTotal;
 };
 
-const assertValidMoney = (...amounts) => {
-  if (
-    amounts.some(
-      (amount) =>
-        amount !== undefined &&
-        amount !== null &&
-        (!Number.isSafeInteger(amount) || amount < 0),
-    )
-  ) {
-    throw new ApiError(400, INVOICE_MESSAGES.AMOUNT_MUST_BE_INTEGER);
-  }
-};
-
 const assertInvoiceWarehouseAccess = async (invoice, actor) => {
   if (actor?.role !== ROLES.DISPATCHER) return;
 
@@ -79,13 +67,11 @@ const create = async (payload, session = null, actor = null) => {
     tax = 0,
     discount = 0,
     dueDate: inputDueDate,
-    paymentTerms = "immediate",
+    paymentTerms = PAYMENT_TERMS.IMMEDIATE,
     items: inputItems,
     notes = "",
     issuedBy = null,
   } = payload;
-
-  assertValidMoney(inputSubTotal, tax, discount);
 
   let finalCustomerId = customerId;
   let finalSubTotal = inputSubTotal;
@@ -169,7 +155,6 @@ const create = async (payload, session = null, actor = null) => {
   }
 
   const totalAmount = finalSubTotal + tax - discount;
-  assertValidMoney(finalSubTotal, totalAmount);
   if (!Number.isSafeInteger(totalAmount)) {
     throw new ApiError(400, INVOICE_MESSAGES.AMOUNT_OUT_OF_RANGE);
   }
@@ -374,7 +359,6 @@ const updateById = async (invoiceId, updateData, actor = null) => {
   const tax = updateData.tax !== undefined ? updateData.tax : invoice.tax;
   const discount =
     updateData.discount !== undefined ? updateData.discount : invoice.discount;
-  assertValidMoney(subTotal, tax, discount);
   let items = updateData.items;
   let finalSubTotal = subTotal;
 
@@ -397,7 +381,6 @@ const updateById = async (invoiceId, updateData, actor = null) => {
   }
 
   const totalAmount = finalSubTotal + tax - discount;
-  assertValidMoney(finalSubTotal, totalAmount);
   if (!Number.isSafeInteger(totalAmount)) {
     throw new ApiError(400, INVOICE_MESSAGES.AMOUNT_OUT_OF_RANGE);
   }

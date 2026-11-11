@@ -119,15 +119,38 @@ describe("invoiceValidator.queryInvoiceSchema", () => {
     ["excessive limit", { limit: 101 }],
     ["invalid overdue flag", { isOverdue: "yes" }],
     ["search over 100 characters", { search: "x".repeat(101) }],
+    [
+      "end date before start date",
+      { startDate: "2026-02-01", endDate: "2026-01-01" },
+    ],
   ])("rejects %s", (_case, query) => {
     expect(
       invoiceValidator.queryInvoiceSchema.validate(query).error,
     ).toBeDefined();
   });
+
+  it("accepts valid date ranges and single boundary dates", () => {
+    expect(
+      invoiceValidator.queryInvoiceSchema.validate({
+        startDate: "2026-01-01",
+        endDate: "2026-01-31",
+      }).error,
+    ).toBeUndefined();
+    expect(
+      invoiceValidator.queryInvoiceSchema.validate({
+        startDate: "2026-01-01",
+      }).error,
+    ).toBeUndefined();
+    expect(
+      invoiceValidator.queryInvoiceSchema.validate({
+        endDate: "2026-01-31",
+      }).error,
+    ).toBeUndefined();
+  });
 });
 
 describe("invoiceValidator parameter and cancellation schemas", () => {
-  it("validates invoice IDs", () => {
+  it("validates invoice IDs and invoice codes", () => {
     expect(
       invoiceValidator.paramInvoiceIdSchema.validate({
         invoiceId: "507f1f77bcf86cd799439011",
@@ -137,6 +160,35 @@ describe("invoiceValidator parameter and cancellation schemas", () => {
       invoiceValidator.paramInvoiceIdSchema.validate({
         invoiceId: "invoice-1",
       }).error,
+    ).toBeDefined();
+
+    const { error, value } = invoiceValidator.paramInvoiceCodeSchema.validate({
+      invoiceCode: "  INV-2026-0001  ",
+    });
+    expect(error).toBeUndefined();
+    expect(value.invoiceCode).toBe("INV-2026-0001");
+
+    expect(
+      invoiceValidator.paramInvoiceCodeSchema.validate({ invoiceCode: "   " })
+        .error,
+    ).toBeDefined();
+    expect(
+      invoiceValidator.paramInvoiceCodeSchema.validate({}).error,
+    ).toBeDefined();
+  });
+
+  it("validates stats query schema", () => {
+    expect(
+      invoiceValidator.statsQuerySchema.validate({
+        customerId: "507f1f77bcf86cd799439011",
+      }).error,
+    ).toBeUndefined();
+    expect(
+      invoiceValidator.statsQuerySchema.validate({}).error,
+    ).toBeUndefined();
+    expect(
+      invoiceValidator.statsQuerySchema.validate({ customerId: "bad-id" })
+        .error,
     ).toBeDefined();
   });
 

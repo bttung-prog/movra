@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 
 import { INVOICE_STATUSES } from "../../constants/invoiceStatuses.js";
+import { PAYMENT_TERMS } from "../../constants/paymentTerms.js";
 
 import { integerMoney } from "../../utils/integerMoneySchema.js";
 
@@ -95,8 +96,8 @@ const invoicesSchema = new mongoose.Schema(
 
     paymentTerms: {
       type: String,
-      enum: ["immediate", "net_15", "net_30"],
-      default: "immediate",
+      enum: Object.values(PAYMENT_TERMS),
+      default: PAYMENT_TERMS.IMMEDIATE,
     },
 
     issueDate: {

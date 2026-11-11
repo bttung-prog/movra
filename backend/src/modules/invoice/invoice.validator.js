@@ -1,6 +1,7 @@
 import Joi from "joi";
 
 import { INVOICE_STATUSES } from "../../constants/invoiceStatuses.js";
+import { PAYMENT_TERMS } from "../../constants/paymentTerms.js";
 
 const objectId = Joi.string()
   .regex(/^[0-9a-fA-F]{24}$/)
@@ -9,8 +10,6 @@ const objectId = Joi.string()
     "any.required": "ID is required",
   });
 
-const invoiceStatusEnum = Object.values(INVOICE_STATUSES);
-const paymentTermsEnum = ["immediate", "net_15", "net_30"];
 const moneyAmount = () =>
   Joi.number().integer().min(0).max(Number.MAX_SAFE_INTEGER).messages({
     "number.integer": "Amount must be an integer",
@@ -43,8 +42,8 @@ const createInvoiceSchema = Joi.object({
   discount: moneyAmount().default(0),
   dueDate: Joi.date().iso().optional(),
   paymentTerms: Joi.string()
-    .valid(...paymentTermsEnum)
-    .default("immediate"),
+    .valid(...Object.values(PAYMENT_TERMS))
+    .default(PAYMENT_TERMS.IMMEDIATE),
   items: Joi.array().items(invoiceItemSchema).optional(),
   notes: Joi.string().trim().allow("").optional(),
 }).or("orderId", "customerId");
@@ -55,7 +54,7 @@ const updateInvoiceSchema = Joi.object({
   discount: moneyAmount().optional(),
   dueDate: Joi.date().iso().optional(),
   paymentTerms: Joi.string()
-    .valid(...paymentTermsEnum)
+    .valid(...Object.values(PAYMENT_TERMS))
     .optional(),
   items: Joi.array().items(invoiceItemSchema).optional(),
   notes: Joi.string().trim().allow("").optional(),
@@ -66,17 +65,34 @@ const queryInvoiceSchema = Joi.object({
   limit: Joi.number().integer().min(1).max(100).default(10),
   search: Joi.string().trim().max(100).allow("").optional(),
   status: Joi.string()
-    .valid(...invoiceStatusEnum)
+    .valid(...Object.values(INVOICE_STATUSES))
     .optional(),
   customerId: objectId.optional(),
   orderId: objectId.optional(),
   startDate: Joi.date().iso().optional(),
-  endDate: Joi.date().iso().optional(),
+  endDate: Joi.date()
+    .iso()
+    .when("startDate", {
+      is: Joi.date().required(),
+      then: Joi.date().min(Joi.ref("startDate")),
+    })
+    .optional(),
   isOverdue: Joi.boolean().optional(),
 });
 
 const paramInvoiceIdSchema = Joi.object({
   invoiceId: objectId.required(),
+});
+
+const paramInvoiceCodeSchema = Joi.object({
+  invoiceCode: Joi.string().trim().required().messages({
+    "any.required": "Invoice code is required",
+    "string.empty": "Invoice code cannot be empty",
+  }),
+});
+
+const statsQuerySchema = Joi.object({
+  customerId: objectId.optional(),
 });
 
 const cancelInvoiceSchema = Joi.object({
@@ -91,5 +107,7 @@ export default {
   updateInvoiceSchema,
   queryInvoiceSchema,
   paramInvoiceIdSchema,
+  paramInvoiceCodeSchema,
+  statsQuerySchema,
   cancelInvoiceSchema,
 };
