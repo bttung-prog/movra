@@ -66,7 +66,7 @@ const getAllFailureReasonsSchema = Joi.object({
 
   startDate: Joi.date().iso().optional(),
 
-  endDate: Joi.date().iso().raw().optional(),
+  endDate: Joi.date().iso().min(Joi.ref("startDate")).raw().optional(),
 });
 
 const getByIdSchema = Joi.object({
@@ -98,7 +98,7 @@ const statsQuerySchema = Joi.object({
   tripId: objectId.optional(),
   reportedBy: objectId.optional(),
   startDate: Joi.date().iso().optional(),
-  endDate: Joi.date().iso().raw().optional(),
+  endDate: Joi.date().iso().min(Joi.ref("startDate")).raw().optional(),
 });
 
 const updateFailureReasonSchema = Joi.object({

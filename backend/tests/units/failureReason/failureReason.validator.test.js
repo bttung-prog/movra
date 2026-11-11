@@ -80,6 +80,8 @@ describe("failureReasonValidator list and ID schemas", () => {
         limit: 50,
         failureReasonType: "damaged",
         orderId,
+        startDate: "2026-01-01",
+        endDate: "2026-01-31",
       }).error,
     ).toBeUndefined();
 
@@ -88,11 +90,25 @@ describe("failureReasonValidator list and ID schemas", () => {
       { limit: 101 },
       { failureReasonType: "unknown" },
       { orderId: "bad-id" },
+      { startDate: "2026-02-01", endDate: "2026-01-01" },
     ]) {
       expect(
         failureReasonValidator.getAllFailureReasonsSchema.validate(query).error,
       ).toBeDefined();
     }
+  });
+
+  it("accepts single boundary dates for list query", () => {
+    expect(
+      failureReasonValidator.getAllFailureReasonsSchema.validate({
+        startDate: "2026-01-01",
+      }).error,
+    ).toBeUndefined();
+    expect(
+      failureReasonValidator.getAllFailureReasonsSchema.validate({
+        endDate: "2026-01-31",
+      }).error,
+    ).toBeUndefined();
   });
 
   it("requires valid IDs for failure reports, orders, and trips", () => {
@@ -148,5 +164,37 @@ describe("failureReasonValidator.updateFailureReasonSchema", () => {
         failureReasonValidator.updateFailureReasonSchema.validate(update).error,
       ).toBeDefined();
     }
+  });
+});
+
+describe("failureReasonValidator.statsQuerySchema", () => {
+  it("validates optional filters and ordered date ranges", () => {
+    expect(
+      failureReasonValidator.statsQuerySchema.validate({
+        failureReasonType: "damaged",
+        startDate: "2026-01-01",
+        endDate: "2026-01-31",
+      }).error,
+    ).toBeUndefined();
+
+    expect(
+      failureReasonValidator.statsQuerySchema.validate({
+        startDate: "2026-02-01",
+        endDate: "2026-01-01",
+      }).error,
+    ).toBeDefined();
+  });
+
+  it("accepts single boundary dates for stats query", () => {
+    expect(
+      failureReasonValidator.statsQuerySchema.validate({
+        startDate: "2026-01-01",
+      }).error,
+    ).toBeUndefined();
+    expect(
+      failureReasonValidator.statsQuerySchema.validate({
+        endDate: "2026-01-31",
+      }).error,
+    ).toBeUndefined();
   });
 });
