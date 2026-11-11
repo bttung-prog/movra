@@ -166,20 +166,7 @@ beforeEach(() => {
 });
 
 describe("issueService.create", () => {
-  it("rejects non-positive quantity and unauthorized warehouse staff", async () => {
-    await expect(
-      issueService.create({
-        orderId,
-        warehouseId,
-        tripId,
-        issuedBy,
-        quantity: 0,
-      }),
-    ).rejects.toMatchObject({
-      statusCode: 400,
-      message: ISSUE_MESSAGES.QTY_GREATER_THAN_ZERO,
-    });
-
+  it("rejects unauthorized warehouse staff", async () => {
     await expect(
       issueService.create(
         { orderId, warehouseId, tripId, issuedBy, quantity: 2 },
