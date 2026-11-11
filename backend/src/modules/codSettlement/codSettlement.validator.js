@@ -1,5 +1,6 @@
 import Joi from "joi";
-import { SETTLEMENT_STATUSES, PAYOUT_METHODS } from "./codSettlement.js";
+import { SETTLEMENT_STATUSES } from "../../constants/settlementStatuses.js";
+import { PAYOUT_METHODS } from "../../constants/payoutMethods.js";
 import { COD_SETTLEMENT_MESSAGES } from "../../constants/messages.js";
 
 const objectId = Joi.string()
@@ -62,10 +63,18 @@ const paramIdSchema = Joi.object({
   id: objectId.required(),
 });
 
+const paramCodeSchema = Joi.object({
+  code: Joi.string().trim().required().messages({
+    "any.required": COD_SETTLEMENT_MESSAGES.CODE_REQUIRED,
+    "string.empty": COD_SETTLEMENT_MESSAGES.CODE_EMPTY,
+  }),
+});
+
 export default {
   generateSettlementSchema,
   completeSettlementSchema,
   cancelSettlementSchema,
   querySettlementSchema,
   paramIdSchema,
+  paramCodeSchema,
 };

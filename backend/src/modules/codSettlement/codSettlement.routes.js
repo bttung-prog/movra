@@ -53,6 +53,7 @@ codSettlementRouter.get(
 codSettlementRouter.get(
   "/code/:code",
   authorize(ROLES.ADMIN, ROLES.DISPATCHER, ROLES.ACCOUNTANT, ROLES.CUSTOMER),
+  validate(codSettlementValidator.paramCodeSchema, "params"),
   codSettlementController.getByCode,
 );
 

@@ -1,16 +1,7 @@
 import mongoose from "mongoose";
 
-export const SETTLEMENT_STATUSES = {
-  DRAFT: "draft",
-  CONFIRMED: "confirmed",
-  COMPLETED: "completed",
-  CANCELLED: "cancelled",
-};
-
-export const PAYOUT_METHODS = {
-  WALLET: "wallet",
-  BANK_TRANSFER: "bank_transfer",
-};
+import { SETTLEMENT_STATUSES } from "../../constants/settlementStatuses.js";
+import { PAYOUT_METHODS } from "../../constants/payoutMethods.js";
 
 const codSettlementSchema = new mongoose.Schema(
   {

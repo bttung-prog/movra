@@ -2,10 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import { COD_SETTLEMENT_MESSAGES } from "../../../src/constants/messages.js";
 import codSettlementValidator from "../../../src/modules/codSettlement/codSettlement.validator.js";
-import {
-  PAYOUT_METHODS,
-  SETTLEMENT_STATUSES,
-} from "../../../src/modules/codSettlement/codSettlement.js";
+import { SETTLEMENT_STATUSES } from "../../../src/constants/settlementStatuses.js";
+import { PAYOUT_METHODS } from "../../../src/constants/payoutMethods.js";
 
 const orderId = "507f1f77bcf86cd799439011";
 const customerId = "507f1f77bcf86cd799439012";
@@ -147,5 +145,34 @@ describe("codSettlementValidator.querySettlementSchema and paramIdSchema", () =>
       codSettlementValidator.paramIdSchema.validate({ id: "settlement-1" })
         .error,
     ).toBeDefined();
+  });
+});
+
+describe("codSettlementValidator.paramCodeSchema", () => {
+  it("accepts a valid settlement code and trims it", () => {
+    const { error, value } = codSettlementValidator.paramCodeSchema.validate({
+      code: "  SET-2026-0001  ",
+    });
+
+    expect(error).toBeUndefined();
+    expect(value.code).toBe("SET-2026-0001");
+  });
+
+  it("rejects missing code", () => {
+    const { error } = codSettlementValidator.paramCodeSchema.validate({});
+
+    expect(error).toBeDefined();
+    expect(error?.details[0].message).toBe(
+      COD_SETTLEMENT_MESSAGES.CODE_REQUIRED,
+    );
+  });
+
+  it("rejects empty or whitespace-only code", () => {
+    const { error } = codSettlementValidator.paramCodeSchema.validate({
+      code: "   ",
+    });
+
+    expect(error).toBeDefined();
+    expect(error?.details[0].message).toBe(COD_SETTLEMENT_MESSAGES.CODE_EMPTY);
   });
 });

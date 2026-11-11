@@ -63,10 +63,8 @@ vi.mock("../../../src/utils/generateCode.js", () => ({
 import { COD_SETTLEMENT_MESSAGES } from "../../../src/constants/messages.js";
 import { ROLES } from "../../../src/constants/roles.js";
 import codSettlementService from "../../../src/modules/codSettlement/codSettlement.service.js";
-import {
-  PAYOUT_METHODS,
-  SETTLEMENT_STATUSES,
-} from "../../../src/modules/codSettlement/codSettlement.js";
+import { SETTLEMENT_STATUSES } from "../../../src/constants/settlementStatuses.js";
+import { PAYOUT_METHODS } from "../../../src/constants/payoutMethods.js";
 
 const settlementId = "settlement-1";
 const orderId = "order-1";
