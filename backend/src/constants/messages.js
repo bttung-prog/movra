@@ -889,6 +889,8 @@ export const COD_SETTLEMENT_MESSAGES = {
   GET_ONE_SUCCESS: "Lấy chi tiết phiếu đối soát thành công",
   INVALID_ID: "Định dạng ID không hợp lệ",
   ID_REQUIRED: "ID là bắt buộc",
+  CODE_REQUIRED: "Mã phiếu đối soát là bắt buộc",
+  CODE_EMPTY: "Mã phiếu đối soát không được để trống",
   ORDER_ID_REQUIRED: "ID đơn hàng là bắt buộc",
   CANCEL_REASON_REQUIRED: "Lý do hủy là bắt buộc",
   CANCEL_REASON_EMPTY: "Lý do hủy không được để trống",

@@ -15,7 +15,8 @@ import orderService from "../order/order.service.js";
 import customerService from "../customer/customer.service.js";
 import walletTransactionService from "../walletTransaction/walletTransaction.service.js";
 
-import { SETTLEMENT_STATUSES, PAYOUT_METHODS } from "./codSettlement.js";
+import { SETTLEMENT_STATUSES } from "../../constants/settlementStatuses.js";
+import { PAYOUT_METHODS } from "../../constants/payoutMethods.js";
 
 import codSettlementRepository from "./codSettlement.repository.js";
 
