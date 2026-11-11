@@ -40,8 +40,6 @@ const create = async (
   },
   session = null,
 ) => {
-  ensureLicenseIsValid(licenseExpiryDate);
-
   const user = await userService.getById(userId, session);
   if (user.role !== ROLES.DRIVER) {
     throw new ApiError(400, USER_MESSAGES.DRIVER_ROLE_INVALID);
@@ -175,9 +173,6 @@ const ensureNoActiveTrips = async (
 
 const updateById = async (driverId, updateData, externalSession = null) => {
   const existingDriver = await getById(driverId, null, externalSession);
-  if (updateData.licenseExpiryDate !== undefined) {
-    ensureLicenseIsValid(updateData.licenseExpiryDate);
-  }
   const existingVehicleId =
     existingDriver.currentVehicleId?._id?.toString() ||
     existingDriver.currentVehicleId?.toString() ||
@@ -350,7 +345,6 @@ const getByCode = async (driverCode, user = null) => {
 
 const renewLicense = async (driverId, newExpiryDate) => {
   await getById(driverId);
-  ensureLicenseIsValid(newExpiryDate);
 
   return driverRepository.renewLicense(driverId, new Date(newExpiryDate));
 };
