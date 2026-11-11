@@ -160,19 +160,6 @@ describe("driverService.create", () => {
     expect(mocks.create).not.toHaveBeenCalled();
   });
 
-  it("rejects an expired license before making service calls", async () => {
-    await expect(
-      driverService.create({
-        ...validCreatePayload,
-        licenseExpiryDate: "2020-01-01",
-      }),
-    ).rejects.toMatchObject({
-      statusCode: 400,
-      message: DRIVER_MESSAGES.EXPIRY_MUST_BE_FUTURE,
-    });
-    expect(mocks.getUserById).not.toHaveBeenCalled();
-  });
-
   it("rejects duplicate identity data", async () => {
     mocks.checkIdentityConflict.mockResolvedValue({
       userId: "another-user",
@@ -306,16 +293,6 @@ describe("driverService.deleteById and renewLicense", () => {
     expect(mocks.deleteById).not.toHaveBeenCalled();
   });
 
-  it("rejects renewing a license with a past expiry date", async () => {
-    await expect(
-      driverService.renewLicense(driverId, "2020-01-01"),
-    ).rejects.toMatchObject({
-      statusCode: 400,
-      message: DRIVER_MESSAGES.EXPIRY_MUST_BE_FUTURE,
-    });
-    expect(mocks.renewLicense).not.toHaveBeenCalled();
-  });
-
   it("renews the license using a Date value", async () => {
     const renewedDriver = {
       ...existingDriver,
@@ -330,5 +307,29 @@ describe("driverService.deleteById and renewLicense", () => {
       driverId,
       new Date(validExpiryDate),
     );
+  });
+});
+
+describe("driverService.ensureLicenseIsValid", () => {
+  it("rejects an expired or invalid license date", () => {
+    expect(() => driverService.ensureLicenseIsValid("2020-01-01")).toThrow(
+      expect.objectContaining({
+        statusCode: 400,
+        message: DRIVER_MESSAGES.EXPIRY_MUST_BE_FUTURE,
+      }),
+    );
+
+    expect(() => driverService.ensureLicenseIsValid("invalid-date")).toThrow(
+      expect.objectContaining({
+        statusCode: 400,
+        message: DRIVER_MESSAGES.EXPIRY_MUST_BE_FUTURE,
+      }),
+    );
+  });
+
+  it("accepts a future license expiry date", () => {
+    expect(() =>
+      driverService.ensureLicenseIsValid(validExpiryDate),
+    ).not.toThrow();
   });
 });
