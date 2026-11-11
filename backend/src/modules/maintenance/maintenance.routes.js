@@ -28,6 +28,7 @@ maintenanceRouter.get(
 maintenanceRouter.get(
   "/schedules/upcoming",
   authorize(ROLES.ADMIN, ROLES.DRIVER, ROLES.DISPATCHER),
+  validate(maintenanceValidator.upcomingQuerySchema, "query"),
   maintenanceController.getUpcomingMaintenances,
 );
 

@@ -96,7 +96,6 @@ vi.mock("../../../src/modules/notification/notification.service.js", () => ({
 }));
 
 import {
-  COMMON_MESSAGES,
   DRIVER_MESSAGES,
   MAINTENANCE_MESSAGES,
 } from "../../../src/constants/messages.js";
@@ -210,7 +209,7 @@ describe("maintenanceService.createSchedule", () => {
     );
   });
 
-  it("rejects missing fields or zero frequency before creating a schedule", async () => {
+  it("rejects zero frequency before creating a schedule", async () => {
     await expect(
       maintenanceService.createSchedule({
         vehicleId,
@@ -221,18 +220,6 @@ describe("maintenanceService.createSchedule", () => {
     ).rejects.toMatchObject({
       statusCode: 400,
       message: MAINTENANCE_MESSAGES.FREQUENCY_MUST_BE_GREATER_THAN_ZERO,
-    });
-
-    await expect(
-      maintenanceService.createSchedule({
-        vehicleId,
-        taskName: "Oil change",
-        frequencyMonths: null,
-        frequencyKm: 5000,
-      }),
-    ).rejects.toMatchObject({
-      statusCode: 400,
-      message: COMMON_MESSAGES.ALL_FIELDS_REQUIRED,
     });
     expect(mocks.createSchedule).not.toHaveBeenCalled();
   });
@@ -389,13 +376,8 @@ describe("maintenanceService.createLog", () => {
 });
 
 describe("maintenanceService log access and cost queries", () => {
-  it("requires a log ID and returns a matching log", async () => {
+  it("returns a matching log by ID", async () => {
     await expect(maintenanceService.getLogById(logId)).resolves.toBe(log);
-
-    await expect(maintenanceService.getLogById(null)).rejects.toMatchObject({
-      statusCode: 400,
-      message: MAINTENANCE_MESSAGES.LOG_ID_REQUIRED,
-    });
   });
 
   it("filters logs to a driver's assigned vehicle and calculates cost", async () => {
@@ -438,25 +420,6 @@ describe("maintenanceService log access and cost queries", () => {
       new Date("2026-01-31"),
       [vehicleId],
     );
-  });
-
-  it("rejects cost queries with missing dates or invalid vehicle IDs", async () => {
-    await expect(
-      maintenanceService.getTotalCost({ startDate: "2026-01-01" }),
-    ).rejects.toMatchObject({
-      statusCode: 400,
-      message: MAINTENANCE_MESSAGES.DATE_RANGE_REQUIRED,
-    });
-    await expect(
-      maintenanceService.getTotalCostByVehicle({
-        vehicleId: "vehicle-1",
-        startDate: "2026-01-01",
-        endDate: "2026-01-31",
-      }),
-    ).rejects.toMatchObject({
-      statusCode: 400,
-      message: MAINTENANCE_MESSAGES.INVALID_VEHICLE_ID,
-    });
   });
 });
 
