@@ -46,6 +46,7 @@ paymentRouter.post(
 paymentRouter.get(
   "/stats",
   authorize(ROLES.ADMIN, ROLES.DISPATCHER, ROLES.ACCOUNTANT),
+  validate(paymentValidator.statsQuerySchema, "query"),
   paymentController.getStats,
 );
 
@@ -65,6 +66,7 @@ paymentRouter.get(
     ROLES.CUSTOMER,
     ROLES.DRIVER,
   ),
+  validate(paymentValidator.paramPaymentCodeSchema, "params"),
   paymentController.getByCode,
 );
 

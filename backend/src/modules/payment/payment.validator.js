@@ -1,7 +1,10 @@
 import Joi from "joi";
 
 import { PAYMENT_STATUSES } from "../../constants/paymentStatuses.js";
-import { PAYMENT_METHODS, PAYER_TYPES } from "../../constants/paymentMethods.js";
+import {
+  PAYMENT_METHODS,
+  PAYER_TYPES,
+} from "../../constants/paymentMethods.js";
 
 const objectId = Joi.string()
   .regex(/^[0-9a-fA-F]{24}$/)
@@ -100,11 +103,35 @@ const queryPaymentSchema = Joi.object({
   orderId: objectId.optional(),
   tripId: objectId.optional(),
   startDate: Joi.date().iso().optional(),
-  endDate: Joi.date().iso().optional(),
+  endDate: Joi.date()
+    .iso()
+    .when("startDate", {
+      is: Joi.date().required(),
+      then: Joi.date().min(Joi.ref("startDate")),
+    })
+    .optional(),
 });
 
 const paramPaymentIdSchema = Joi.object({
   paymentId: objectId.required(),
+});
+
+const paramPaymentCodeSchema = Joi.object({
+  paymentCode: Joi.string().trim().required().messages({
+    "any.required": "Payment code is required",
+    "string.empty": "Payment code cannot be empty",
+  }),
+});
+
+const statsQuerySchema = Joi.object({
+  startDate: Joi.date().iso().optional(),
+  endDate: Joi.date()
+    .iso()
+    .when("startDate", {
+      is: Joi.date().required(),
+      then: Joi.date().min(Joi.ref("startDate")),
+    })
+    .optional(),
 });
 
 export default {
@@ -113,5 +140,7 @@ export default {
   verifyPaymentSchema,
   refundPaymentSchema,
   queryPaymentSchema,
+  statsQuerySchema,
   paramPaymentIdSchema,
+  paramPaymentCodeSchema,
 };

@@ -183,6 +183,32 @@ describe("paymentValidator verification, refund, query, and parameter schemas", 
     expect(
       paymentValidator.queryPaymentSchema.validate({ tripId: "trip-1" }).error,
     ).toBeDefined();
+
+    expect(
+      paymentValidator.queryPaymentSchema.validate({
+        startDate: "2026-01-01",
+        endDate: "2026-01-31",
+      }).error,
+    ).toBeUndefined();
+
+    expect(
+      paymentValidator.queryPaymentSchema.validate({
+        startDate: "2026-01-01",
+      }).error,
+    ).toBeUndefined();
+
+    expect(
+      paymentValidator.queryPaymentSchema.validate({
+        endDate: "2026-01-31",
+      }).error,
+    ).toBeUndefined();
+
+    expect(
+      paymentValidator.queryPaymentSchema.validate({
+        startDate: "2026-02-01",
+        endDate: "2026-01-01",
+      }).error,
+    ).toBeDefined();
   });
 
   it("validates payment ID parameters", () => {
@@ -193,6 +219,60 @@ describe("paymentValidator verification, refund, query, and parameter schemas", 
     expect(
       paymentValidator.paramPaymentIdSchema.validate({
         paymentId: "payment-1",
+      }).error,
+    ).toBeDefined();
+  });
+
+  it("validates payment code parameters", () => {
+    const { error, value } = paymentValidator.paramPaymentCodeSchema.validate({
+      paymentCode: "  PAY-2026-0001  ",
+    });
+    expect(error).toBeUndefined();
+    expect(value.paymentCode).toBe("PAY-2026-0001");
+
+    expect(
+      paymentValidator.paramPaymentCodeSchema.validate({ paymentCode: "   " })
+        .error,
+    ).toBeDefined();
+    expect(
+      paymentValidator.paramPaymentCodeSchema.validate({}).error,
+    ).toBeDefined();
+  });
+
+  it("validates stats query schema and ordered date ranges", () => {
+    expect(
+      paymentValidator.statsQuerySchema.validate({}).error,
+    ).toBeUndefined();
+
+    expect(
+      paymentValidator.statsQuerySchema.validate({
+        startDate: "2026-01-01",
+        endDate: "2026-01-31",
+      }).error,
+    ).toBeUndefined();
+
+    expect(
+      paymentValidator.statsQuerySchema.validate({
+        startDate: "2026-01-01",
+      }).error,
+    ).toBeUndefined();
+
+    expect(
+      paymentValidator.statsQuerySchema.validate({
+        endDate: "2026-01-31",
+      }).error,
+    ).toBeUndefined();
+
+    expect(
+      paymentValidator.statsQuerySchema.validate({
+        startDate: "2026-02-01",
+        endDate: "2026-01-01",
+      }).error,
+    ).toBeDefined();
+
+    expect(
+      paymentValidator.statsQuerySchema.validate({
+        startDate: "invalid-date",
       }).error,
     ).toBeDefined();
   });
