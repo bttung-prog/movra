@@ -251,10 +251,6 @@ const updateLocation = async (
   currentUser = null,
   session = null,
 ) => {
-  if (!location || !location.trim()) {
-    throw new ApiError(400, INVENTORY_MESSAGES.LOCATION_EMPTY);
-  }
-
   const existingInventory = await getById(inventoryId, true, session);
 
   if (existingInventory.status !== INVENTORY_STATUSES.IN_STOCK) {
@@ -309,10 +305,6 @@ const updateConditionById = async (
   currentUser = null,
   session = null,
 ) => {
-  if (!Object.values(INVENTORY_CONDITIONS).includes(condition)) {
-    throw new ApiError(400, INVENTORY_MESSAGES.INVALID_CONDITION);
-  }
-
   const existingInventory = await getById(inventoryId, true, session);
 
   if (existingInventory.status !== INVENTORY_STATUSES.IN_STOCK) {

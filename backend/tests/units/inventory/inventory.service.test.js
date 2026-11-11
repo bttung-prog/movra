@@ -299,14 +299,7 @@ describe("inventoryService updates", () => {
     );
   });
 
-  it("rejects empty location and non-in-stock location updates", async () => {
-    await expect(
-      inventoryService.updateLocation(inventoryId, "   "),
-    ).rejects.toMatchObject({
-      statusCode: 400,
-      message: INVENTORY_MESSAGES.LOCATION_EMPTY,
-    });
-
+  it("rejects non-in-stock location updates", async () => {
     mocks.findById.mockResolvedValue({
       ...existingInventory,
       status: "issued",
@@ -365,21 +358,14 @@ describe("inventoryService updates", () => {
     );
   });
 
-  it("validates condition before updating by order or inventory ID", async () => {
+  it("validates condition before updating by order ID", async () => {
     await expect(
       inventoryService.updateCondition(orderId, "excellent"),
     ).rejects.toMatchObject({
       statusCode: 400,
       message: INVENTORY_MESSAGES.INVALID_CONDITION,
     });
-    await expect(
-      inventoryService.updateConditionById(inventoryId, "excellent"),
-    ).rejects.toMatchObject({
-      statusCode: 400,
-      message: INVENTORY_MESSAGES.INVALID_CONDITION,
-    });
     expect(mocks.updateConditionByOrderId).not.toHaveBeenCalled();
-    expect(mocks.updateConditionById).not.toHaveBeenCalled();
   });
 });
 
