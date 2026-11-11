@@ -6,7 +6,6 @@ import { VEHICLE_STATUSES } from "../../constants/vehicleStatuses.js";
 import { TRIP_STATUSES } from "../../constants/tripStatuses.js";
 import {
   MAINTENANCE_MESSAGES,
-  COMMON_MESSAGES,
   DRIVER_MESSAGES,
 } from "../../constants/messages.js";
 
@@ -60,17 +59,6 @@ const createSchedule = async (
   { vehicleId, taskName, frequencyMonths, frequencyKm },
   user = null,
 ) => {
-  if (
-    !vehicleId ||
-    !taskName ||
-    frequencyMonths === undefined ||
-    frequencyMonths === null ||
-    frequencyKm === undefined ||
-    frequencyKm === null
-  ) {
-    throw new ApiError(400, COMMON_MESSAGES.ALL_FIELDS_REQUIRED);
-  }
-
   if (frequencyMonths <= 0 && frequencyKm <= 0) {
     throw new ApiError(
       400,
@@ -474,17 +462,6 @@ const createLog = async (
 ) => {
   await checkDriverVehicleAccess(user, vehicleId);
 
-  if (
-    !vehicleId ||
-    !scheduleId ||
-    !type ||
-    !description ||
-    cost == null ||
-    odometerReading == null
-  ) {
-    throw new ApiError(400, COMMON_MESSAGES.ALL_FIELDS_REQUIRED);
-  }
-
   const vehicle = await vehicleService.getById(vehicleId, user);
   if (vehicle.status === VEHICLE_STATUSES.RETIRED) {
     throw new ApiError(400, MAINTENANCE_MESSAGES.VEHICLE_RETIRED);
@@ -544,10 +521,6 @@ const getLogs = async ({ filter = {}, page = 1, limit = 10, user = null }) => {
 };
 
 const getLogById = async (logId, user = null) => {
-  if (!logId) {
-    throw new ApiError(400, MAINTENANCE_MESSAGES.LOG_ID_REQUIRED);
-  }
-
   const log = await maintenanceRepository.findLogById(logId);
 
   if (!log) {
@@ -562,10 +535,6 @@ const getLogById = async (logId, user = null) => {
 };
 
 const getTotalCost = async ({ startDate, endDate, user = null }) => {
-  if (!startDate || !endDate) {
-    throw new ApiError(400, MAINTENANCE_MESSAGES.DATE_RANGE_REQUIRED);
-  }
-
   let vehicleIds = null;
   if (user?.role === ROLES.DISPATCHER) {
     vehicleIds = await vehicleService.getIdsByWarehouseId(user.warehouseId);
@@ -587,17 +556,6 @@ const getTotalCostByVehicle = async ({
   endDate,
   user = null,
 }) => {
-  if (!vehicleId || !startDate || !endDate) {
-    throw new ApiError(
-      400,
-      MAINTENANCE_MESSAGES.VEHICLE_AND_DATE_RANGE_REQUIRED,
-    );
-  }
-
-  if (!mongoose.Types.ObjectId.isValid(vehicleId)) {
-    throw new ApiError(400, MAINTENANCE_MESSAGES.INVALID_VEHICLE_ID);
-  }
-
   await vehicleService.getById(vehicleId, user);
 
   const result = await maintenanceRepository.totalCostByVehicle(

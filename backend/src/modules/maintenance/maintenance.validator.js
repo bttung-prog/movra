@@ -32,6 +32,13 @@ const createScheduleSchema = Joi.object({
   taskName: Joi.string().trim().required(),
   frequencyMonths: Joi.number().min(0).required(),
   frequencyKm: Joi.number().min(0).required(),
+}).custom((value, helpers) => {
+  if (value.frequencyMonths <= 0 && value.frequencyKm <= 0) {
+    return helpers.message(
+      "At least one frequency (months or km) must be greater than 0",
+    );
+  }
+  return value;
 });
 
 const updateScheduleSchema = Joi.object({
@@ -91,6 +98,10 @@ const logPaginationSchema = Joi.object({
     .optional(),
 });
 
+const upcomingQuerySchema = Joi.object({
+  daysAhead: Joi.number().integer().min(1).default(7),
+});
+
 export default {
   objectId,
   scheduleIdParamSchema,
@@ -104,4 +115,5 @@ export default {
   getCostByVehicleSchema,
   schedulePaginationSchema,
   logPaginationSchema,
+  upcomingQuerySchema,
 };

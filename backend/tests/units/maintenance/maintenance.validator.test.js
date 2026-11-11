@@ -30,6 +30,7 @@ describe("maintenanceValidator schedule schemas", () => {
     ["missing task name", { taskName: undefined }],
     ["negative month frequency", { frequencyMonths: -1 }],
     ["negative distance frequency", { frequencyKm: -1 }],
+    ["both frequencies zero", { frequencyMonths: 0, frequencyKm: 0 }],
   ])("rejects schedule with %s", (_case, override) => {
     expect(
       maintenanceValidator.createScheduleSchema.validate({
@@ -40,6 +41,26 @@ describe("maintenanceValidator schedule schemas", () => {
         ...override,
       }).error,
     ).toBeDefined();
+  });
+
+  it("accepts schedule when only one frequency is greater than zero", () => {
+    expect(
+      maintenanceValidator.createScheduleSchema.validate({
+        vehicleId,
+        taskName: "Oil change",
+        frequencyMonths: 0,
+        frequencyKm: 5000,
+      }).error,
+    ).toBeUndefined();
+
+    expect(
+      maintenanceValidator.createScheduleSchema.validate({
+        vehicleId,
+        taskName: "Oil change",
+        frequencyMonths: 6,
+        frequencyKm: 0,
+      }).error,
+    ).toBeUndefined();
   });
 
   it("requires at least one schedule update and validates optional fields", () => {
@@ -182,6 +203,33 @@ describe("maintenanceValidator date, pagination, and parameter schemas", () => {
     ).toBeDefined();
     expect(
       maintenanceValidator.logIdParamSchema.validate({}).error,
+    ).toBeDefined();
+  });
+});
+
+describe("maintenanceValidator upcoming schedule query schema", () => {
+  it("accepts valid daysAhead and defaults to 7", () => {
+    const { error, value } = maintenanceValidator.upcomingQuerySchema.validate(
+      {},
+    );
+    expect(error).toBeUndefined();
+    expect(value.daysAhead).toBe(7);
+
+    const custom = maintenanceValidator.upcomingQuerySchema.validate({
+      daysAhead: 14,
+    });
+    expect(custom.error).toBeUndefined();
+    expect(custom.value.daysAhead).toBe(14);
+  });
+
+  it.each([
+    ["zero daysAhead", { daysAhead: 0 }],
+    ["negative daysAhead", { daysAhead: -5 }],
+    ["non-integer daysAhead", { daysAhead: 1.5 }],
+    ["string daysAhead", { daysAhead: "invalid" }],
+  ])("rejects %s", (_case, query) => {
+    expect(
+      maintenanceValidator.upcomingQuerySchema.validate(query).error,
     ).toBeDefined();
   });
 });
