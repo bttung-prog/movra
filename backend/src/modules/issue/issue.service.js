@@ -36,10 +36,6 @@ const create = async (
   { orderId, goodsCategoryId, warehouseId, tripId, issuedBy, quantity, note },
   currentUser = null,
 ) => {
-  if (quantity <= 0) {
-    throw new ApiError(400, ISSUE_MESSAGES.QTY_GREATER_THAN_ZERO);
-  }
-
   if (currentUser && currentUser.role === ROLES.WAREHOUSE_STAFF) {
     if (!currentUser.warehouseId) {
       throw new ApiError(403, ISSUE_MESSAGES.STAFF_NOT_ASSIGNED);
