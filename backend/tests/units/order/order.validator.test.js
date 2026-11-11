@@ -31,6 +31,7 @@ describe("orderValidator.createOrderSchema", () => {
     ["invalid sender phone", { senderPhone: "123" }],
     ["non-positive weight", { weight: 0 }],
     ["fractional quantity", { quantity: 1.5 }],
+    ["missing category ID", { goodCategory: undefined }],
     ["malformed category ID", { goodCategory: "category-1" }],
     ["negative COD amount", { codAmount: -1 }],
     ["unsupported order type", { type: "overnight" }],
@@ -196,5 +197,51 @@ describe("orderValidator.markAsDeliveredSchema", () => {
         codCollectedAmount: -1000,
       }).error,
     ).toBeDefined();
+  });
+});
+
+describe("orderValidator.unassignOrdersSchema", () => {
+  it("requires at least one valid order ID", () => {
+    expect(
+      orderValidator.unassignOrdersSchema.validate({ orderIds: [] }).error,
+    ).toBeDefined();
+
+    expect(
+      orderValidator.unassignOrdersSchema.validate({}).error,
+    ).toBeDefined();
+  });
+
+  it("accepts valid order IDs", () => {
+    expect(
+      orderValidator.unassignOrdersSchema.validate({
+        orderIds: ["507f1f77bcf86cd799439011"],
+      }).error,
+    ).toBeUndefined();
+  });
+});
+
+describe("orderValidator.statsQuerySchema", () => {
+  it("accepts valid optional filters", () => {
+    expect(
+      orderValidator.statsQuerySchema.validate({
+        customerId: "507f1f77bcf86cd799439011",
+        tripId: "507f1f77bcf86cd799439012",
+        routeId: "507f1f77bcf86cd799439013",
+        goodCategory: "507f1f77bcf86cd799439014",
+        type: "standard",
+      }).error,
+    ).toBeUndefined();
+
+    expect(orderValidator.statsQuerySchema.validate({}).error).toBeUndefined();
+  });
+
+  it.each([
+    ["invalid customer ID", { customerId: "bad-id" }],
+    ["invalid trip ID", { tripId: "bad-id" }],
+    ["invalid route ID", { routeId: "bad-id" }],
+    ["invalid goodCategory ID", { goodCategory: "bad-id" }],
+    ["unsupported order type", { type: "unknown" }],
+  ])("rejects %s", (_case, query) => {
+    expect(orderValidator.statsQuerySchema.validate(query).error).toBeDefined();
   });
 });

@@ -255,9 +255,6 @@ const create = async (
   session = null,
   user = null,
 ) => {
-  if (!goodCategory) {
-    throw new ApiError(400, ORDER_MESSAGES.CATEGORY_REQUIRED);
-  }
   await goodsCategoryService.getById(goodCategory);
 
   if (!customerId) {
@@ -1108,10 +1105,6 @@ const assignOrdersToTrip = async ({ tripId, orderIds = [] }, user = null) => {
     trip.driverId?.warehouseId?._id ||
     trip.driverId?.warehouseId;
 
-  if (!orderIds.length) {
-    throw new ApiError(400, ORDER_MESSAGES.ORDER_IDS_REQUIRED_ASSIGN);
-  }
-
   const orders = await orderRepository.findByIds(orderIds);
   if (orders.length !== orderIds.length) {
     throw new ApiError(404, ORDER_MESSAGES.ORDERS_NOT_FOUND);
@@ -1286,10 +1279,6 @@ const assignOrdersToTrip = async ({ tripId, orderIds = [] }, user = null) => {
 };
 
 const unassignOrdersFromTrip = async ({ orderIds = [] }, user = null) => {
-  if (!orderIds.length) {
-    throw new ApiError(400, ORDER_MESSAGES.ORDER_IDS_REQUIRED_UNASSIGN);
-  }
-
   const orders = await orderRepository.findByIds(orderIds);
   if (orders.length !== orderIds.length) {
     throw new ApiError(404, ORDER_MESSAGES.ORDERS_NOT_FOUND);
@@ -1860,11 +1849,7 @@ const handleOrdersOnTripCancellation = async (
 };
 
 const markOrderAsFeedbacked = (orderId, session = null) => {
-  return orderRepository.updateById(
-    orderId,
-    { isFeedbacked: true },
-    session,
-  );
+  return orderRepository.updateById(orderId, { isFeedbacked: true }, session);
 };
 
 export default {

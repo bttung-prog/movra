@@ -225,6 +225,16 @@ const unassignOrdersSchema = Joi.object({
   }),
 });
 
+const statsQuerySchema = Joi.object({
+  customerId: objectId.optional(),
+  tripId: objectId.optional(),
+  routeId: objectId.optional(),
+  goodCategory: objectId.optional(),
+  type: Joi.string()
+    .valid(...orderTypeEnum)
+    .optional(),
+});
+
 export default {
   createOrderSchema,
   updateOrderSchema,
@@ -232,6 +242,7 @@ export default {
   paramOrderCodeSchema,
   paramTripIdSchema,
   queryOrderSchema,
+  statsQuerySchema,
   createTrackingLogSchema,
   pickupConfirmationSchema,
   queryTrackingLogSchema,
