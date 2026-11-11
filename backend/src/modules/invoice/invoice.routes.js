@@ -22,6 +22,7 @@ invoiceRouter.post(
 invoiceRouter.get(
   "/stats",
   authorize(ROLES.ADMIN, ROLES.DISPATCHER, ROLES.ACCOUNTANT),
+  validate(invoiceValidator.statsQuerySchema, "query"),
   invoiceController.getStats,
 );
 
@@ -41,6 +42,7 @@ invoiceRouter.get(
 invoiceRouter.get(
   "/code/:invoiceCode",
   authorize(ROLES.ADMIN, ROLES.DISPATCHER, ROLES.ACCOUNTANT, ROLES.CUSTOMER),
+  validate(invoiceValidator.paramInvoiceCodeSchema, "params"),
   invoiceController.getByCode,
 );
 
