@@ -2,24 +2,37 @@ import Joi from "joi";
 
 const objectIdPattern = /^[0-9a-fA-F]{24}$/;
 
-const createSchema = Joi.object({
-  originWarehouseId: Joi.string()
-    .pattern(objectIdPattern)
-    .required()
-    .messages({
-      "any.required": "Origin warehouse is required",
-      "string.pattern.base":
-        "Origin warehouse ID must be a valid MongoDB ObjectId",
-    }),
+const validateDistinctDestination = (value, helpers) => {
+  const { originWarehouseId } = helpers.state.ancestors[0] || {};
+  if (
+    typeof originWarehouseId === "string" &&
+    value.toLowerCase() === originWarehouseId.toLowerCase()
+  ) {
+    return helpers.error("any.invalid");
+  }
+  return value;
+};
 
-  destinationWarehouseId: Joi.string()
-    .pattern(objectIdPattern)
-    .required()
-    .messages({
-      "any.required": "Destination warehouse is required",
-      "string.pattern.base":
-        "Destination warehouse ID must be a valid MongoDB ObjectId",
-    }),
+const destinationWarehouseIdSchema = Joi.string()
+  .pattern(objectIdPattern)
+  .custom(validateDistinctDestination, "distinct destination warehouse")
+  .messages({
+    "string.pattern.base":
+      "Destination warehouse ID must be a valid MongoDB ObjectId",
+    "any.invalid":
+      "Destination warehouse cannot be identical to origin warehouse",
+  });
+
+const createSchema = Joi.object({
+  originWarehouseId: Joi.string().pattern(objectIdPattern).required().messages({
+    "any.required": "Origin warehouse is required",
+    "string.pattern.base":
+      "Origin warehouse ID must be a valid MongoDB ObjectId",
+  }),
+
+  destinationWarehouseId: destinationWarehouseIdSchema.required().messages({
+    "any.required": "Destination warehouse is required",
+  }),
 
   distance: Joi.number().positive().required().messages({
     "any.required": "Distance is required",
@@ -40,10 +53,7 @@ const updateSchema = Joi.object({
       "Origin warehouse ID must be a valid MongoDB ObjectId",
   }),
 
-  destinationWarehouseId: Joi.string().pattern(objectIdPattern).messages({
-    "string.pattern.base":
-      "Destination warehouse ID must be a valid MongoDB ObjectId",
-  }),
+  destinationWarehouseId: destinationWarehouseIdSchema,
 
   distance: Joi.number().positive().messages({
     "number.base": "Distance must be a number",
