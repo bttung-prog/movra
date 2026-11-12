@@ -271,10 +271,6 @@ const updateManager = async (warehouseId, userId) => {
 const changeStatus = async (warehouseId, status) => {
   await getById(warehouseId, true);
 
-  if (!status || !Object.values(WAREHOUSE_STATUSES).includes(status)) {
-    throw new ApiError(400, WAREHOUSE_MESSAGES.INVALID_STATUS);
-  }
-
   if (status !== WAREHOUSE_STATUSES.ACTIVE) {
     await ensureNoActivePersonnel(warehouseId);
   }
