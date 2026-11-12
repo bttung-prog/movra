@@ -47,6 +47,19 @@ describe("pricingValidator.calculateFeeSchema", () => {
       }).error,
     ).toBeDefined();
   });
+
+  it.each([0, -1, 1.5, "invalid"])(
+    "rejects invalid quantity %s",
+    (quantity) => {
+      expect(
+        pricingValidator.calculateFeeSchema.validate({
+          weight: 2,
+          quantity,
+          distance: 10,
+        }).error,
+      ).toBeDefined();
+    },
+  );
 });
 
 describe("pricingValidator.createShippingRateSchema", () => {

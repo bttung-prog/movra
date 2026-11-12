@@ -193,24 +193,6 @@ describe("pricingService.calculateFee", () => {
       message: "Khoảng cách vận chuyển phải lớn hơn 0",
     });
   });
-
-  it.each([0, -1, 1.5, "invalid"])(
-    "rejects invalid quantity %s before looking up a route",
-    async (quantity) => {
-      await expect(
-        pricingService.calculateFee({
-          weight: 2,
-          quantity,
-          routeId,
-        }),
-      ).rejects.toMatchObject({
-        statusCode: 400,
-        message: "Số lượng kiện hàng phải là số nguyên lớn hơn 0",
-      });
-
-      expect(mocks.getRouteById).not.toHaveBeenCalled();
-    },
-  );
 });
 
 describe("pricingService.rate management", () => {
