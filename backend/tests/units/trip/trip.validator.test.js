@@ -31,6 +31,11 @@ describe("tripValidator.createTripSchema", () => {
 
   it.each([
     ["invalid vehicle ID", { vehicleId: "vehicle-1" }],
+    ["missing route ID for delivery trip", { routeId: undefined }],
+    [
+      "missing route ID for transfer trip",
+      { type: "transfer", routeId: undefined },
+    ],
     ["unsupported trip type", { type: "express" }],
     ["end time before start time", { plannedEnd: "2030-04-01T07:00:00.000Z" }],
   ])("rejects %s", (_case, override) => {
@@ -63,11 +68,30 @@ describe("tripValidator.updateTripSchema", () => {
   );
 
   it("accepts an update to the planned schedule", () => {
+    expect(
+      tripValidator.updateTripSchema.validate({
+        plannedEnd: "2030-04-01T13:00:00.000Z",
+      }).error,
+    ).toBeUndefined();
+
+    expect(
+      tripValidator.updateTripSchema.validate({
+        plannedStart: "2030-04-01T08:00:00.000Z",
+        plannedEnd: "2030-04-01T13:00:00.000Z",
+      }).error,
+    ).toBeUndefined();
+  });
+
+  it("rejects plannedEnd not after plannedStart when both are provided", () => {
     const result = tripValidator.updateTripSchema.validate({
-      plannedEnd: "2030-04-01T13:00:00.000Z",
+      plannedStart: "2030-04-01T12:00:00.000Z",
+      plannedEnd: "2030-04-01T08:00:00.000Z",
     });
 
-    expect(result.error).toBeUndefined();
+    expect(result.error?.details[0]).toMatchObject({
+      type: "date.greater",
+      message: "Planned end date must be after planned start date",
+    });
   });
 });
 
@@ -154,10 +178,17 @@ describe("tripValidator tracking and expense schemas", () => {
     ).toBeDefined();
   });
 
-  it("requires at least one field when updating an expense", () => {
+  it("requires at least one field and positive amount when updating an expense", () => {
     const result = tripValidator.updateExpenseSchema.validate({});
 
     expect(result.error).toBeDefined();
     expect(result.error.details[0].type).toBe("object.min");
+
+    expect(
+      tripValidator.updateExpenseSchema.validate({ expenseAmount: 0 }).error,
+    ).toBeDefined();
+    expect(
+      tripValidator.updateExpenseSchema.validate({ expenseAmount: -50 }).error,
+    ).toBeDefined();
   });
 });

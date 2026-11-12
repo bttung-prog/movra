@@ -88,10 +88,17 @@ const updateTripSchema = Joi.object({
     "date.format": "Planned start must be in ISO format",
   }),
 
-  plannedEnd: Joi.date().iso().messages({
-    "date.base": "Planned end must be a valid date",
-    "date.format": "Planned end must be in ISO format",
-  }),
+  plannedEnd: Joi.date()
+    .iso()
+    .when("plannedStart", {
+      is: Joi.date().required(),
+      then: Joi.date().greater(Joi.ref("plannedStart")),
+    })
+    .messages({
+      "date.base": "Planned end must be a valid date",
+      "date.format": "Planned end must be in ISO format",
+      "date.greater": "Planned end date must be after planned start date",
+    }),
 
   actualStart: Joi.date().iso().allow(null).messages({
     "date.base": "Actual start must be a valid date",
