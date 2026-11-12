@@ -98,6 +98,16 @@ describe("vehicleValidator vehicle parameters and queries", () => {
         vehicleTypeId: "invalid",
       }).error,
     ).toBeDefined();
+    expect(
+      vehicleValidator.plateNumberParamSchema.validate({
+        plateNumber: "  51A-123.45  ",
+      }).value,
+    ).toEqual({ plateNumber: "51A-123.45" });
+    for (const payload of [{}, { plateNumber: "   " }]) {
+      expect(
+        vehicleValidator.plateNumberParamSchema.validate(payload).error,
+      ).toBeDefined();
+    }
   });
 
   it("applies pagination defaults and validates filters", () => {
@@ -187,16 +197,52 @@ describe("vehicleValidator usage log schemas", () => {
     expect(
       vehicleValidator.checkOutUsageLogSchema.validate({ endOdo: -1 }).error,
     ).toBeDefined();
+    expect(
+      vehicleValidator.checkOutUsageLogSchema.validate({
+        endOdo: 1300,
+        fuelConsumed: -1,
+      }).error,
+    ).toBeDefined();
 
     expect(
       vehicleValidator.updateUsageLogSchema.validate({}).error?.details[0].type,
     ).toBe("object.min");
+    expect(
+      vehicleValidator.updateUsageLogSchema.validate({ fuelConsumed: -0.5 })
+        .error,
+    ).toBeDefined();
+    expect(
+      vehicleValidator.updateUsageLogSchema.validate({ fuelConsumed: 0 }).error,
+    ).toBeUndefined();
     const { error, value } = vehicleValidator.queryUsageLogsSchema.validate({});
     expect(error).toBeUndefined();
     expect(value).toMatchObject({ page: 1, limit: 10 });
     expect(
       vehicleValidator.usageStatsQuerySchema.validate({
         startDate: "not-a-date",
+      }).error,
+    ).toBeDefined();
+    expect(
+      vehicleValidator.usageStatsQuerySchema.validate({
+        endDate: "2026-01-10",
+      }).error,
+    ).toBeUndefined();
+    expect(
+      vehicleValidator.usageStatsQuerySchema.validate({
+        startDate: "2026-01-10",
+        endDate: "2026-01-10",
+      }).error,
+    ).toBeUndefined();
+    expect(
+      vehicleValidator.usageStatsQuerySchema.validate({
+        startDate: "2026-01-10",
+        endDate: "2026-01-11",
+      }).error,
+    ).toBeUndefined();
+    expect(
+      vehicleValidator.usageStatsQuerySchema.validate({
+        startDate: "2026-01-10",
+        endDate: "2026-01-09",
       }).error,
     ).toBeDefined();
   });

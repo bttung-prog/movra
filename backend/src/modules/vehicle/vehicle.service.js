@@ -887,14 +887,6 @@ const updateUsageLogById = async (
     throw new ApiError(400, VEHICLE_MESSAGES.START_TIME_MUST_BEFORE_END);
   }
 
-  if (
-    updateData.fuelConsumed !== undefined &&
-    updateData.fuelConsumed !== null &&
-    updateData.fuelConsumed < 0
-  ) {
-    throw new ApiError(400, VEHICLE_MESSAGES.FUEL_CONSUMED_INVALID);
-  }
-
   const targetVehicleId =
     updateData.vehicleId || existingLog.vehicleId?._id || existingLog.vehicleId;
   const targetDriverId =
@@ -994,10 +986,6 @@ const checkOutUsageLog = async ({
       400,
       VEHICLE_MESSAGES.END_ODO_LESS_THAN_START(endOdo, existingLog.startOdo),
     );
-  }
-
-  if (fuelConsumed < 0) {
-    throw new ApiError(400, VEHICLE_MESSAGES.FUEL_CONSUMED_INVALID);
   }
 
   const targetVehicleId = existingLog.vehicleId?._id;
