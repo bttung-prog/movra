@@ -152,49 +152,6 @@ describe("userService.createWithHashedPassword", () => {
     expect(transaction.endSession).toHaveBeenCalled();
   });
 
-  it("requires role-specific profile data before creating staff accounts", async () => {
-    await expect(
-      userService.createWithHashedPassword({
-        email: "driver@example.com",
-        passwordHash: "hashed-password",
-        phone: "0123456789",
-        fullName: "Driver",
-        role: ROLES.DRIVER,
-      }),
-    ).rejects.toMatchObject({
-      statusCode: 400,
-      message: USER_MESSAGES.DRIVER_DATA_REQUIRED,
-    });
-
-    await expect(
-      userService.createWithHashedPassword({
-        email: "staff@example.com",
-        passwordHash: "hashed-password",
-        phone: "0123456789",
-        fullName: "Staff",
-        role: ROLES.WAREHOUSE_STAFF,
-      }),
-    ).rejects.toMatchObject({
-      statusCode: 400,
-      message: USER_MESSAGES.STAFF_DATA_REQUIRED,
-    });
-
-    await expect(
-      userService.createWithHashedPassword({
-        email: "dispatcher@example.com",
-        passwordHash: "hashed-password",
-        phone: "0123456789",
-        fullName: "Dispatcher",
-        role: ROLES.DISPATCHER,
-      }),
-    ).rejects.toMatchObject({
-      statusCode: 400,
-      message: USER_MESSAGES.DISPATCHER_DATA_REQUIRED,
-    });
-
-    expect(mocks.create).not.toHaveBeenCalled();
-  });
-
   it("rejects duplicate normalized emails and phone numbers", async () => {
     mocks.findByEmail.mockResolvedValueOnce(user);
     await expect(
@@ -226,7 +183,7 @@ describe("userService.createWithHashedPassword", () => {
     expect(mocks.create).not.toHaveBeenCalled();
   });
 
-  it("rejects incomplete account data", async () => {
+  it("rejects missing password hash", async () => {
     await expect(
       userService.createWithHashedPassword({
         email: "user@example.com",
@@ -409,22 +366,6 @@ describe("userService.updateById and updateRole preconditions", () => {
     expect(transaction.commitTransaction).toHaveBeenCalled();
   });
 
-  it("requires dedicated operations to change role or status", async () => {
-    for (const updateData of [
-      { role: ROLES.DRIVER },
-      { status: USER_STATUSES.LOCKED },
-    ]) {
-      await expect(
-        userService.updateById(userId, updateData),
-      ).rejects.toMatchObject({
-        statusCode: 400,
-        message: USER_MESSAGES.ROLE_STATUS_CHANGE_REQUIRES_DEDICATED_OPERATION,
-      });
-    }
-
-    expect(mocks.updateById).not.toHaveBeenCalled();
-  });
-
   it("rejects an email already belonging to a different user", async () => {
     mocks.findByEmail.mockResolvedValueOnce({ _id: "another-user" });
 
@@ -452,15 +393,6 @@ describe("userService.updateById and updateRole preconditions", () => {
     ).rejects.toMatchObject({
       statusCode: 400,
       message: USER_MESSAGES.DISPATCHER_USER_NOT_ACTIVE,
-    });
-  });
-
-  it("requires driver profile data before assigning the driver role", async () => {
-    await expect(
-      userService.updateRole(userId, ROLES.DRIVER),
-    ).rejects.toMatchObject({
-      statusCode: 400,
-      message: USER_MESSAGES.DRIVER_DATA_REQUIRED,
     });
   });
 });

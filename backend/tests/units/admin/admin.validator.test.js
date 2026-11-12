@@ -114,6 +114,31 @@ describe("adminValidator.changeRoleUserSchema", () => {
     ).toBeUndefined();
   });
 
+  it("requires matching role data when changing to warehouse_staff or dispatcher", () => {
+    expect(
+      adminValidator.changeRoleUserSchema.validate({
+        role: "warehouse_staff",
+      }).error,
+    ).toBeDefined();
+    expect(
+      adminValidator.changeRoleUserSchema.validate({
+        role: "warehouse_staff",
+        staffData: { warehouseId: userId },
+      }).error,
+    ).toBeUndefined();
+    expect(
+      adminValidator.changeRoleUserSchema.validate({
+        role: "dispatcher",
+      }).error,
+    ).toBeDefined();
+    expect(
+      adminValidator.changeRoleUserSchema.validate({
+        role: "dispatcher",
+        dispatcherData: { warehouseId: userId },
+      }).error,
+    ).toBeUndefined();
+  });
+
   it("rejects role-specific data that does not match the selected role", () => {
     expect(
       adminValidator.changeRoleUserSchema.validate({

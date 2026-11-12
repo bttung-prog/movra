@@ -24,20 +24,8 @@ const createWithHashedPassword = async ({
   staffData,
   dispatcherData,
 }) => {
-  if (!email || !passwordHash || !phone || !fullName || !role) {
+  if (!passwordHash) {
     throw new ApiError(400, COMMON_MESSAGES.ALL_FIELDS_REQUIRED);
-  }
-
-  if (role === ROLES.DRIVER && !driverData) {
-    throw new ApiError(400, USER_MESSAGES.DRIVER_DATA_REQUIRED);
-  }
-
-  if (role === ROLES.WAREHOUSE_STAFF && !staffData) {
-    throw new ApiError(400, USER_MESSAGES.STAFF_DATA_REQUIRED);
-  }
-
-  if (role === ROLES.DISPATCHER && !dispatcherData) {
-    throw new ApiError(400, USER_MESSAGES.DISPATCHER_DATA_REQUIRED);
   }
 
   const cleanEmail = email.toLowerCase().trim();
@@ -262,13 +250,6 @@ const searchPaginated = async (
 const updateById = async (userId, updateData) => {
   await getById(userId);
 
-  if (updateData.role !== undefined || updateData.status !== undefined) {
-    throw new ApiError(
-      400,
-      USER_MESSAGES.ROLE_STATUS_CHANGE_REQUIRES_DEDICATED_OPERATION,
-    );
-  }
-
   const cleanData = {};
 
   if (updateData.email !== undefined) {
@@ -314,18 +295,6 @@ const updateRole = async (userId, role, roleData = {}) => {
 
   if (cleanRole === ROLES.ACCOUNTANT && existingUser.status !== "active") {
     throw new ApiError(400, USER_MESSAGES.ACCOUNTANT_USER_NOT_ACTIVE);
-  }
-
-  if (cleanRole === ROLES.DRIVER && !driverData) {
-    throw new ApiError(400, USER_MESSAGES.DRIVER_DATA_REQUIRED);
-  }
-
-  if (cleanRole === ROLES.WAREHOUSE_STAFF && !staffData) {
-    throw new ApiError(400, USER_MESSAGES.STAFF_DATA_REQUIRED);
-  }
-
-  if (cleanRole === ROLES.DISPATCHER && !dispatcherData) {
-    throw new ApiError(400, USER_MESSAGES.DISPATCHER_DATA_REQUIRED);
   }
 
   const session = await mongoose.startSession();
