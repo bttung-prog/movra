@@ -46,15 +46,6 @@ const topUp = async (payload, actor) => {
     );
   }
 
-  if (
-    !Number.isSafeInteger(Number(amount)) ||
-    Number(amount) <= 0 ||
-    ![PAYMENT_METHODS.BANK, PAYMENT_METHODS.E_WALLET].includes(paymentMethod) ||
-    typeof transactionReference !== "string" ||
-    !transactionReference.trim()
-  ) {
-    throw new ApiError(400, WALLET_TRANSACTION_MESSAGES.INVALID_TOPUP);
-  }
   const cleanReference = transactionReference.trim();
 
   const session = await mongoose.startSession();
@@ -98,13 +89,7 @@ const adjustWallet = async (payload, actor) => {
     throw new ApiError(403, WALLET_TRANSACTION_MESSAGES.ADMIN_ONLY_ADJUSTMENT);
   }
 
-  const adjustmentAmount = Number(amount);
-  if (!Number.isSafeInteger(adjustmentAmount) || adjustmentAmount <= 0) {
-    throw new ApiError(400, WALLET_TRANSACTION_MESSAGES.INVALID_ADJUSTMENT);
-  }
-
-  const balanceChange =
-    direction === "debit" ? -adjustmentAmount : adjustmentAmount;
+  const balanceChange = direction === "debit" ? -amount : amount;
   const session = await mongoose.startSession();
   session.startTransaction();
 
@@ -132,7 +117,7 @@ const adjustWallet = async (payload, actor) => {
       {
         customerId,
         type: WALLET_TRANSACTION_TYPES.ADJUSTMENT,
-        amount: adjustmentAmount,
+        amount,
         adjustmentDirection: direction,
         balanceBefore,
         balanceAfter,

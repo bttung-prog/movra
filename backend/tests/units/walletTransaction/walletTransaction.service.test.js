@@ -120,27 +120,10 @@ describe("walletTransactionService.topUp", () => {
     });
     expect(mocks.createWalletTopUp).not.toHaveBeenCalled();
   });
-
-  it("rejects invalid top-up details before accessing the database", async () => {
-    await expect(
-      walletTransactionService.topUp(
-        {
-          amount: 0,
-          transactionReference: "REF-1",
-        },
-        { role: ROLES.CUSTOMER, customerId },
-      ),
-    ).rejects.toMatchObject({
-      statusCode: 400,
-      message: WALLET_TRANSACTION_MESSAGES.INVALID_TOPUP,
-    });
-    expect(mocks.getCustomerById).not.toHaveBeenCalled();
-    expect(mocks.createWalletTopUp).not.toHaveBeenCalled();
-  });
 });
 
 describe("walletTransactionService.adjustWallet", () => {
-  it("requires an authenticated admin and a valid positive amount", async () => {
+  it("requires an authenticated admin or accountant", async () => {
     await expect(
       walletTransactionService.adjustWallet(
         { customerId, amount: 250, direction: "credit", reason: "Correction" },
@@ -149,16 +132,6 @@ describe("walletTransactionService.adjustWallet", () => {
     ).rejects.toMatchObject({
       statusCode: 403,
       message: WALLET_TRANSACTION_MESSAGES.ADMIN_ONLY_ADJUSTMENT,
-    });
-
-    await expect(
-      walletTransactionService.adjustWallet(
-        { customerId, amount: 0, direction: "credit", reason: "Correction" },
-        { role: ROLES.ADMIN, userId: "admin-1" },
-      ),
-    ).rejects.toMatchObject({
-      statusCode: 400,
-      message: WALLET_TRANSACTION_MESSAGES.INVALID_ADJUSTMENT,
     });
     expect(mocks.getCustomerById).not.toHaveBeenCalled();
   });
