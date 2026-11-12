@@ -141,21 +141,6 @@ beforeEach(() => {
 });
 
 describe("receiptService.create", () => {
-  it("rejects non-positive quantities before loading related records", async () => {
-    await expect(
-      receiptService.create({
-        orderId,
-        warehouseId,
-        receivedBy,
-        quantity: 0,
-      }),
-    ).rejects.toMatchObject({
-      statusCode: 400,
-      message: RECEIPT_MESSAGES.QTY_GREATER_THAN_ZERO,
-    });
-    expect(mocks.getOrderById).not.toHaveBeenCalled();
-  });
-
   it("enforces warehouse staff assignment", async () => {
     await expect(
       receiptService.create(
@@ -394,7 +379,7 @@ describe("receiptService lookup and update access", () => {
     });
   });
 
-  it("prevents updates to cancelled receipts and core receipt fields", async () => {
+  it("prevents updates to cancelled receipts", async () => {
     mocks.findById.mockResolvedValueOnce({
       ...receipt,
       status: RECEIPT_STATUSES.CANCELLED,
@@ -404,13 +389,6 @@ describe("receiptService lookup and update access", () => {
     ).rejects.toMatchObject({
       statusCode: 400,
       message: RECEIPT_MESSAGES.CANNOT_UPDATE_CANCELLED,
-    });
-
-    await expect(
-      receiptService.updateById(receiptId, { quantity: 3 }),
-    ).rejects.toMatchObject({
-      statusCode: 400,
-      message: RECEIPT_MESSAGES.CANNOT_MODIFY_CORE,
     });
   });
 });

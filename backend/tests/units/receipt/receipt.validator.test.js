@@ -51,6 +51,7 @@ describe("receiptValidator.createReceiptSchema", () => {
     ["invalid goods category ID", { goodsCategoryId: "category-1" }],
     ["fractional quantity", { quantity: 1.5 }],
     ["zero quantity", { quantity: 0 }],
+    ["negative quantity", { quantity: -1 }],
     ["unsupported condition", { condition: "unknown" }],
     ["invalid received date", { receivedAt: "not-a-date" }],
     ["note over 500 characters", { note: "x".repeat(501) }],
@@ -82,6 +83,40 @@ describe("receiptValidator update schemas", () => {
         .error,
     ).toBeDefined();
   });
+
+  it.each([
+    ["warehouseId", warehouseId, "Warehouse ID cannot be modified"],
+    ["orderId", orderId, "Order ID cannot be modified"],
+    [
+      "goodsCategoryId",
+      goodsCategoryId,
+      "Goods Category ID cannot be modified",
+    ],
+    ["quantity", 5, "Quantity cannot be modified"],
+  ])(
+    "rejects forbidden core field %s even with stripUnknown enabled",
+    (field, value, expectedMessage) => {
+      const options = { abortEarly: false, stripUnknown: true };
+
+      const standaloneResult = receiptValidator.updateReceiptSchema.validate(
+        { [field]: value },
+        options,
+      );
+      expect(standaloneResult.error?.details[0]).toMatchObject({
+        type: "any.unknown",
+        message: expectedMessage,
+      });
+
+      const combinedResult = receiptValidator.updateReceiptSchema.validate(
+        { [field]: value, note: "Checked" },
+        options,
+      );
+      expect(combinedResult.error?.details[0]).toMatchObject({
+        type: "any.unknown",
+        message: expectedMessage,
+      });
+    },
+  );
 
   it("accepts cancellation notes while enforcing their maximum length", () => {
     expect(

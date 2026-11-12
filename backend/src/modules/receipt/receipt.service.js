@@ -46,10 +46,6 @@ const create = async (
   currentUser = null,
   session = null,
 ) => {
-  if (quantity <= 0) {
-    throw new ApiError(400, RECEIPT_MESSAGES.QTY_GREATER_THAN_ZERO);
-  }
-
   if (currentUser && currentUser.role === ROLES.WAREHOUSE_STAFF) {
     if (!currentUser.warehouseId) {
       throw new ApiError(403, RECEIPT_MESSAGES.STAFF_NOT_ASSIGNED);
@@ -456,15 +452,6 @@ const updateById = async (receiptId, updateData, currentUser = null) => {
     currentUser,
     WAREHOUSE_MESSAGES.ACCESS_DENIED,
   );
-
-  if (
-    updateData.warehouseId !== undefined ||
-    updateData.orderId !== undefined ||
-    updateData.goodsCategoryId !== undefined ||
-    updateData.quantity !== undefined
-  ) {
-    throw new ApiError(400, RECEIPT_MESSAGES.CANNOT_MODIFY_CORE);
-  }
 
   const allowedUpdates = {};
   if (updateData.note !== undefined) allowedUpdates.note = updateData.note;

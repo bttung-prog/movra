@@ -2,6 +2,11 @@ import Joi from "joi";
 
 const objectIdPattern = /^[0-9a-fA-F]{24}$/;
 
+const forbiddenCoreField = (label) =>
+  Joi.forbidden().messages({
+    "any.unknown": `${label} cannot be modified`,
+  });
+
 const createReceiptSchema = Joi.object({
   orderId: Joi.string().pattern(objectIdPattern).required().messages({
     "any.required": "Order ID is required",
@@ -61,6 +66,11 @@ const updateReceiptSchema = Joi.object({
   }),
 
   note: Joi.string().max(500).allow(""),
+
+  warehouseId: forbiddenCoreField("Warehouse ID"),
+  orderId: forbiddenCoreField("Order ID"),
+  goodsCategoryId: forbiddenCoreField("Goods Category ID"),
+  quantity: forbiddenCoreField("Quantity"),
 })
   .min(1)
   .messages({
