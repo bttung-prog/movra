@@ -20,19 +20,12 @@ const calculateFee = async ({
   routeId = null,
   goodsCategoryId = null,
 }) => {
-  const normalizedQuantity = Number(quantity);
-  if (!Number.isInteger(normalizedQuantity) || normalizedQuantity < 1) {
-    throw new ApiError(400, PRICING_MESSAGES.INVALID_QUANTITY);
-  }
-
-  let effectiveDistance = Number(distance) || 0;
-
   if (routeId) {
     const route = await routeService.getById(routeId);
-    effectiveDistance = route.distance;
+    distance = route.distance;
   }
 
-  if (effectiveDistance <= 0) {
+  if (!distance || distance <= 0) {
     throw new ApiError(400, PRICING_MESSAGES.INVALID_DISTANCE);
   }
 
@@ -45,14 +38,14 @@ const calculateFee = async ({
     rate = DEFAULT_RATES_BY_SERVICE_TYPE[serviceType] || DEFAULT_RATE;
   }
 
-  const totalWeight = (Number(weight) || 1) * normalizedQuantity;
-  const totalVolume = (Number(volume) || 0) * normalizedQuantity;
+  const totalWeight = weight * quantity;
+  const totalVolume = volume * quantity;
   const volumetricWeight =
     totalVolume > 0 ? Number((totalVolume / 5000).toFixed(2)) : 0;
   const billableWeight = Math.max(totalWeight, volumetricWeight);
 
   const extraWeight = Math.max(0, billableWeight - rate.baseWeight);
-  const extraDistance = Math.max(0, effectiveDistance - rate.baseDistance);
+  const extraDistance = Math.max(0, distance - rate.baseDistance);
 
   const weightFee = Math.ceil(extraWeight) * rate.extraWeightPrice;
   const distanceFee = Math.ceil(extraDistance) * rate.extraDistancePrice;
@@ -84,7 +77,7 @@ const calculateFee = async ({
     actualWeight: totalWeight,
     volumetricWeight,
     billableWeight,
-    distance: effectiveDistance,
+    distance,
     breakdown: {
       basePrice: rate.basePrice,
       weightFee,
