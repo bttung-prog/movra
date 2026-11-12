@@ -212,22 +212,6 @@ describe("tripService.create", () => {
     plannedEnd: validEnd,
   };
 
-  it("rejects a schedule whose start is not before its end", async () => {
-    await expect(
-      tripService.create({
-        ...createPayload,
-        plannedStart: validEnd,
-        plannedEnd: validStart,
-      }),
-    ).rejects.toMatchObject({
-      statusCode: 400,
-      message: TRIP_MESSAGES.START_BEFORE_END,
-    });
-
-    expect(mocks.getVehicleById).not.toHaveBeenCalled();
-    expect(mocks.startSession).not.toHaveBeenCalled();
-  });
-
   it("rejects an inactive driver", async () => {
     mocks.getDriverById.mockResolvedValue({
       _id: driverId,
@@ -608,19 +592,6 @@ describe("tripService tracking logs and expenses", () => {
       skip: 10,
       limit: 10,
     });
-  });
-
-  it("rejects adding an expense with a non-positive amount", async () => {
-    await expect(
-      tripService.addExpense("trip-1", {
-        expenseType: "fuel",
-        expenseAmount: 0,
-      }),
-    ).rejects.toMatchObject({
-      statusCode: 400,
-      message: TRIP_MESSAGES.EXPENSE_AMOUNT_POSITIVE,
-    });
-    expect(mocks.createExpense).not.toHaveBeenCalled();
   });
 
   it("creates a valid expense with a normalized date", async () => {

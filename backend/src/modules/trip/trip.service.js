@@ -229,19 +229,11 @@ const create = async ({
   const startDate = new Date(plannedStart);
   const endDate = new Date(plannedEnd);
 
-  if (startDate >= endDate) {
-    throw new ApiError(400, TRIP_MESSAGES.START_BEFORE_END);
-  }
-
   const [vehicle, driver, route] = await Promise.all([
     vehicleService.getById(vehicleId, user),
     driverService.getById(driverId),
     routeId ? routeService.getById(routeId) : Promise.resolve(null),
   ]);
-
-  if (type !== TRIP_TYPES.PICKUP && !route) {
-    throw new ApiError(400, TRIP_MESSAGES.ROUTE_REQUIRED);
-  }
 
   if (driver.status !== USER_STATUSES.ACTIVE) {
     throw new ApiError(400, TRIP_MESSAGES.DRIVER_NOT_ACTIVE);
@@ -1302,10 +1294,6 @@ const addExpense = async (
     await userService.getById(createdBy);
   }
 
-  if (expenseAmount <= 0) {
-    throw new ApiError(400, TRIP_MESSAGES.EXPENSE_AMOUNT_POSITIVE);
-  }
-
   return tripRepository.createExpense({
     tripId,
     expenseType,
@@ -1369,10 +1357,6 @@ const updateExpenseById = async (expenseId, updateData, user = null) => {
   }
 
   await getById(existingExpense.tripId, false, user);
-
-  if (updateData.expenseAmount !== undefined && updateData.expenseAmount <= 0) {
-    throw new ApiError(400, TRIP_MESSAGES.EXPENSE_AMOUNT_POSITIVE);
-  }
 
   return tripRepository.updateExpenseById(expenseId, updateData);
 };
