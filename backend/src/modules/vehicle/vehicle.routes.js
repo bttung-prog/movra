@@ -18,7 +18,11 @@ vehicleRouter.post(
   vehicleController.createType,
 );
 
-vehicleRouter.get("/types", authorize(ROLES.ADMIN), vehicleController.getActiveTypes);
+vehicleRouter.get(
+  "/types",
+  authorize(ROLES.ADMIN),
+  vehicleController.getActiveTypes,
+);
 
 vehicleRouter.get(
   "/types/deleted",
@@ -92,6 +96,7 @@ vehicleRouter.get(
 vehicleRouter.get(
   "/plate/:plateNumber",
   authorize(ROLES.ADMIN, ROLES.DISPATCHER),
+  validate(vehicleValidator.plateNumberParamSchema, "params"),
   vehicleController.getByPlateNumber,
 );
 

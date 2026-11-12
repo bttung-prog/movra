@@ -24,6 +24,13 @@ const vehicleIdParamSchema = Joi.object({
   }),
 });
 
+const plateNumberParamSchema = Joi.object({
+  plateNumber: Joi.string().trim().required().messages({
+    "any.required": "Plate number is required",
+    "string.empty": "Plate number cannot be empty",
+  }),
+});
+
 const createTypeSchema = Joi.object({
   name: Joi.string().trim().required(),
   description: Joi.string().trim().required(),
@@ -242,13 +249,22 @@ const usageStatsQuerySchema = Joi.object({
   startDate: Joi.date().iso().optional().messages({
     "date.base": "Start date must be a valid date",
   }),
-  endDate: Joi.date().iso().optional().messages({
-    "date.base": "End date must be a valid date",
-  }),
+  endDate: Joi.date()
+    .iso()
+    .when("startDate", {
+      is: Joi.date().required(),
+      then: Joi.date().min(Joi.ref("startDate")),
+    })
+    .optional()
+    .messages({
+      "date.base": "End date must be a valid date",
+      "date.min": "End date must be greater than or equal to start date",
+    }),
 });
 
 export default {
   vehicleIdParamSchema,
+  plateNumberParamSchema,
   vehicleTypeIdParamSchema,
   vehicleTypeNameParamSchema,
   logIdParamSchema,
