@@ -91,21 +91,6 @@ describe("routeService.create", () => {
     });
   });
 
-  it("rejects identical origin and destination warehouses", async () => {
-    await expect(
-      routeService.create({
-        originWarehouseId,
-        destinationWarehouseId: originWarehouseId,
-        distance: 100,
-        expectedDuration: 4,
-      }),
-    ).rejects.toMatchObject({
-      statusCode: 400,
-      message: ROUTE_MESSAGES.IDENTICAL_ORIGIN_DEST,
-    });
-    expect(mocks.createRoute).not.toHaveBeenCalled();
-  });
-
   it("reuses a soft-deleted route instead of creating a duplicate", async () => {
     mocks.findByWarehousePair.mockResolvedValue({
       _id: routeId,
@@ -271,6 +256,25 @@ describe("routeService.updateById", () => {
     ).rejects.toMatchObject({
       statusCode: 409,
     });
+  });
+
+  it("rejects partial updates that make merged origin and destination warehouses identical", async () => {
+    mocks.findRouteById.mockResolvedValue({
+      _id: routeId,
+      originWarehouseId,
+      destinationWarehouseId,
+      deletedAt: null,
+    });
+
+    await expect(
+      routeService.updateById(routeId, {
+        destinationWarehouseId: originWarehouseId.toUpperCase(),
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: ROUTE_MESSAGES.IDENTICAL_ORIGIN_DEST,
+    });
+    expect(mocks.updateRouteById).not.toHaveBeenCalled();
   });
 });
 

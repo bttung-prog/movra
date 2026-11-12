@@ -8,46 +8,6 @@ import orderService from "../order/order.service.js";
 
 import routeRepository from "./route.repository.js";
 
-const validateRouteData = (
-  { originWarehouseId, destinationWarehouseId, distance, expectedDuration },
-  isUpdate = false,
-) => {
-  if (!isUpdate) {
-    if (!originWarehouseId) {
-      throw new ApiError(400, ROUTE_MESSAGES.ORIGIN_REQUIRED);
-    }
-
-    if (!destinationWarehouseId) {
-      throw new ApiError(400, ROUTE_MESSAGES.DESTINATION_REQUIRED);
-    }
-
-    if (distance === undefined || distance === null) {
-      throw new ApiError(400, ROUTE_MESSAGES.DISTANCE_REQUIRED);
-    }
-
-    if (expectedDuration === undefined || expectedDuration === null) {
-      throw new ApiError(400, ROUTE_MESSAGES.DURATION_REQUIRED);
-    }
-  }
-
-  if (
-    originWarehouseId &&
-    destinationWarehouseId &&
-    String(originWarehouseId).toLowerCase() ===
-      String(destinationWarehouseId).toLowerCase()
-  ) {
-    throw new ApiError(400, ROUTE_MESSAGES.IDENTICAL_ORIGIN_DEST);
-  }
-
-  if (distance !== undefined && distance <= 0) {
-    throw new ApiError(400, ROUTE_MESSAGES.DISTANCE_MUST_POSITIVE);
-  }
-
-  if (expectedDuration !== undefined && expectedDuration <= 0) {
-    throw new ApiError(400, ROUTE_MESSAGES.DURATION_MUST_POSITIVE);
-  }
-};
-
 const validateRouteWarehouses = async (
   originWarehouseId,
   destinationWarehouseId,
@@ -78,13 +38,6 @@ const create = async ({
   distance,
   expectedDuration,
 }) => {
-  validateRouteData({
-    originWarehouseId,
-    destinationWarehouseId,
-    distance,
-    expectedDuration,
-  });
-
   const [originWarehouse, destinationWarehouse] = await validateRouteWarehouses(
     originWarehouseId,
     destinationWarehouseId,
@@ -176,20 +129,18 @@ const updateById = async (routeId, updateData) => {
     updateData.originWarehouseId !== undefined
       ? updateData.originWarehouseId
       : existingOriginWarehouseId;
+
   const mergedDestinationWarehouseId =
     updateData.destinationWarehouseId !== undefined
       ? updateData.destinationWarehouseId
       : existingDestinationWarehouseId;
 
-  validateRouteData(
-    {
-      originWarehouseId: mergedOriginWarehouseId,
-      destinationWarehouseId: mergedDestinationWarehouseId,
-      distance: updateData.distance,
-      expectedDuration: updateData.expectedDuration,
-    },
-    true,
-  );
+  if (
+    String(mergedOriginWarehouseId).toLowerCase() ===
+    String(mergedDestinationWarehouseId).toLowerCase()
+  ) {
+    throw new ApiError(400, ROUTE_MESSAGES.IDENTICAL_ORIGIN_DEST);
+  }
 
   const [originWarehouse, destinationWarehouse] = await validateRouteWarehouses(
     mergedOriginWarehouseId,

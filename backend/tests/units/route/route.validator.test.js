@@ -39,6 +39,26 @@ describe("routeValidator.createSchema", () => {
       }).error,
     ).toBeDefined();
   });
+
+  it("rejects identical origin and destination warehouses (case-insensitive)", () => {
+    for (const destinationWarehouseId of [
+      "507f1f77bcf86cd799439011",
+      "507F1F77BCF86CD799439011",
+    ]) {
+      const result = routeValidator.createSchema.validate({
+        originWarehouseId: "507f1f77bcf86cd799439011",
+        destinationWarehouseId,
+        distance: 120,
+        expectedDuration: 8,
+      });
+
+      expect(result.error?.details[0]).toMatchObject({
+        type: "any.invalid",
+        message:
+          "Destination warehouse cannot be identical to origin warehouse",
+      });
+    }
+  });
 });
 
 describe("routeValidator.updateSchema", () => {
@@ -49,13 +69,31 @@ describe("routeValidator.updateSchema", () => {
     expect(result.error.details[0].type).toBe("object.min");
   });
 
-  it("accepts valid partial updates", () => {
+  it("accepts valid partial updates including a single warehouse ID", () => {
     const result = routeValidator.updateSchema.validate({
       distance: 150,
     });
 
     expect(result.error).toBeUndefined();
     expect(result.value).toMatchObject({ distance: 150 });
+
+    expect(
+      routeValidator.updateSchema.validate({
+        destinationWarehouseId: "507f1f77bcf86cd799439011",
+      }).error,
+    ).toBeUndefined();
+  });
+
+  it("rejects identical origin and destination warehouses when both are provided", () => {
+    const result = routeValidator.updateSchema.validate({
+      originWarehouseId: "507f1f77bcf86cd799439011",
+      destinationWarehouseId: "507F1F77BCF86CD799439011",
+    });
+
+    expect(result.error?.details[0]).toMatchObject({
+      type: "any.invalid",
+      message: "Destination warehouse cannot be identical to origin warehouse",
+    });
   });
 });
 
