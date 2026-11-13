@@ -1,7 +1,9 @@
 import Joi from "joi";
 
 import { ORDER_STATUSES } from "../../constants/orderStatuses.js";
+import { PAYMENT_STATUSES } from "../../constants/paymentStatuses.js";
 import { SERVICE_TYPES } from "../../constants/serviceTypes.js";
+import { SHIPPING_MODES } from "../../constants/shippingModes.js";
 
 const objectId = Joi.string()
   .regex(/^[0-9a-fA-F]{24}$/)
@@ -13,10 +15,13 @@ const objectId = Joi.string()
 const phonePattern = /^[0-9]{10,11}$/;
 
 const orderStatusEnum = Object.values(ORDER_STATUSES);
-
-const paymentStatusEnum = ["pending", "failed", "success"];
-
 const orderTypeEnum = Object.values(SERVICE_TYPES);
+const shippingModeEnum = Object.values(SHIPPING_MODES);
+
+const locationSchema = Joi.object({
+  latitude: Joi.number().min(-90).max(90).required(),
+  longitude: Joi.number().min(-180).max(180).required(),
+});
 
 const createOrderSchema = Joi.object({
   customerId: objectId.optional(),
@@ -36,14 +41,9 @@ const createOrderSchema = Joi.object({
     "string.empty": "Sender address cannot be empty",
   }),
 
-  pickupLocation: Joi.object({
-    latitude: Joi.number().min(-90).max(90).required(),
-    longitude: Joi.number().min(-180).max(180).required(),
-  })
-    .optional()
-    .messages({
-      "any.required": "Pickup location coordinates are required",
-    }),
+  pickupLocation: locationSchema.optional().messages({
+    "any.required": "Pickup location coordinates are required",
+  }),
 
   recipientName: Joi.string().trim().required().messages({
     "any.required": "Recipient name is required",
@@ -63,6 +63,8 @@ const createOrderSchema = Joi.object({
     "any.required": "Recipient address is required",
     "string.empty": "Recipient address cannot be empty",
   }),
+
+  deliveryLocation: locationSchema.optional(),
 
   goodCategory: objectId.required().messages({
     "any.required": "goodCategory is required",
@@ -94,6 +96,10 @@ const createOrderSchema = Joi.object({
   type: Joi.string()
     .valid(...orderTypeEnum)
     .default(SERVICE_TYPES.STANDARD),
+
+  shippingMode: Joi.string()
+    .valid(...shippingModeEnum)
+    .default(SHIPPING_MODES.CONSOLIDATED),
 
   notes: Joi.string().trim().allow("").optional(),
 
@@ -143,7 +149,7 @@ const queryOrderSchema = Joi.object({
     .valid(...orderStatusEnum)
     .optional(),
   paymentStatus: Joi.string()
-    .valid(...paymentStatusEnum)
+    .valid(...Object.values(PAYMENT_STATUSES))
     .optional(),
   customerId: objectId.optional(),
   tripId: objectId.optional(),
@@ -151,6 +157,9 @@ const queryOrderSchema = Joi.object({
   goodCategory: objectId.optional(),
   type: Joi.string()
     .valid(...orderTypeEnum)
+    .optional(),
+  shippingMode: Joi.string()
+    .valid(...shippingModeEnum)
     .optional(),
 });
 
@@ -232,6 +241,9 @@ const statsQuerySchema = Joi.object({
   goodCategory: objectId.optional(),
   type: Joi.string()
     .valid(...orderTypeEnum)
+    .optional(),
+  shippingMode: Joi.string()
+    .valid(...shippingModeEnum)
     .optional(),
 });
 

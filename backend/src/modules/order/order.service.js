@@ -21,6 +21,8 @@ import {
   WAREHOUSE_MESSAGES,
 } from "../../constants/messages.js";
 import { SERVICE_TYPES } from "../../constants/serviceTypes.js";
+import { SHIPPING_MODES } from "../../constants/shippingModes.js";
+import { PAYMENT_STATUSES } from "../../constants/paymentStatuses.js";
 
 import ApiError from "../../utils/ApiError.js";
 import generateCode from "../../utils/generateCode.js";
@@ -33,6 +35,7 @@ import routeService from "../route/route.service.js";
 import tripService from "../trip/trip.service.js";
 import userService from "../user/user.service.js";
 import pricingService from "../pricing/pricing.service.js";
+import { resolveOrderRouting } from "../route/routing.helper.js";
 import notificationService from "../notification/notification.service.js";
 import walletTransactionService from "../walletTransaction/walletTransaction.service.js";
 import warehouseService from "../warehouse/warehouse.service.js";
@@ -241,6 +244,7 @@ const create = async (
     recipientName,
     recipientPhone,
     recipientAddress,
+    deliveryLocation,
     goodCategory,
     weight,
     volume,
@@ -248,6 +252,7 @@ const create = async (
     codAmount = 0,
     routeId,
     type = SERVICE_TYPES.STANDARD,
+    shippingMode = SHIPPING_MODES.CONSOLIDATED,
     notes,
     createdBy,
     warehouseId = null,
@@ -262,43 +267,24 @@ const create = async (
   }
   const customer = await customerService.getById(customerId);
 
-  if (user?.role === ROLES.CUSTOMER && routeId) {
-    throw new ApiError(400, ORDER_MESSAGES.CUSTOMER_ROUTE_NOT_ALLOWED);
-  }
+  const routing = await resolveOrderRouting({
+    shippingMode,
+    pickupLocation,
+    deliveryLocation,
+    warehouseId,
+    routeId,
+    user,
+    requireWarehouse: true,
+  });
 
-  if (routeId) {
-    await routeService.getById(routeId);
-  }
-
-  let pickupDistanceKm;
-  const hasPickupLocation = Boolean(
-    pickupLocation?.latitude !== undefined &&
-    pickupLocation?.longitude !== undefined,
-  );
-
-  if (user?.role === ROLES.CUSTOMER) {
-    if (!hasPickupLocation) {
-      throw new ApiError(400, ORDER_MESSAGES.PICKUP_LOCATION_REQUIRED);
-    }
-
-    const nearest = await warehouseService.getNearestActiveWarehouse(
-      pickupLocation.latitude,
-      pickupLocation.longitude,
-    );
-    warehouseId = nearest.warehouse._id;
-    pickupDistanceKm = nearest.distanceKm;
-  } else if (warehouseId) {
-    await warehouseService.getById(warehouseId, true, true);
-  } else if (hasPickupLocation) {
-    const nearest = await warehouseService.getNearestActiveWarehouse(
-      pickupLocation.latitude,
-      pickupLocation.longitude,
-    );
-    warehouseId = nearest.warehouse._id;
-    pickupDistanceKm = nearest.distanceKm;
-  } else {
-    throw new ApiError(400, ORDER_MESSAGES.WAREHOUSE_REQUIRED);
-  }
+  warehouseId = routing.warehouseId;
+  routeId = routing.routeId;
+  const {
+    destinationWarehouseId,
+    pickupDistanceKm,
+    deliveryDistanceKm,
+    totalDistanceKm,
+  } = routing;
 
   if (createdBy) {
     await userService.getById(createdBy);
@@ -323,9 +309,11 @@ const create = async (
 
   const feeResult = await pricingService.calculateFee({
     serviceType: type,
+    shippingMode: routing.shippingMode,
     weight,
     volume,
     quantity,
+    ...(totalDistanceKm !== undefined ? { distance: totalDistanceKm } : {}),
     routeId,
     goodsCategoryId: goodCategory,
   });
@@ -355,6 +343,9 @@ const create = async (
         recipientName,
         recipientPhone,
         recipientAddress,
+        deliveryLocation,
+        deliveryDistanceKm,
+        totalDistanceKm,
         goodCategory,
         weight,
         volume,
@@ -367,9 +358,11 @@ const create = async (
         totalAmount: calculatedTotal,
         routeId,
         warehouseId,
+        destinationWarehouseId,
         type,
+        shippingMode: routing.shippingMode,
         paymentMethod: null,
-        paymentStatus: "pending",
+        paymentStatus: PAYMENT_STATUSES.PENDING,
         paymentTime: null,
         notes,
         status: ORDER_STATUSES.CREATED,
@@ -644,7 +637,10 @@ const updateById = async ({
       trip.warehouseId ||
       trip.driverId?.warehouseId?._id ||
       trip.driverId?.warehouseId;
-    if (effectiveRouteId?.toString() !== tripRouteId?.toString()) {
+    if (
+      trip.type === TRIP_TYPES.TRANSFER &&
+      effectiveRouteId?.toString() !== tripRouteId?.toString()
+    ) {
       throw new ApiError(400, ORDER_MESSAGES.ROUTE_TRIP_MISMATCH);
     }
     if (
@@ -675,7 +671,7 @@ const updateById = async ({
     Number(effectiveShippingFee || 0) + Number(effectiveCodAmount || 0);
 
   if (payload.codCollected === true && !payload.paymentStatus) {
-    payload.paymentStatus = "success";
+    payload.paymentStatus = PAYMENT_STATUSES.COMPLETED;
     if (!payload.paymentTime) {
       payload.paymentTime = new Date();
     }
@@ -684,7 +680,7 @@ const updateById = async ({
     !payload.paymentStatus &&
     existingOrder.codCollected === true
   ) {
-    payload.paymentStatus = "pending";
+    payload.paymentStatus = PAYMENT_STATUSES.PENDING;
     payload.paymentTime = null;
   }
 
@@ -1130,7 +1126,7 @@ const assignOrdersToTrip = async ({ tripId, orderIds = [] }, user = null) => {
     const orderRouteId = order.routeId?._id || order.routeId;
     const tripRouteId = trip.routeId?._id || trip.routeId;
     if (
-      trip.type !== TRIP_TYPES.PICKUP &&
+      trip.type === TRIP_TYPES.TRANSFER &&
       (!orderRouteId || orderRouteId.toString() !== tripRouteId?.toString())
     ) {
       throw new ApiError(400, ORDER_MESSAGES.ROUTE_TRIP_MISMATCH);
@@ -1142,6 +1138,17 @@ const assignOrdersToTrip = async ({ tripId, orderIds = [] }, user = null) => {
       orderWarehouseId.toString() !== tripWarehouseId?.toString()
     ) {
       throw new ApiError(400, WAREHOUSE_MESSAGES.ACCESS_DENIED);
+    }
+
+    const orderDestinationWarehouseId =
+      order.destinationWarehouseId?._id || order.destinationWarehouseId;
+    if (
+      trip.type === TRIP_TYPES.DELIVERY &&
+      orderDestinationWarehouseId &&
+      tripWarehouseId &&
+      orderDestinationWarehouseId.toString() !== tripWarehouseId.toString()
+    ) {
+      throw new ApiError(400, ORDER_MESSAGES.TRANSFER_REQUIRED_BEFORE_DELIVERY);
     }
   }
 
@@ -1195,7 +1202,7 @@ const assignOrdersToTrip = async ({ tripId, orderIds = [] }, user = null) => {
 
       const currentOrderRouteId = order.routeId?._id || order.routeId;
       if (
-        currentTrip.type !== TRIP_TYPES.PICKUP &&
+        currentTrip.type === TRIP_TYPES.TRANSFER &&
         (!currentOrderRouteId ||
           currentOrderRouteId.toString() !== currentTripRouteId?.toString())
       ) {
@@ -1210,6 +1217,21 @@ const assignOrdersToTrip = async ({ tripId, orderIds = [] }, user = null) => {
           currentTripWarehouseId?.toString()
       ) {
         throw new ApiError(400, WAREHOUSE_MESSAGES.ACCESS_DENIED);
+      }
+
+      const currentOrderDestinationWarehouseId =
+        order.destinationWarehouseId?._id || order.destinationWarehouseId;
+      if (
+        currentTrip.type === TRIP_TYPES.DELIVERY &&
+        currentOrderDestinationWarehouseId &&
+        currentTripWarehouseId &&
+        currentOrderDestinationWarehouseId.toString() !==
+          currentTripWarehouseId.toString()
+      ) {
+        throw new ApiError(
+          400,
+          ORDER_MESSAGES.TRANSFER_REQUIRED_BEFORE_DELIVERY,
+        );
       }
     }
 

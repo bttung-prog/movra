@@ -391,6 +391,10 @@ export const RECEIPT_MESSAGES = {
   ORDER_IN_ANOTHER_WAREHOUSE:
     "Đơn hàng hiện đang ở kho khác. Cần xuất kho từ kho đó trước khi nhập vào đây",
   CODE_GEN_FAILED: "Không thể tạo mã phiếu nhập duy nhất. Vui lòng thử lại",
+  DESTINATION_WAREHOUSE_MISMATCH:
+    "Kho nhập hàng không khớp với kho đích của đơn hàng trung chuyển",
+  SAME_WAREHOUSE_TRANSFER:
+    "Không thể nhập kho trung chuyển vào chính kho vừa xuất đi",
   ORDER_PROCESSING: "Đơn hàng đang được xử lý hoặc đang được nhập vào kho này",
   ALREADY_CANCELLED: "Không thể hủy phiếu nhập đã bị hủy trước đó",
   CANCEL_NOT_AUTHORIZED:
@@ -655,12 +659,19 @@ export const ORDER_MESSAGES = {
     "Truy cập bị từ chối. Bạn không phải là chủ sở hữu của đơn hàng này",
   CATEGORY_REQUIRED: "Danh mục hàng hóa là bắt buộc",
   CUSTOMER_REQUIRED: "Thông tin khách hàng là bắt buộc",
-  CUSTOMER_ROUTE_NOT_ALLOWED:
-    "Khách hàng không cần chọn tuyến kho-kho khi tạo đơn",
+  CUSTOMER_ROUTE_NOT_ALLOWED: "Khách hàng không cần chọn tuyến khi tạo đơn",
   WAREHOUSE_REQUIRED:
     "Vui lòng chọn kho phụ trách hoặc cung cấp tọa độ điểm lấy hàng để tự động chọn kho",
   PICKUP_LOCATION_REQUIRED:
     "Cần tọa độ điểm lấy hàng để tự động chọn kho gần nhất",
+  DELIVERY_LOCATION_REQUIRED:
+    "Cần tọa độ điểm giao hàng để xác định kho đích và tính khoảng cách vận chuyển",
+  ROUTE_NOT_SUPPORTED:
+    "Chưa hỗ trợ tuyến vận chuyển giữa kho lấy hàng và kho giao hàng",
+  DIRECT_ROUTE_NOT_ALLOWED:
+    "Đơn hàng chạy thẳng nguyên chuyến không sử dụng tuyến trung chuyển",
+  TRANSFER_REQUIRED_BEFORE_DELIVERY:
+    "Đơn hàng cần được trung chuyển tới kho đích trước khi gán vào chuyến giao hàng",
   CODE_GEN_FAILED: "Không thể tạo mã đơn hàng duy nhất. Vui lòng thử lại",
   INVALID_SHIPPING_FEE: "Không thể xác định phí vận chuyển hợp lệ",
   SHIPPING_FEE_ALREADY_PAID:
@@ -933,6 +944,8 @@ export const NOTIFICATION_MESSAGES = {
 export const PRICING_MESSAGES = {
   CALCULATE_SUCCESS: "Tính cước vận chuyển thành công",
   INVALID_DISTANCE: "Khoảng cách vận chuyển phải lớn hơn 0",
+  LOCATIONS_OR_DISTANCE_REQUIRED:
+    "Cần cung cấp tọa độ lấy/giao hàng hoặc khoảng cách hợp lệ để tính cước",
   INVALID_QUANTITY: "Số lượng kiện hàng phải là số nguyên lớn hơn 0",
   CREATE_RATE_SUCCESS: "Tạo bảng cước thành công",
   GET_ALL_RATES_SUCCESS: "Lấy danh sách bảng cước thành công",

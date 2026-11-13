@@ -19,19 +19,24 @@ describe("tripValidator.createTripSchema", () => {
     expect(value.type).toBe("delivery");
   });
 
-  it("accepts pickup trips", () => {
-    const result = tripValidator.createTripSchema.validate({
+  it("accepts pickup and delivery trips without a route ID", () => {
+    const pickupResult = tripValidator.createTripSchema.validate({
       ...validTripPayload,
       type: "pickup",
       routeId: undefined,
     });
+    expect(pickupResult.error).toBeUndefined();
 
-    expect(result.error).toBeUndefined();
+    const deliveryResult = tripValidator.createTripSchema.validate({
+      ...validTripPayload,
+      type: "delivery",
+      routeId: undefined,
+    });
+    expect(deliveryResult.error).toBeUndefined();
   });
 
   it.each([
     ["invalid vehicle ID", { vehicleId: "vehicle-1" }],
-    ["missing route ID for delivery trip", { routeId: undefined }],
     [
       "missing route ID for transfer trip",
       { type: "transfer", routeId: undefined },

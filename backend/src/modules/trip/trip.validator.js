@@ -37,12 +37,12 @@ const createTripSchema = Joi.object({
   }),
 
   routeId: Joi.when("type", {
-    is: TRIP_TYPES.PICKUP,
-    then: Joi.string().pattern(objectIdPattern).optional(),
-    otherwise: Joi.string().pattern(objectIdPattern).required().messages({
+    is: TRIP_TYPES.TRANSFER,
+    then: Joi.string().pattern(objectIdPattern).required().messages({
       "any.required": "Route ID is required",
       "string.pattern.base": "Route ID must be a valid MongoDB ObjectId",
     }),
+    otherwise: Joi.string().pattern(objectIdPattern).optional().allow(null),
   }),
 
   plannedStart: Joi.date().iso().required().messages({
@@ -79,7 +79,7 @@ const updateTripSchema = Joi.object({
     "any.unknown": "Use the reassignment endpoint to change the driver",
   }),
 
-  routeId: Joi.string().pattern(objectIdPattern).messages({
+  routeId: Joi.string().pattern(objectIdPattern).allow(null).messages({
     "string.pattern.base": "Route ID must be a valid MongoDB ObjectId",
   }),
 

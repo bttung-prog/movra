@@ -1,7 +1,9 @@
 import mongoose from "mongoose";
 
 import { ORDER_STATUSES } from "../../constants/orderStatuses.js";
+import { PAYMENT_STATUSES } from "../../constants/paymentStatuses.js";
 import { SERVICE_TYPES } from "../../constants/serviceTypes.js";
+import { SHIPPING_MODES } from "../../constants/shippingModes.js";
 
 const orderSchema = new mongoose.Schema(
   {
@@ -62,6 +64,21 @@ const orderSchema = new mongoose.Schema(
       type: String,
       required: true,
       trim: true,
+    },
+
+    deliveryLocation: {
+      latitude: { type: Number, min: -90, max: 90 },
+      longitude: { type: Number, min: -180, max: 180 },
+    },
+
+    deliveryDistanceKm: {
+      type: Number,
+      min: 0,
+    },
+
+    totalDistanceKm: {
+      type: Number,
+      min: 0,
     },
 
     goodCategory: {
@@ -151,6 +168,12 @@ const orderSchema = new mongoose.Schema(
       default: null,
     },
 
+    destinationWarehouseId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Warehouse",
+      default: null,
+    },
+
     tripId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Trip",
@@ -160,6 +183,12 @@ const orderSchema = new mongoose.Schema(
       type: String,
       enum: Object.values(SERVICE_TYPES),
       default: SERVICE_TYPES.STANDARD,
+    },
+
+    shippingMode: {
+      type: String,
+      enum: Object.values(SHIPPING_MODES),
+      default: SHIPPING_MODES.CONSOLIDATED,
     },
 
     status: {
@@ -176,8 +205,8 @@ const orderSchema = new mongoose.Schema(
 
     paymentStatus: {
       type: String,
-      enum: ["pending", "failed", "success"],
-      default: "pending",
+      enum: Object.values(PAYMENT_STATUSES),
+      default: PAYMENT_STATUSES.PENDING,
     },
 
     paymentMethod: {
@@ -229,6 +258,8 @@ orderSchema.index({ customerId: 1 });
 orderSchema.index({ customerId: 1, isFeedbacked: 1 });
 orderSchema.index({ tripId: 1 });
 orderSchema.index({ warehouseId: 1 });
+orderSchema.index({ destinationWarehouseId: 1 });
+orderSchema.index({ shippingMode: 1 });
 orderSchema.index({ warehouseId: 1, deletedAt: 1, createdAt: -1 });
 orderSchema.index({ warehouseId: 1, status: 1 });
 orderSchema.index({ status: 1 });

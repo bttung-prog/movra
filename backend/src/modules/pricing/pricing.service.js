@@ -3,6 +3,8 @@ import {
   DEFAULT_RATE,
   DEFAULT_RATES_BY_SERVICE_TYPE,
 } from "../../constants/defaultShippingRate.js";
+import { SHIPPING_MODES } from "../../constants/shippingModes.js";
+import { hasValidCoordinates } from "../../utils/distance.util.js";
 
 import ApiError from "../../utils/ApiError.js";
 
@@ -10,17 +12,46 @@ import goodsCategoryService from "../goodsCategory/goodsCategory.service.js";
 import routeService from "../route/route.service.js";
 
 import pricingRepository from "./pricing.repository.js";
+import { resolveOrderRouting } from "../route/routing.helper.js";
+
+const VOLUMETRIC_WEIGHT_DIVISOR = 3333;
 
 const calculateFee = async ({
   serviceType = "standard",
+  shippingMode = SHIPPING_MODES.CONSOLIDATED,
   weight = 1,
   volume = 0,
   quantity = 1,
-  distance = 5,
+  distance = undefined,
   routeId = null,
+  pickupLocation = null,
+  deliveryLocation = null,
   goodsCategoryId = null,
 }) => {
-  if (routeId) {
+  let routingBreakdown = null;
+
+  if (
+    (distance === undefined || distance === null) &&
+    hasValidCoordinates(pickupLocation) &&
+    hasValidCoordinates(deliveryLocation)
+  ) {
+    const routing = await resolveOrderRouting({
+      shippingMode,
+      pickupLocation,
+      deliveryLocation,
+      routeId,
+    });
+    distance = routing.totalDistanceKm;
+    routingBreakdown = {
+      warehouseId: routing.warehouseId,
+      destinationWarehouseId: routing.destinationWarehouseId,
+      routeId: routing.routeId,
+      pickupDistanceKm: routing.pickupDistanceKm,
+      routeDistanceKm: routing.routeDistanceKm,
+      deliveryDistanceKm: routing.deliveryDistanceKm,
+      totalDistanceKm: routing.totalDistanceKm,
+    };
+  } else if (routeId && (distance === undefined || distance === null)) {
     const route = await routeService.getById(routeId);
     distance = route.distance;
   }
@@ -41,7 +72,9 @@ const calculateFee = async ({
   const totalWeight = weight * quantity;
   const totalVolume = volume * quantity;
   const volumetricWeight =
-    totalVolume > 0 ? Number((totalVolume / 5000).toFixed(2)) : 0;
+    totalVolume > 0
+      ? Number((totalVolume / VOLUMETRIC_WEIGHT_DIVISOR).toFixed(2))
+      : 0;
   const billableWeight = Math.max(totalWeight, volumetricWeight);
 
   const extraWeight = Math.max(0, billableWeight - rate.baseWeight);
@@ -73,11 +106,13 @@ const calculateFee = async ({
 
   return {
     serviceType: rate.serviceType,
+    shippingMode,
     rateName: rate.name,
     actualWeight: totalWeight,
     volumetricWeight,
     billableWeight,
     distance,
+    ...(routingBreakdown ? { routingBreakdown } : {}),
     breakdown: {
       basePrice: rate.basePrice,
       weightFee,

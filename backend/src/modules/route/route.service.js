@@ -115,6 +115,16 @@ const getById = async (routeId, requireNotDeleted = true) => {
   return validateRouteExists(route, requireNotDeleted);
 };
 
+const getActiveByWarehousePair = (
+  originWarehouseId,
+  destinationWarehouseId,
+) => {
+  return routeRepository.findActiveByWarehousePair(
+    originWarehouseId,
+    destinationWarehouseId,
+  );
+};
+
 const updateById = async (routeId, updateData) => {
   const existingRoute = await getById(routeId);
 
@@ -242,6 +252,7 @@ export default {
   create,
   getAll,
   getById,
+  getActiveByWarehousePair,
   updateById,
   deleteById,
   restoreById,

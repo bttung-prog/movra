@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 
 import { ROLES } from "../../constants/roles.js";
+import { ORDER_STATUSES } from "../../constants/orderStatuses.js";
 import { RECEIPT_STATUSES } from "../../constants/receiptStatuses.js";
 import {
   INVENTORY_STATUSES,
@@ -58,11 +59,37 @@ const create = async (
   const order = await orderService.getById(orderId, true);
   const previousWarehouseId = order.warehouseId || null;
   const previousWarehouseIdString = previousWarehouseId?.toString();
-  if (order.status !== "picked_up") {
+  const receivableStatuses = [
+    ORDER_STATUSES.PICKED_UP,
+    ORDER_STATUSES.TRANSPORTING,
+  ];
+  if (!receivableStatuses.includes(order.status)) {
     throw new ApiError(
       400,
       RECEIPT_MESSAGES.ORDER_STATUS_INVALID(order.status),
     );
+  }
+
+  if (order.status === ORDER_STATUSES.TRANSPORTING) {
+    if (
+      previousWarehouseIdString &&
+      previousWarehouseIdString === warehouseId.toString()
+    ) {
+      throw new ApiError(400, RECEIPT_MESSAGES.SAME_WAREHOUSE_TRANSFER);
+    }
+
+    const expectedDestinationWarehouseId =
+      order.destinationWarehouseId?._id ||
+      order.destinationWarehouseId ||
+      order.routeId?.destinationWarehouseId?._id ||
+      order.routeId?.destinationWarehouseId;
+
+    if (
+      expectedDestinationWarehouseId &&
+      expectedDestinationWarehouseId.toString() !== warehouseId.toString()
+    ) {
+      throw new ApiError(400, RECEIPT_MESSAGES.DESTINATION_WAREHOUSE_MISMATCH);
+    }
   }
 
   if (order.quantity && quantity !== order.quantity) {

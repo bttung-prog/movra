@@ -7,6 +7,7 @@ import { WAREHOUSE_MESSAGES } from "../../constants/messages.js";
 import ApiError from "../../utils/ApiError.js";
 import { escapeRegex } from "../../utils/regexUtils.js";
 import checkWarehouseAccess from "../../utils/checkWarehouseAccess.js";
+import { calculateHaversineDistanceKm } from "../../utils/distance.util.js";
 
 import userService from "../user/user.service.js";
 import inventoryService from "../inventory/inventory.service.js";
@@ -89,16 +90,10 @@ const ensureNoInStockInventory = async (
 };
 
 const distanceInKm = (latitude, longitude, warehouse) => {
-  const toRadians = (degrees) => (degrees * Math.PI) / 180;
-  const latitudeDelta = toRadians(warehouse.latitude - latitude);
-  const longitudeDelta = toRadians(warehouse.longitude - longitude);
-  const haversine =
-    Math.sin(latitudeDelta / 2) ** 2 +
-    Math.cos(toRadians(latitude)) *
-      Math.cos(toRadians(warehouse.latitude)) *
-      Math.sin(longitudeDelta / 2) ** 2;
-
-  return 6371 * 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+  return calculateHaversineDistanceKm(
+    { latitude, longitude },
+    { latitude: warehouse.latitude, longitude: warehouse.longitude },
+  );
 };
 
 const create = async ({
