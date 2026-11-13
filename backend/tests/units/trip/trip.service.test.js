@@ -261,6 +261,37 @@ describe("tripService.create", () => {
 
     expect(mocks.startSession).not.toHaveBeenCalled();
   });
+
+  it("allows creating a delivery trip without a routeId", async () => {
+    mocks.createTrip.mockResolvedValue({
+      ...plannedTrip,
+      type: "delivery",
+      routeId: null,
+    });
+
+    const result = await tripService.create({
+      ...createPayload,
+      type: "delivery",
+      routeId: null,
+    });
+
+    expect(mocks.getRouteById).not.toHaveBeenCalled();
+    expect(result.routeId).toBeNull();
+  });
+
+  it("requires routeId when creating a transfer trip", async () => {
+    await expect(
+      tripService.create({
+        ...createPayload,
+        type: "transfer",
+        routeId: null,
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: TRIP_MESSAGES.ROUTE_REQUIRED,
+    });
+    expect(mocks.startSession).not.toHaveBeenCalled();
+  });
 });
 
 describe("tripService.getAll and getById", () => {

@@ -236,7 +236,10 @@ const syncCompletedPaymentEffects = async ({
       targetCustomerId =
         targetCustomerId || order.customerId?._id || order.customerId;
       const updateData = {
-        paymentStatus: invoiceIsPaid === false ? "pending" : "success",
+        paymentStatus:
+          invoiceIsPaid === false
+            ? PAYMENT_STATUSES.PENDING
+            : PAYMENT_STATUSES.COMPLETED,
         paymentTime: new Date(),
       };
 

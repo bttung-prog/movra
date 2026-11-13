@@ -25,6 +25,7 @@ describe("orderValidator.createOrderSchema", () => {
     expect(error).toBeUndefined();
     expect(value.codAmount).toBe(0);
     expect(value.type).toBe("standard");
+    expect(value.shippingMode).toBe("consolidated");
   });
 
   it.each([
@@ -35,9 +36,14 @@ describe("orderValidator.createOrderSchema", () => {
     ["malformed category ID", { goodCategory: "category-1" }],
     ["negative COD amount", { codAmount: -1 }],
     ["unsupported order type", { type: "overnight" }],
+    ["unsupported shipping mode", { shippingMode: "air" }],
     [
-      "latitude outside valid range",
+      "pickup latitude outside valid range",
       { pickupLocation: { latitude: 91, longitude: 0 } },
+    ],
+    [
+      "delivery longitude outside valid range",
+      { deliveryLocation: { latitude: 10, longitude: 181 } },
     ],
   ])("rejects %s", (_case, override) => {
     const result = orderValidator.createOrderSchema.validate({

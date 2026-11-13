@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   updateCustomerById: vi.fn(),
   getGoodsCategoryById: vi.fn(),
   getRouteById: vi.fn(),
+  getActiveRouteByWarehousePair: vi.fn(),
   getTripById: vi.fn(),
   getTripIdsByWarehouseId: vi.fn(),
   syncTripTotalOrder: vi.fn(),
@@ -57,7 +58,10 @@ vi.mock("../../../src/modules/goodsCategory/goodsCategory.service.js", () => ({
 }));
 
 vi.mock("../../../src/modules/route/route.service.js", () => ({
-  default: { getById: mocks.getRouteById },
+  default: {
+    getById: mocks.getRouteById,
+    getActiveByWarehousePair: mocks.getActiveRouteByWarehousePair,
+  },
 }));
 
 vi.mock("../../../src/modules/trip/trip.service.js", () => ({
@@ -212,27 +216,166 @@ describe("orderService.create", () => {
     });
   });
 
-  it("assigns customer orders to the nearest active warehouse without a route", async () => {
-    const payload = { ...validCreatePayload, routeId: undefined };
+  it("requires delivery coordinates for customer orders", async () => {
+    await expect(
+      orderService.create(
+        {
+          ...validCreatePayload,
+          routeId: undefined,
+          deliveryLocation: undefined,
+        },
+        transaction,
+        { role: ROLES.CUSTOMER },
+      ),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: ORDER_MESSAGES.DELIVERY_LOCATION_REQUIRED,
+    });
+  });
+
+  it("assigns intra-zone customer orders to Kho A without a route (d1 + d3)", async () => {
+    mocks.getNearestWarehouse
+      .mockResolvedValueOnce({
+        warehouse: { _id: "warehouse-nearest" },
+        distanceKm: 3.2,
+      })
+      .mockResolvedValueOnce({
+        warehouse: { _id: "warehouse-nearest" },
+        distanceKm: 4.8,
+      });
+
+    const payload = {
+      ...validCreatePayload,
+      routeId: undefined,
+      deliveryLocation: { latitude: 10.8, longitude: 106.72 },
+    };
     const result = await orderService.create(payload, transaction, {
       role: ROLES.CUSTOMER,
     });
 
-    expect(mocks.getNearestWarehouse).toHaveBeenCalledWith(10.78, 106.69);
+    expect(mocks.getNearestWarehouse).toHaveBeenCalledTimes(2);
+    expect(mocks.getActiveRouteByWarehousePair).not.toHaveBeenCalled();
     expect(mocks.calculateFee).toHaveBeenCalledWith(
-      expect.objectContaining({ routeId: undefined }),
+      expect.objectContaining({
+        routeId: null,
+        distance: 8,
+        shippingMode: "consolidated",
+      }),
     );
     expect(mocks.createOrder).toHaveBeenCalledWith(
       expect.objectContaining({
         warehouseId: "warehouse-nearest",
+        destinationWarehouseId: "warehouse-nearest",
         pickupLocation: { latitude: 10.78, longitude: 106.69 },
+        deliveryLocation: { latitude: 10.8, longitude: 106.72 },
         pickupDistanceKm: 3.2,
-        routeId: undefined,
+        deliveryDistanceKm: 4.8,
+        totalDistanceKm: 8,
+        routeId: null,
+        shippingMode: "consolidated",
         status: "created",
       }),
       transaction,
     );
     expect(result).toEqual({ _id: "order-1", orderCode: "ORD-0001" });
+  });
+
+  it("resolves inter-warehouse route and 3-stage distance for customer orders", async () => {
+    mocks.getNearestWarehouse
+      .mockResolvedValueOnce({
+        warehouse: { _id: "warehouse-a" },
+        distanceKm: 4.5,
+      })
+      .mockResolvedValueOnce({
+        warehouse: { _id: "warehouse-b" },
+        distanceKm: 5.5,
+      });
+    mocks.getActiveRouteByWarehousePair.mockResolvedValue({
+      _id: "route-ab",
+      distance: 120,
+    });
+
+    const payload = {
+      ...validCreatePayload,
+      routeId: undefined,
+      deliveryLocation: { latitude: 21.02, longitude: 105.83 },
+    };
+    await orderService.create(payload, transaction, { role: ROLES.CUSTOMER });
+
+    expect(mocks.getActiveRouteByWarehousePair).toHaveBeenCalledWith(
+      "warehouse-a",
+      "warehouse-b",
+    );
+    expect(mocks.calculateFee).toHaveBeenCalledWith(
+      expect.objectContaining({
+        routeId: "route-ab",
+        distance: 130,
+      }),
+    );
+    expect(mocks.createOrder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        warehouseId: "warehouse-a",
+        destinationWarehouseId: "warehouse-b",
+        routeId: "route-ab",
+        pickupDistanceKm: 4.5,
+        deliveryDistanceKm: 5.5,
+        totalDistanceKm: 130,
+      }),
+      transaction,
+    );
+  });
+
+  it("rejects inter-warehouse consolidated order when no active route exists", async () => {
+    mocks.getNearestWarehouse
+      .mockResolvedValueOnce({
+        warehouse: { _id: "warehouse-a" },
+        distanceKm: 4,
+      })
+      .mockResolvedValueOnce({
+        warehouse: { _id: "warehouse-b" },
+        distanceKm: 6,
+      });
+    mocks.getActiveRouteByWarehousePair.mockResolvedValue(null);
+
+    await expect(
+      orderService.create(
+        {
+          ...validCreatePayload,
+          routeId: undefined,
+          deliveryLocation: { latitude: 21.02, longitude: 105.83 },
+        },
+        transaction,
+        { role: ROLES.CUSTOMER },
+      ),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: ORDER_MESSAGES.ROUTE_NOT_SUPPORTED,
+    });
+  });
+
+  it("calculates direct FTL distance A -> B without route lookup", async () => {
+    await orderService.create(
+      {
+        ...validCreatePayload,
+        routeId: undefined,
+        shippingMode: "direct",
+        deliveryLocation: { latitude: 10.88, longitude: 106.79 },
+      },
+      transaction,
+      { role: ROLES.CUSTOMER },
+    );
+
+    expect(mocks.getActiveRouteByWarehousePair).not.toHaveBeenCalled();
+    expect(mocks.createOrder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        shippingMode: "direct",
+        routeId: null,
+        destinationWarehouseId: null,
+        warehouseId: "warehouse-nearest",
+        totalDistanceKm: expect.any(Number),
+      }),
+      transaction,
+    );
   });
 
   it("requires a warehouse or pickup location for admin order creation", async () => {
@@ -261,9 +404,11 @@ describe("orderService.create", () => {
     expect(result).toEqual({ _id: "order-1", orderCode: "ORD-0001" });
     expect(mocks.calculateFee).toHaveBeenCalledWith({
       serviceType: "standard",
+      shippingMode: "consolidated",
       weight: 2,
       volume: 1,
       quantity: 3,
+      distance: 3.2,
       routeId: "route-1",
       goodsCategoryId: "category-1",
     });
@@ -305,9 +450,11 @@ describe("orderService.create", () => {
     expect(result).toEqual({ _id: "order-1", orderCode: "ORD-0001" });
     expect(mocks.calculateFee).toHaveBeenCalledWith({
       serviceType: "express",
+      shippingMode: "consolidated",
       weight: 2,
       volume: 1,
       quantity: 1,
+      distance: 3.2,
       routeId: "route-1",
       goodsCategoryId: "category-1",
     });
@@ -650,6 +797,94 @@ describe("orderService.assignOrdersToTrip", () => {
       "trip-1",
       transaction,
     );
+  });
+
+  it("allows assigning intra-zone or arrived orders to a delivery trip without routeId", async () => {
+    const deliveryTrip = {
+      _id: "trip-delivery",
+      tripCode: "TRIP-DEL-1",
+      type: "delivery",
+      status: "planned",
+      routeId: null,
+      warehouseId: "warehouse-b",
+    };
+    const arrivedOrder = {
+      _id: "order-1",
+      orderCode: "ORD-0001",
+      status: "stored",
+      routeId: "route-ab",
+      warehouseId: "warehouse-b",
+      destinationWarehouseId: "warehouse-b",
+    };
+    mocks.getTripById.mockResolvedValue(deliveryTrip);
+    mocks.findByIds.mockResolvedValue([arrivedOrder]);
+    mocks.updateMany.mockResolvedValue({ modifiedCount: 1 });
+
+    const result = await orderService.assignOrdersToTrip({
+      tripId: "trip-delivery",
+      orderIds: ["order-1"],
+    });
+
+    expect(result).toEqual({ assignedCount: 1, tripId: "trip-delivery" });
+  });
+
+  it("blocks assigning an order at Kho A to a delivery trip if its destinationWarehouseId is Kho B", async () => {
+    mocks.getTripById.mockResolvedValue({
+      _id: "trip-delivery-a",
+      type: "delivery",
+      status: "planned",
+      routeId: null,
+      warehouseId: "warehouse-a",
+    });
+    mocks.findByIds.mockResolvedValue([
+      {
+        _id: "order-1",
+        orderCode: "ORD-0001",
+        status: "stored",
+        routeId: "route-ab",
+        warehouseId: "warehouse-a",
+        destinationWarehouseId: "warehouse-b",
+      },
+    ]);
+
+    await expect(
+      orderService.assignOrdersToTrip({
+        tripId: "trip-delivery-a",
+        orderIds: ["order-1"],
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: ORDER_MESSAGES.TRANSFER_REQUIRED_BEFORE_DELIVERY,
+    });
+  });
+
+  it("enforces routeId match when assigning stored orders to a transfer trip", async () => {
+    mocks.getTripById.mockResolvedValue({
+      _id: "trip-transfer",
+      type: "transfer",
+      status: "planned",
+      routeId: "route-ab",
+      warehouseId: "warehouse-a",
+    });
+    mocks.findByIds.mockResolvedValue([
+      {
+        _id: "order-1",
+        orderCode: "ORD-0001",
+        status: "stored",
+        routeId: "route-ac",
+        warehouseId: "warehouse-a",
+      },
+    ]);
+
+    await expect(
+      orderService.assignOrdersToTrip({
+        tripId: "trip-transfer",
+        orderIds: ["order-1"],
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: ORDER_MESSAGES.ROUTE_TRIP_MISMATCH,
+    });
   });
 });
 

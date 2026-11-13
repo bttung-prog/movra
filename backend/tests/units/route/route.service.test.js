@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   countTrips: vi.fn(),
   countOrders: vi.fn(),
   findByWarehousePair: vi.fn(),
+  findActiveByWarehousePair: vi.fn(),
   createRoute: vi.fn(),
   findAllRoutes: vi.fn(),
   countAllRoutes: vi.fn(),
@@ -29,6 +30,7 @@ vi.mock("../../../src/modules/order/order.service.js", () => ({
 vi.mock("../../../src/modules/route/route.repository.js", () => ({
   default: {
     findByWarehousePair: mocks.findByWarehousePair,
+    findActiveByWarehousePair: mocks.findActiveByWarehousePair,
     create: mocks.createRoute,
     findAll: mocks.findAllRoutes,
     countAll: mocks.countAllRoutes,
@@ -89,6 +91,25 @@ describe("routeService.create", () => {
       distance: 150,
       expectedDuration: 8,
     });
+  });
+
+  it("looks up active route by warehouse pair", async () => {
+    mocks.findActiveByWarehousePair.mockResolvedValue({
+      _id: routeId,
+      distance: 150,
+      deletedAt: null,
+    });
+
+    const route = await routeService.getActiveByWarehousePair(
+      originWarehouseId,
+      destinationWarehouseId,
+    );
+
+    expect(mocks.findActiveByWarehousePair).toHaveBeenCalledWith(
+      originWarehouseId,
+      destinationWarehouseId,
+    );
+    expect(route).toMatchObject({ _id: routeId, distance: 150 });
   });
 
   it("reuses a soft-deleted route instead of creating a duplicate", async () => {

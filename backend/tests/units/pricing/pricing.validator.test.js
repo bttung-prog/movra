@@ -12,11 +12,40 @@ describe("pricingValidator.calculateFeeSchema", () => {
     expect(error).toBeUndefined();
     expect(value).toMatchObject({
       serviceType: "standard",
+      shippingMode: "consolidated",
       weight: 2,
       volume: 0,
       quantity: 1,
       distance: 15,
     });
+  });
+
+  it("accepts pickupLocation and deliveryLocation instead of distance or routeId", () => {
+    const { error, value } = pricingValidator.calculateFeeSchema.validate({
+      weight: 10,
+      shippingMode: "direct",
+      pickupLocation: { latitude: 10.77, longitude: 106.69 },
+      deliveryLocation: { latitude: 21.02, longitude: 105.83 },
+    });
+
+    expect(error).toBeUndefined();
+    expect(value.shippingMode).toBe("direct");
+  });
+
+  it("rejects providing only one of pickupLocation or deliveryLocation", () => {
+    expect(
+      pricingValidator.calculateFeeSchema.validate({
+        weight: 5,
+        pickupLocation: { latitude: 10.77, longitude: 106.69 },
+      }).error,
+    ).toBeDefined();
+
+    expect(
+      pricingValidator.calculateFeeSchema.validate({
+        weight: 5,
+        deliveryLocation: { latitude: 21.02, longitude: 105.83 },
+      }).error,
+    ).toBeDefined();
   });
 
   it("requires either distance or routeId and rejects invalid values", () => {

@@ -46,6 +46,17 @@ const findByWarehousePair = (originWarehouseId, destinationWarehouseId) => {
   }).lean();
 };
 
+const findActiveByWarehousePair = (
+  originWarehouseId,
+  destinationWarehouseId,
+) => {
+  return Route.findOne({
+    originWarehouseId,
+    destinationWarehouseId,
+    deletedAt: null,
+  }).lean();
+};
+
 const updateById = (routeId, updateData, session = null) => {
   return Route.findByIdAndUpdate(routeId, updateData, {
     new: true,
@@ -82,6 +93,7 @@ export default {
   countAll,
   findById,
   findByWarehousePair,
+  findActiveByWarehousePair,
   updateById,
   deleteById,
   restoreById,

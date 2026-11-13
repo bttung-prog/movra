@@ -1,6 +1,7 @@
 import Joi from "joi";
 
 import { SERVICE_TYPES } from "../../constants/serviceTypes.js";
+import { SHIPPING_MODES } from "../../constants/shippingModes.js";
 
 const objectId = Joi.string()
   .regex(/^[0-9a-fA-F]{24}$/)
@@ -11,10 +12,18 @@ const objectId = Joi.string()
 
 const serviceTypesEnum = Object.values(SERVICE_TYPES);
 
+const locationSchema = Joi.object({
+  latitude: Joi.number().min(-90).max(90).required(),
+  longitude: Joi.number().min(-180).max(180).required(),
+});
+
 const calculateFeeSchema = Joi.object({
   serviceType: Joi.string()
     .valid(...serviceTypesEnum)
     .default(SERVICE_TYPES.STANDARD),
+  shippingMode: Joi.string()
+    .valid(...Object.values(SHIPPING_MODES))
+    .default(SHIPPING_MODES.CONSOLIDATED),
   weight: Joi.number().positive().required().messages({
     "any.required": "Weight is required",
     "number.positive": "Weight must be greater than 0",
@@ -25,11 +34,17 @@ const calculateFeeSchema = Joi.object({
     "number.positive": "Distance must be greater than 0",
   }),
   routeId: objectId.optional(),
+  pickupLocation: locationSchema.optional(),
+  deliveryLocation: locationSchema.optional(),
   goodsCategoryId: objectId.optional(),
 })
-  .or("distance", "routeId")
+  .or("distance", "routeId", "pickupLocation")
+  .and("pickupLocation", "deliveryLocation")
   .messages({
-    "object.missing": "Either distance or routeId must be provided",
+    "object.missing":
+      "Either distance, routeId, or pickupLocation & deliveryLocation must be provided",
+    "object.and":
+      "Both pickupLocation and deliveryLocation must be provided together",
   });
 
 const createShippingRateSchema = Joi.object({

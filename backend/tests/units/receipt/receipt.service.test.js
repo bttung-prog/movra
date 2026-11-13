@@ -263,6 +263,80 @@ describe("receiptService.create", () => {
     expect(mocks.create).toHaveBeenCalledWith(expect.any(Object), transaction);
   });
 
+  it("receives a transporting order at destination Kho B and updates warehouseId", async () => {
+    mocks.findByReceiptCode.mockResolvedValue(null);
+    mocks.getOrderById.mockResolvedValue({
+      _id: orderId,
+      status: "transporting",
+      quantity: 2,
+      goodCategory: { _id: categoryId },
+      warehouseId: "warehouse-a",
+      destinationWarehouseId: warehouseId,
+      tripId: { _id: "transfer-trip-1" },
+    });
+
+    await receiptService.create(
+      { orderId, warehouseId, receivedBy, quantity: 2 },
+      null,
+      transaction,
+    );
+
+    expect(mocks.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        warehouseId,
+        previousWarehouseId: "warehouse-a",
+        previousOrderStatus: "transporting",
+      }),
+      transaction,
+    );
+    expect(mocks.addOrderTrackingLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderId,
+        tripId: "transfer-trip-1",
+        status: "stored",
+        warehouseId,
+        expectedStatus: "transporting",
+        expectedWarehouseId: "warehouse-a",
+        clearTrip: true,
+        session: transaction,
+      }),
+    );
+  });
+
+  it("rejects receiving a transporting order back into the origin warehouse or wrong destination", async () => {
+    mocks.getOrderById.mockResolvedValueOnce({
+      _id: orderId,
+      status: "transporting",
+      quantity: 2,
+      goodCategory: { _id: categoryId },
+      warehouseId,
+      destinationWarehouseId: "warehouse-b",
+    });
+
+    await expect(
+      receiptService.create({ orderId, warehouseId, receivedBy, quantity: 2 }),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: RECEIPT_MESSAGES.SAME_WAREHOUSE_TRANSFER,
+    });
+
+    mocks.getOrderById.mockResolvedValueOnce({
+      _id: orderId,
+      status: "transporting",
+      quantity: 2,
+      goodCategory: { _id: categoryId },
+      warehouseId: "warehouse-a",
+      destinationWarehouseId: "warehouse-b",
+    });
+
+    await expect(
+      receiptService.create({ orderId, warehouseId, receivedBy, quantity: 2 }),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: RECEIPT_MESSAGES.DESTINATION_WAREHOUSE_MISMATCH,
+    });
+  });
+
   it("rejects orders already in stock or missing a receiver", async () => {
     await expect(
       receiptService.create({ orderId, warehouseId, quantity: 2 }),

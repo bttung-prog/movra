@@ -220,12 +220,16 @@ const checkTripOverlap = async ({
 const create = async ({
   vehicleId,
   driverId,
-  routeId,
+  routeId = null,
   type = TRIP_TYPES.DELIVERY,
   plannedStart,
   plannedEnd,
   user = null,
 }) => {
+  if (type === TRIP_TYPES.TRANSFER && !routeId) {
+    throw new ApiError(400, TRIP_MESSAGES.ROUTE_REQUIRED);
+  }
+
   const startDate = new Date(plannedStart);
   const endDate = new Date(plannedEnd);
 
@@ -487,8 +491,12 @@ const updateById = async (tripId, updateData, user = null) => {
     throw new ApiError(400, TRIP_MESSAGES.START_BEFORE_END);
   }
 
-  if (updateData.type && updateData.type !== TRIP_TYPES.PICKUP) {
-    const effectiveRouteId = updateData.routeId || existingTrip.routeId;
+  const effectiveType = updateData.type || existingTrip.type;
+  if (effectiveType === TRIP_TYPES.TRANSFER) {
+    const effectiveRouteId =
+      updateData.routeId !== undefined
+        ? updateData.routeId
+        : existingTrip.routeId;
     if (!effectiveRouteId) {
       throw new ApiError(400, TRIP_MESSAGES.ROUTE_REQUIRED);
     }
@@ -756,8 +764,10 @@ const reassign = async (
     }
 
     const routeId = trip.routeId?._id || trip.routeId;
-    const route = await routeService.getById(routeId);
-    validateRouteOriginWarehouse(route, driverWarehouseId);
+    if (routeId) {
+      const route = await routeService.getById(routeId);
+      validateRouteOriginWarehouse(route, driverWarehouseId);
+    }
 
     if (driver.status !== USER_STATUSES.ACTIVE) {
       throw new ApiError(400, TRIP_MESSAGES.NEW_DRIVER_NOT_ACTIVE);
