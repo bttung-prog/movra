@@ -154,6 +154,9 @@ const queryOrderSchema = Joi.object({
   customerId: objectId.optional(),
   tripId: objectId.optional(),
   routeId: objectId.optional(),
+  warehouseId: objectId.optional(),
+  destinationWarehouseId: objectId.optional(),
+  warehouseScope: Joi.string().valid("origin", "destination", "all").optional(),
   goodCategory: objectId.optional(),
   type: Joi.string()
     .valid(...orderTypeEnum)
@@ -238,6 +241,9 @@ const statsQuerySchema = Joi.object({
   customerId: objectId.optional(),
   tripId: objectId.optional(),
   routeId: objectId.optional(),
+  warehouseId: objectId.optional(),
+  destinationWarehouseId: objectId.optional(),
+  warehouseScope: Joi.string().valid("origin", "destination", "all").optional(),
   goodCategory: objectId.optional(),
   type: Joi.string()
     .valid(...orderTypeEnum)

@@ -98,16 +98,29 @@ const assertOrderWarehouseAccess = async (order, user) => {
 
   if (user?.role !== ROLES.DISPATCHER) return;
 
-  const tripId = order.tripId?._id || order.tripId;
-  if (tripId) {
-    if (order.warehouseId) {
-      checkWarehouseAccess(order.warehouseId, user);
-    }
-    await tripService.getById(tripId, false, user);
-    return;
+  const userWarehouseId = user.warehouseId?.toString();
+  const orderWarehouseId = (
+    order.warehouseId?._id || order.warehouseId
+  )?.toString();
+  const orderDestWarehouseId = (
+    order.destinationWarehouseId?._id || order.destinationWarehouseId
+  )?.toString();
+
+  const isOriginMatch = Boolean(
+    orderWarehouseId && orderWarehouseId === userWarehouseId,
+  );
+  const isDestMatch = Boolean(
+    orderDestWarehouseId && orderDestWarehouseId === userWarehouseId,
+  );
+
+  if (!isOriginMatch && !isDestMatch) {
+    throw new ApiError(403, WAREHOUSE_MESSAGES.ACCESS_DENIED);
   }
 
-  checkWarehouseAccess(order.warehouseId, user);
+  const tripId = order.tripId?._id || order.tripId;
+  if (tripId && isOriginMatch) {
+    await tripService.getById(tripId, false, user);
+  }
 };
 
 const getTripLoadMetrics = async (
@@ -207,13 +220,58 @@ const assertTripCapacity = async (
 };
 
 const scopeOrderFilter = async (filter, user) => {
-  if (user?.role !== ROLES.DISPATCHER) return filter;
+  const { warehouseScope, ...cleanFilter } = filter;
+
+  if (user?.role !== ROLES.DISPATCHER) {
+    return cleanFilter;
+  }
+
   if (!user.warehouseId) {
     throw new ApiError(403, WAREHOUSE_MESSAGES.DISPATCHER_NOT_ASSIGNED);
   }
 
+  const userWarehouseId = user.warehouseId.toString();
+
+  // If dispatcher queries inbound orders specifically
+  if (cleanFilter.destinationWarehouseId) {
+    if (cleanFilter.destinationWarehouseId.toString() !== userWarehouseId) {
+      throw new ApiError(403, WAREHOUSE_MESSAGES.ACCESS_DENIED);
+    }
+    return cleanFilter;
+  }
+
+  // If dispatcher queries outbound/origin orders specifically
+  if (cleanFilter.warehouseId) {
+    if (cleanFilter.warehouseId.toString() !== userWarehouseId) {
+      throw new ApiError(403, WAREHOUSE_MESSAGES.ACCESS_DENIED);
+    }
+    return cleanFilter;
+  }
+
+  // If dispatcher wants to see all orders involving their warehouse (both outbound and inbound)
+  if (warehouseScope === "all") {
+    return {
+      $and: [
+        cleanFilter,
+        {
+          $or: [
+            { warehouseId: user.warehouseId },
+            { destinationWarehouseId: user.warehouseId },
+          ],
+        },
+      ],
+    };
+  }
+
+  if (warehouseScope === "destination") {
+    return {
+      ...cleanFilter,
+      destinationWarehouseId: user.warehouseId,
+    };
+  }
+
   return {
-    ...filter,
+    ...cleanFilter,
     warehouseId: user.warehouseId,
   };
 };
