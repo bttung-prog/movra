@@ -36,8 +36,12 @@ const getAll = async (req, res, next) => {
       customerId,
       tripId,
       routeId,
+      warehouseId,
+      destinationWarehouseId,
+      warehouseScope,
       goodCategory,
       type,
+      shippingMode,
     } = req.query;
 
     const filter = {};
@@ -80,6 +84,22 @@ const getAll = async (req, res, next) => {
       filter.type = type;
     }
 
+    if (shippingMode) {
+      filter.shippingMode = shippingMode;
+    }
+
+    if (warehouseId) {
+      filter.warehouseId = warehouseId;
+    }
+
+    if (destinationWarehouseId) {
+      filter.destinationWarehouseId = destinationWarehouseId;
+    }
+
+    if (warehouseScope) {
+      filter.warehouseScope = warehouseScope;
+    }
+
     const result = await orderService.getAll({
       filter,
       page,
@@ -97,7 +117,7 @@ const getMyOrders = async (req, res, next) => {
   try {
     const page = parseInt(req.query.page, 10) || 1;
     const limit = parseInt(req.query.limit, 10) || 10;
-    const { search, status, paymentStatus, type } = req.query;
+    const { search, status, paymentStatus, type, shippingMode } = req.query;
 
     const filter = {};
 
@@ -121,6 +141,10 @@ const getMyOrders = async (req, res, next) => {
 
     if (type) {
       filter.type = type;
+    }
+
+    if (shippingMode) {
+      filter.shippingMode = shippingMode;
     }
 
     const result = await orderService.getMyOrders({
@@ -335,7 +359,17 @@ const deleteById = async (req, res, next) => {
 
 const getStatsByStatus = async (req, res, next) => {
   try {
-    const { customerId, tripId, routeId, goodCategory, type } = req.query;
+    const {
+      customerId,
+      tripId,
+      routeId,
+      warehouseId,
+      destinationWarehouseId,
+      warehouseScope,
+      goodCategory,
+      type,
+      shippingMode,
+    } = req.query;
 
     const filter = {};
 
@@ -357,6 +391,22 @@ const getStatsByStatus = async (req, res, next) => {
 
     if (type) {
       filter.type = type;
+    }
+
+    if (shippingMode) {
+      filter.shippingMode = shippingMode;
+    }
+
+    if (warehouseId) {
+      filter.warehouseId = warehouseId;
+    }
+
+    if (destinationWarehouseId) {
+      filter.destinationWarehouseId = destinationWarehouseId;
+    }
+
+    if (warehouseScope) {
+      filter.warehouseScope = warehouseScope;
     }
 
     const stats = await orderService.getStatsByStatus({

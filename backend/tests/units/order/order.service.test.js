@@ -124,7 +124,10 @@ vi.mock("../../../src/configs/logger.js", () => ({
   default: { error: mocks.loggerError },
 }));
 
-import { ORDER_MESSAGES } from "../../../src/constants/messages.js";
+import {
+  ORDER_MESSAGES,
+  WAREHOUSE_MESSAGES,
+} from "../../../src/constants/messages.js";
 import { ROLES } from "../../../src/constants/roles.js";
 import orderService from "../../../src/modules/order/order.service.js";
 
@@ -1088,6 +1091,42 @@ describe("orderService.getById", () => {
       message: ORDER_MESSAGES.ACCESS_DENIED,
     });
   });
+
+  it("allows a destination warehouse dispatcher to view inbound order details", async () => {
+    mocks.findById.mockResolvedValue({
+      ...existingOrder,
+      warehouseId: "warehouse-origin",
+      destinationWarehouseId: "warehouse-dest",
+    });
+
+    await expect(
+      orderService.getById("order-1", true, {
+        role: ROLES.DISPATCHER,
+        warehouseId: "warehouse-dest",
+      }),
+    ).resolves.toMatchObject({
+      _id: "order-1",
+      destinationWarehouseId: "warehouse-dest",
+    });
+  });
+
+  it("rejects an unrelated warehouse dispatcher from viewing order details", async () => {
+    mocks.findById.mockResolvedValue({
+      ...existingOrder,
+      warehouseId: "warehouse-origin",
+      destinationWarehouseId: "warehouse-dest",
+    });
+
+    await expect(
+      orderService.getById("order-1", true, {
+        role: ROLES.DISPATCHER,
+        warehouseId: "warehouse-other",
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 403,
+      message: WAREHOUSE_MESSAGES.ACCESS_DENIED,
+    });
+  });
 });
 
 describe("orderService.getAll and getMyOrders", () => {
@@ -1162,6 +1201,69 @@ describe("orderService.getAll and getMyOrders", () => {
       sort: { createdAt: -1 },
     });
     expect(mocks.getTripIdsByWarehouseId).not.toHaveBeenCalled();
+  });
+
+  it("allows a dispatcher to query inbound orders by destinationWarehouseId", async () => {
+    mocks.findAll.mockResolvedValue([existingOrder]);
+    mocks.countAll.mockResolvedValue(1);
+
+    await orderService.getAll({
+      filter: {
+        destinationWarehouseId: "warehouse-dest",
+        status: "transporting",
+      },
+      user: { role: ROLES.DISPATCHER, warehouseId: "warehouse-dest" },
+    });
+
+    expect(mocks.findAll).toHaveBeenCalledWith({
+      filter: {
+        deletedAt: null,
+        status: "transporting",
+        destinationWarehouseId: "warehouse-dest",
+      },
+      skip: 0,
+      limit: 10,
+      sort: { createdAt: -1 },
+    });
+  });
+
+  it("rejects a dispatcher querying a foreign destination warehouse", async () => {
+    await expect(
+      orderService.getAll({
+        filter: { destinationWarehouseId: "warehouse-foreign" },
+        user: { role: ROLES.DISPATCHER, warehouseId: "warehouse-own" },
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 403,
+      message: WAREHOUSE_MESSAGES.ACCESS_DENIED,
+    });
+  });
+
+  it("allows a dispatcher to query all warehouse-related orders with warehouseScope: all", async () => {
+    mocks.findAll.mockResolvedValue([existingOrder]);
+    mocks.countAll.mockResolvedValue(1);
+
+    await orderService.getAll({
+      filter: { warehouseScope: "all" },
+      user: { role: ROLES.DISPATCHER, warehouseId: "warehouse-1" },
+    });
+
+    expect(mocks.findAll).toHaveBeenCalledWith({
+      filter: {
+        $and: [
+          { deletedAt: null },
+          {
+            $or: [
+              { warehouseId: "warehouse-1" },
+              { destinationWarehouseId: "warehouse-1" },
+            ],
+          },
+        ],
+      },
+      skip: 0,
+      limit: 10,
+      sort: { createdAt: -1 },
+    });
   });
 });
 
