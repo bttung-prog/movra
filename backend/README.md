@@ -10,11 +10,12 @@ The API is built with Node.js and Express and stores application data in MongoDB
 
 - User registration and login, access-token refresh, and logout.
 - Role-based access for administrators, dispatchers, drivers, warehouse staff, and customers.
-- Customer, staff, driver, vehicle, warehouse, and address management.
-- Order pricing, creation, assignment to trips, cancellation, delivery updates, and tracking history.
+- B2B customer profiles with company details, tax codes, credit limits, payment terms, and contract discount rates.
+- Customer, staff, driver, vehicle, warehouse, and address management, including reusable geolocated pickup/delivery points.
+- Order pricing with multi-stage routing, shipping modes, and contract discounts, plus creation, assignment to trips, cancellation, delivery updates, and tracking history.
 - Route and trip scheduling, including pickup, delivery, and transfer trips, with driver and vehicle availability checks.
 - Inventory, receipt, issue, and maintenance workflows.
-- Payment, customer wallet, invoice, COD collection, and settlement workflows.
+- Payment, customer wallet, invoice, COD collection, and settlement workflows, including consolidated period invoices, automatic VAT, and multi-order payment allocation.
 - Dashboard, feedback, failure-reason, and notification endpoints.
 - Local proof-of-delivery image uploads.
 - Unit and integration tests using Vitest and Supertest.
@@ -91,12 +92,12 @@ MongoDB is the system of record. Mongoose models use MongoDB `ObjectId` referenc
 The main data domains include:
 
 - **Identity and access:** users and refresh tokens.
-- **Customer accounts:** customer profiles, wallet balances, spending totals, and loyalty points.
+- **Customer accounts:** B2B customer profiles (company name, tax code, contact details), credit limits, payment terms, contract discount rates, wallet balances, and spending totals.
 - **Operations:** orders, order tracking logs, routes, trips, trip assignments, and trip tracking logs.
 - **Resources:** warehouses, staff, dispatchers, drivers, vehicles, vehicle types, and vehicle usage logs.
 - **Warehouse workflows:** inventory, receipts, issues, and goods categories.
 - **Finance:** payments, invoices, wallet transactions, and COD settlements.
-- **Supporting records:** addresses, maintenance schedules/logs, feedback, notifications, and failure reasons.
+- **Supporting records:** addresses (with optional labels and pickup/delivery coordinates), maintenance schedules/logs, feedback, notifications, and failure reasons.
 
 Unique constraints and indexes are defined on selected fields and query patterns, including user email/phone, generated order/trip codes, and frequently filtered order/trip status and relationship fields. Some records use a `deletedAt` field for soft deletion. Database transactions are used in workflows that need coordinated updates; use a MongoDB deployment that supports transactions when running those workflows.
 
@@ -146,6 +147,37 @@ Creating an order does not charge the customer's wallet. It creates the order wi
 - `bank`: returns a VietQR image URL and remains pending until an administrator or dispatcher verifies the transfer through `PATCH /api/v1/payments/:paymentId/verify`.
 
 Configure `VIETQR_BANK_ID` and `VIETQR_ACCOUNT_NUMBER` in the backend environment before accepting bank payments. `VIETQR_ACCOUNT_NAME` is optional, and `VIETQR_TEMPLATE` defaults to `compact2`. The QR transfer uses the payment code as its transfer description. VietQR only creates the static QR; it does not confirm that money arrived, so staff verification is still required.
+
+### B2B credit limit
+
+When a customer's `defaultPaymentTerms` is `net_15` or `net_30`, creating an order requires available credit:
+
+```text
+invoicedDebt + unbilledCommitment + new shipping fee <= creditLimit
+```
+
+- `invoicedDebt`: remaining amount of active invoices (`draft`, `issued`, `partially_paid`, `overdue`).
+- `unbilledCommitment`: remaining shipping fee of unpaid orders that are not linked to an active invoice.
+- `creditLimit = 0` means no credit limit has been approved; postpaid orders are rejected with HTTP `409`.
+- Immediate-payment customers are not affected. Each order stores a `paymentTerms` snapshot so later contract changes do not alter existing orders.
+
+Contract discounts (`Customer.contractDiscountRate`) are applied to the gross shipping fee before the credit-limit check. Orders snapshot `shippingFeeBeforeDiscount`, `discountRateApplied`, and `discountAmount`, so historical pricing stays stable when a contract changes. Quote requests may include a `customerId`; customers always use their own profile, while staff accounts can quote on behalf of a customer.
+
+Customer listing (`GET /api/v1/customers?search=`) searches by company name or tax code. Contact person details (name, phone, linked user name/email/phone) are available on the customer detail endpoint. Administrators can review credit-term changes at `GET /api/v1/customers/:customerId/credit-history`; each entry records the changed fields, previous/new values, the admin who made the change, and an optional note.
+
+### Consolidated invoices and VAT
+
+`POST /api/v1/invoices` accepts one of:
+
+- `orderId` for a single order (legacy).
+- `orderIds` for a specific set of orders.
+- `billingPeriod: { fromDate, toDate }` together with `customerId` to collect every billable order created in that period that is not already on an active invoice.
+
+Order-linked invoices generate one line item per order. Every order must belong to the same customer, must not be cancelled, must not have its shipping fee paid, and must not already belong to an active invoice.
+
+`vatRate` defaults to `10` (`DEFAULT_VAT_RATE`), and `tax` is calculated as `round(subTotal × vatRate / 100)` unless `tax` is explicitly provided. The invoice snapshots `companyName`, `taxCode`, and `companyAddress` from the customer profile.
+
+Payments are recorded against the invoice. When an invoice links multiple orders, the cumulative paid amount is allocated oldest-first (by order creation time), and refunds recompute the allocation from the new paid amount.
 
 | Resource                           | Base path                                                                        |
 | ---------------------------------- | -------------------------------------------------------------------------------- |
