@@ -5,12 +5,16 @@ const mocks = vi.hoisted(() => ({
   findAll: vi.fn(),
   countAll: vi.fn(),
   findIdsByOrderIds: vi.fn(),
+  findActiveOrderLinksByCustomer: vi.fn(),
+  findActiveByOrderIds: vi.fn(),
   findById: vi.fn(),
   findByCode: vi.fn(),
   findByOrderId: vi.fn(),
   updateById: vi.fn(),
   getStats: vi.fn(),
   getOrderById: vi.fn(),
+  getOrderByIds: vi.fn(),
+  getBillableOrdersForInvoice: vi.fn(),
   getOrderIdsByWarehouseId: vi.fn(),
   getCustomerById: vi.fn(),
   generateCode: vi.fn(),
@@ -25,6 +29,8 @@ vi.mock("../../../src/modules/invoice/invoice.repository.js", () => ({
     findAll: mocks.findAll,
     countAll: mocks.countAll,
     findIdsByOrderIds: mocks.findIdsByOrderIds,
+    findActiveOrderLinksByCustomer: mocks.findActiveOrderLinksByCustomer,
+    findActiveByOrderIds: mocks.findActiveByOrderIds,
     findById: mocks.findById,
     findByCode: mocks.findByCode,
     findByOrderId: mocks.findByOrderId,
@@ -44,6 +50,8 @@ vi.mock("../../../src/modules/notification/notification.service.js", () => ({
 vi.mock("../../../src/modules/order/order.service.js", () => ({
   default: {
     getById: mocks.getOrderById,
+    getByIds: mocks.getOrderByIds,
+    getBillableOrdersForInvoice: mocks.getBillableOrdersForInvoice,
     getIdsByWarehouseId: mocks.getOrderIdsByWarehouseId,
   },
 }));
@@ -79,6 +87,16 @@ const linkedOrder = {
   shippingFeePaid: false,
 };
 
+const secondOrderId = "order-2";
+const secondOrder = {
+  _id: secondOrderId,
+  orderCode: "ORD-0002",
+  customerId,
+  status: "created",
+  shippingFee: 1500,
+  shippingFeePaid: false,
+};
+
 const draftInvoice = {
   _id: invoiceId,
   invoiceCode,
@@ -103,8 +121,12 @@ beforeEach(() => {
   mocks.findById.mockResolvedValue({ ...draftInvoice });
   mocks.findByCode.mockResolvedValue({ ...draftInvoice });
   mocks.findByOrderId.mockResolvedValue(null);
+  mocks.findActiveOrderLinksByCustomer.mockResolvedValue([]);
+  mocks.findActiveByOrderIds.mockResolvedValue(null);
   mocks.updateById.mockResolvedValue({ ...draftInvoice });
   mocks.getOrderById.mockResolvedValue(linkedOrder);
+  mocks.getOrderByIds.mockResolvedValue([linkedOrder]);
+  mocks.getBillableOrdersForInvoice.mockResolvedValue([]);
   mocks.getOrderIdsByWarehouseId.mockResolvedValue([orderId]);
   mocks.getCustomerById.mockResolvedValue({ _id: customerId });
   mocks.generateCode.mockReturnValue(invoiceCode);
@@ -127,9 +149,12 @@ describe("invoiceService.create", () => {
         invoiceCode,
         customerId,
         orderId,
+        orderIds: [orderId],
         subTotal: linkedOrder.shippingFee,
-        totalAmount: linkedOrder.shippingFee,
-        remainingAmount: linkedOrder.shippingFee,
+        tax: 250,
+        vatRate: 10,
+        totalAmount: 2750,
+        remainingAmount: 2750,
         status: INVOICE_STATUSES.DRAFT,
         items: [
           {
@@ -139,6 +164,137 @@ describe("invoiceService.create", () => {
             amount: linkedOrder.shippingFee,
           },
         ],
+      }),
+      null,
+    );
+  });
+
+  it("creates a consolidated invoice from multiple orders with VAT and company snapshot", async () => {
+    mocks.getOrderByIds.mockResolvedValue([linkedOrder, secondOrder]);
+    mocks.getCustomerById.mockResolvedValue({
+      _id: customerId,
+      companyName: "Movra JSC",
+      taxCode: "0312345678",
+      companyAddress: "12 Nguyen Hue",
+    });
+
+    await invoiceService.create({ orderIds: [orderId, secondOrderId] });
+
+    expect(mocks.getOrderByIds).toHaveBeenCalledWith([orderId, secondOrderId]);
+    expect(mocks.findActiveByOrderIds).toHaveBeenCalledWith([
+      orderId,
+      secondOrderId,
+    ]);
+    expect(mocks.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        customerId,
+        orderId: null,
+        orderIds: [orderId, secondOrderId],
+        companyName: "Movra JSC",
+        taxCode: "0312345678",
+        companyAddress: "12 Nguyen Hue",
+        subTotal: 4000,
+        tax: 400,
+        vatRate: 10,
+        totalAmount: 4400,
+        remainingAmount: 4400,
+        items: [
+          expect.objectContaining({
+            description: "Cước vận chuyển cho đơn hàng ORD-0001",
+            unitPrice: 2500,
+          }),
+          expect.objectContaining({
+            description: "Cước vận chuyển cho đơn hàng ORD-0002",
+            unitPrice: 1500,
+          }),
+        ],
+      }),
+      null,
+    );
+  });
+
+  it("collects billable orders in a billing period and excludes invoiced orders", async () => {
+    const fromDate = new Date("2026-01-01T00:00:00.000Z");
+    const toDate = new Date("2026-01-31T00:00:00.000Z");
+    mocks.findActiveOrderLinksByCustomer.mockResolvedValue([
+      { orderId: "order-9", orderIds: [] },
+    ]);
+    mocks.getBillableOrdersForInvoice.mockResolvedValue([
+      linkedOrder,
+      secondOrder,
+    ]);
+
+    await invoiceService.create({
+      customerId,
+      billingPeriod: { fromDate, toDate },
+    });
+
+    expect(mocks.findActiveOrderLinksByCustomer).toHaveBeenCalledWith(
+      customerId,
+    );
+    expect(mocks.getBillableOrdersForInvoice).toHaveBeenCalledWith({
+      customerId,
+      fromDate,
+      toDate,
+      excludeOrderIds: ["order-9"],
+    });
+    expect(mocks.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderIds: [orderId, secondOrderId],
+        billingPeriod: { fromDate, toDate },
+        subTotal: 4000,
+        tax: 400,
+        totalAmount: 4400,
+      }),
+      null,
+    );
+  });
+
+  it("rejects a billing period with no eligible orders", async () => {
+    mocks.getBillableOrdersForInvoice.mockResolvedValue([]);
+
+    await expect(
+      invoiceService.create({
+        customerId,
+        billingPeriod: {
+          fromDate: new Date("2026-01-01T00:00:00.000Z"),
+          toDate: new Date("2026-01-31T00:00:00.000Z"),
+        },
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: INVOICE_MESSAGES.NO_ELIGIBLE_ORDERS,
+    });
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects orders that already belong to another active invoice", async () => {
+    mocks.getOrderByIds.mockResolvedValue([linkedOrder, secondOrder]);
+    mocks.findActiveByOrderIds.mockResolvedValue({
+      invoiceCode: "INV-EXISTING",
+    });
+
+    await expect(
+      invoiceService.create({ orderIds: [orderId, secondOrderId] }),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: INVOICE_MESSAGES.ALREADY_EXISTS,
+    });
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  it("applies an explicit VAT rate to the invoice", async () => {
+    mocks.getCustomerById.mockResolvedValue({ _id: customerId });
+
+    await invoiceService.create({ orderId, vatRate: 8 });
+
+    expect(mocks.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        subTotal: 2500,
+        tax: 200,
+        vatRate: 8,
+        totalAmount: 2700,
+        remainingAmount: 2700,
       }),
       null,
     );
@@ -189,7 +345,7 @@ describe("invoiceService.create", () => {
     ],
     [
       "discount greater than subtotal and tax",
-      { customerId, subTotal: 100, discount: 101 },
+      { customerId, subTotal: 100, discount: 111 },
       INVOICE_MESSAGES.DISCOUNT_EXCEEDS_TOTAL,
     ],
     ["missing customer", { subTotal: 100 }, INVOICE_MESSAGES.CUSTOMER_REQUIRED],
@@ -222,16 +378,6 @@ describe("invoiceService.create", () => {
     expect(mocks.create).not.toHaveBeenCalled();
   });
 
-  it("requires dispatcher-created invoices to be linked to an order", async () => {
-    await expect(
-      invoiceService.create({ customerId }, null, { role: ROLES.DISPATCHER }),
-    ).rejects.toMatchObject({
-      statusCode: 403,
-      message: INVOICE_MESSAGES.DISPATCHER_ORDER_REQUIRED,
-    });
-    expect(mocks.create).not.toHaveBeenCalled();
-  });
-
   it("maps duplicate-order database conflicts to an invoice conflict", async () => {
     mocks.create.mockRejectedValue({
       code: 11000,
@@ -242,6 +388,22 @@ describe("invoiceService.create", () => {
       statusCode: 409,
       message: INVOICE_MESSAGES.ALREADY_EXISTS,
     });
+  });
+});
+
+describe("invoiceService.getActiveOrderIdsByCustomer", () => {
+  it("flattens and deduplicates orderId and orderIds across active invoices", async () => {
+    mocks.findActiveOrderLinksByCustomer.mockResolvedValue([
+      { orderId: "order-1", orderIds: ["order-2"] },
+      { orderId: null, orderIds: ["order-2", "order-3"] },
+    ]);
+
+    const result = await invoiceService.getActiveOrderIdsByCustomer(customerId);
+
+    expect(mocks.findActiveOrderLinksByCustomer).toHaveBeenCalledWith(
+      customerId,
+    );
+    expect(result).toEqual(["order-1", "order-2", "order-3"]);
   });
 });
 
@@ -282,7 +444,12 @@ describe("invoiceService.getAll", () => {
         filter: {
           $and: [
             { status: INVOICE_STATUSES.ISSUED },
-            { orderId: { $in: [orderId] } },
+            {
+              $or: [
+                { orderId: { $in: [orderId] } },
+                { orderIds: { $in: [orderId] } },
+              ],
+            },
           ],
         },
       }),

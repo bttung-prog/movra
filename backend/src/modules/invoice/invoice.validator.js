@@ -36,9 +36,15 @@ const invoiceItemSchema = Joi.object({
 
 const createInvoiceSchema = Joi.object({
   orderId: objectId.optional(),
+  orderIds: Joi.array().items(objectId).min(1).unique().optional(),
+  billingPeriod: Joi.object({
+    fromDate: Joi.date().iso().required(),
+    toDate: Joi.date().iso().min(Joi.ref("fromDate")).required(),
+  }).optional(),
   customerId: objectId.optional(),
   subTotal: moneyAmount().optional(),
-  tax: moneyAmount().default(0),
+  tax: moneyAmount().optional(),
+  vatRate: Joi.number().min(0).max(100).optional(),
   discount: moneyAmount().default(0),
   dueDate: Joi.date().iso().optional(),
   paymentTerms: Joi.string()
@@ -46,11 +52,12 @@ const createInvoiceSchema = Joi.object({
     .default(PAYMENT_TERMS.IMMEDIATE),
   items: Joi.array().items(invoiceItemSchema).optional(),
   notes: Joi.string().trim().allow("").optional(),
-}).or("orderId", "customerId");
+}).or("orderId", "orderIds", "customerId", "billingPeriod");
 
 const updateInvoiceSchema = Joi.object({
   subTotal: moneyAmount().optional(),
   tax: moneyAmount().optional(),
+  vatRate: Joi.number().min(0).max(100).optional(),
   discount: moneyAmount().optional(),
   dueDate: Joi.date().iso().optional(),
   paymentTerms: Joi.string()

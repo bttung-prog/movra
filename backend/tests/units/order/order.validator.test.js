@@ -26,6 +26,7 @@ describe("orderValidator.createOrderSchema", () => {
     expect(value.codAmount).toBe(0);
     expect(value.type).toBe("standard");
     expect(value.shippingMode).toBe("consolidated");
+    expect(value.paymentTerms).toBeUndefined();
   });
 
   it.each([
@@ -37,6 +38,7 @@ describe("orderValidator.createOrderSchema", () => {
     ["negative COD amount", { codAmount: -1 }],
     ["unsupported order type", { type: "overnight" }],
     ["unsupported shipping mode", { shippingMode: "air" }],
+    ["client-supplied payment terms", { paymentTerms: "net_30" }],
     [
       "pickup latitude outside valid range",
       { pickupLocation: { latitude: 91, longitude: 0 } },

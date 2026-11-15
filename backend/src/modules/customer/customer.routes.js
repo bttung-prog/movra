@@ -10,7 +10,11 @@ import customerController from "./customer.controller.js";
 
 const customerRouter = express.Router();
 
-customerRouter.get("/me", authorize(ROLES.CUSTOMER), customerController.getMyProfile);
+customerRouter.get(
+  "/me",
+  authorize(ROLES.CUSTOMER),
+  customerController.getMyProfile,
+);
 
 customerRouter.patch(
   "/me",
@@ -24,6 +28,14 @@ customerRouter.get(
   authorize(ROLES.ADMIN),
   validate(customerValidator.getAllSchema, "query"),
   customerController.getAll,
+);
+
+customerRouter.get(
+  "/:customerId/credit-history",
+  authorize(ROLES.ADMIN),
+  validate(customerValidator.getByIdSchema, "params"),
+  validate(customerValidator.creditHistoryQuerySchema, "query"),
+  customerController.getCreditHistory,
 );
 
 customerRouter.get(

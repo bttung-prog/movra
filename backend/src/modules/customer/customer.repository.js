@@ -42,7 +42,12 @@ const findByUserId = (userId, session = null) => {
     .lean();
 };
 
-const updateById = (customerId, updateData, session = null, conditions = {}) => {
+const updateById = (
+  customerId,
+  updateData,
+  session = null,
+  conditions = {},
+) => {
   return Customer.findOneAndUpdate(
     { ...conditions, _id: customerId },
     updateData,

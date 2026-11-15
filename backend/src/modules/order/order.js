@@ -4,6 +4,8 @@ import { ORDER_STATUSES } from "../../constants/orderStatuses.js";
 import { PAYMENT_STATUSES } from "../../constants/paymentStatuses.js";
 import { SERVICE_TYPES } from "../../constants/serviceTypes.js";
 import { SHIPPING_MODES } from "../../constants/shippingModes.js";
+import { PAYMENT_TERMS } from "../../constants/paymentTerms.js";
+import { PAYMENT_METHODS } from "../../constants/paymentMethods.js";
 
 const orderSchema = new mongoose.Schema(
   {
@@ -136,6 +138,24 @@ const orderSchema = new mongoose.Schema(
       required: true,
     },
 
+    shippingFeeBeforeDiscount: {
+      type: Number,
+      min: 0,
+    },
+
+    discountRateApplied: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100,
+    },
+
+    discountAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
     shippingFeePaid: {
       type: Boolean,
       default: false,
@@ -145,11 +165,6 @@ const orderSchema = new mongoose.Schema(
       type: Number,
       default: 0,
       min: 0,
-    },
-
-    loyaltyPointsAwarded: {
-      type: Boolean,
-      default: false,
     },
 
     totalAmount: {
@@ -191,6 +206,12 @@ const orderSchema = new mongoose.Schema(
       default: SHIPPING_MODES.CONSOLIDATED,
     },
 
+    paymentTerms: {
+      type: String,
+      enum: Object.values(PAYMENT_TERMS),
+      default: PAYMENT_TERMS.IMMEDIATE,
+    },
+
     status: {
       type: String,
       enum: Object.values(ORDER_STATUSES),
@@ -211,6 +232,7 @@ const orderSchema = new mongoose.Schema(
 
     paymentMethod: {
       type: String,
+      enum: Object.values(PAYMENT_METHODS),
       default: null,
       trim: true,
     },
@@ -256,6 +278,7 @@ const orderSchema = new mongoose.Schema(
 
 orderSchema.index({ customerId: 1 });
 orderSchema.index({ customerId: 1, isFeedbacked: 1 });
+orderSchema.index({ customerId: 1, shippingFeePaid: 1, deletedAt: 1 });
 orderSchema.index({ tripId: 1 });
 orderSchema.index({ warehouseId: 1 });
 orderSchema.index({ destinationWarehouseId: 1 });

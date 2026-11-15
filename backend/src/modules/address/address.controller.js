@@ -9,10 +9,13 @@ const create = async (req, res, next) => {
     const newAddress = await addressService.create({
       customerId: req.user.customerId,
       receiverName: req.body.receiverName,
+      label: req.body.label,
       province: req.body.province,
       district: req.body.district,
       ward: req.body.ward,
       detail: req.body.detail,
+      latitude: req.body.latitude,
+      longitude: req.body.longitude,
       postalCode: req.body.postalCode,
       isDefault: req.body.isDefault,
     });

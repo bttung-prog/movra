@@ -31,10 +31,13 @@ const checkAddressOwnership = (address, customerId, action = "truy cập") => {
 const create = async ({
   customerId,
   receiverName,
+  label,
   province,
   district,
   ward,
   detail,
+  latitude,
+  longitude,
   postalCode,
   isDefault: requestedDefault,
 }) => {
@@ -45,10 +48,13 @@ const create = async ({
   const payload = {
     customerId,
     receiverName,
+    label,
     province,
     district,
     ward,
     detail,
+    latitude,
+    longitude,
     postalCode,
     isDefault,
   };

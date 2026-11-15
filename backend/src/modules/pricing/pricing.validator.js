@@ -37,6 +37,7 @@ const calculateFeeSchema = Joi.object({
   pickupLocation: locationSchema.optional(),
   deliveryLocation: locationSchema.optional(),
   goodsCategoryId: objectId.optional(),
+  customerId: objectId.optional(),
 })
   .or("distance", "routeId", "pickupLocation")
   .and("pickupLocation", "deliveryLocation")

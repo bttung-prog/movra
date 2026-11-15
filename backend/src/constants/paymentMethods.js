@@ -3,7 +3,6 @@ export const PAYMENT_METHODS = {
   BANK: "bank",
   E_WALLET: "e_wallet",
   WALLET_BALANCE: "wallet_balance",
-  OTHER: "other",
 };
 
 export const PAYER_TYPES = {

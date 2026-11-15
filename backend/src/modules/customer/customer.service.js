@@ -1,10 +1,14 @@
+import mongoose from "mongoose";
+
+import { CREDIT_AUDIT_FIELDS } from "../../constants/creditAuditFields.js";
 import { CUSTOMER_MESSAGES } from "../../constants/messages.js";
-import { ROLES } from "../../constants/roles.js";
 
 import ApiError from "../../utils/ApiError.js";
+import { escapeRegex } from "../../utils/regexUtils.js";
 
 import userService from "../user/user.service.js";
 
+import customerCreditLogRepository from "./customerCreditLog.repository.js";
 import customerRepository from "./customer.repository.js";
 
 const create = async (userId, session = null) => {
@@ -32,44 +36,22 @@ const getAll = async ({
   const limitNumber = Math.max(1, parseInt(limit, 10) || 10);
   const skip = (pageNumber - 1) * limitNumber;
 
+  let queryFilter = { ...filter };
   if (search && search.trim()) {
-    const matchingUsers = await userService.searchPaginated(search.trim(), {
-      page: pageNumber,
-      limit: limitNumber,
-      filter: { role: ROLES.CUSTOMER },
-    });
-    const userIds = matchingUsers.data.map((user) => user._id);
-    let customers = [];
-
-    if (userIds.length > 0) {
-      const pageCustomers = await customerRepository.findAll({
-        filter: { ...filter, userId: { $in: userIds } },
-        skip: 0,
-        limit: userIds.length,
-      });
-      const customersByUserId = new Map(
-        pageCustomers.map((customer) => [
-          String(customer.userId?._id || customer.userId),
-          customer,
-        ]),
-      );
-      customers = matchingUsers.data
-        .map((user) => customersByUserId.get(String(user._id)))
-        .filter(Boolean);
-    }
-
-    return {
-      data: customers,
-      pagination: {
-        page: pageNumber,
-        limit: limitNumber,
-        totalCustomers: matchingUsers.pagination.totalUsers,
-        totalPages: matchingUsers.pagination.totalPages,
-      },
+    const keyword = escapeRegex(search.trim());
+    queryFilter = {
+      $and: [
+        filter,
+        {
+          $or: [
+            { companyName: { $regex: keyword, $options: "i" } },
+            { taxCode: { $regex: keyword, $options: "i" } },
+          ],
+        },
+      ],
     };
   }
 
-  const queryFilter = { ...filter };
   const [customers, totalCustomers] = await Promise.all([
     customerRepository.findAll({
       filter: queryFilter,
@@ -158,6 +140,96 @@ const updateByUserId = async (userId, updateData) => {
   return customerRepository.updateById(customer._id, updateData);
 };
 
+const buildCreditChanges = (existingCustomer, updates) => {
+  const changes = {};
+
+  for (const field of CREDIT_AUDIT_FIELDS) {
+    if (!Object.prototype.hasOwnProperty.call(updates, field)) {
+      continue;
+    }
+
+    const previousValue = existingCustomer?.[field] ?? null;
+    const nextValue = updates[field];
+
+    if (previousValue !== nextValue) {
+      changes[field] = {
+        from: previousValue,
+        to: nextValue,
+      };
+    }
+  }
+
+  return changes;
+};
+
+const updateByAdmin = async (customerId, updateData, changedBy = null) => {
+  const { creditNote = "", ...customerUpdate } = updateData;
+  const existingCustomer = await getById(customerId);
+  const changes = buildCreditChanges(existingCustomer, customerUpdate);
+
+  if (Object.keys(changes).length === 0) {
+    return customerRepository.updateById(customerId, customerUpdate);
+  }
+
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const updatedCustomer = await customerRepository.updateById(
+      customerId,
+      customerUpdate,
+      session,
+    );
+
+    if (updatedCustomer) {
+      await customerCreditLogRepository.create(
+        {
+          customerId,
+          changedBy,
+          changes,
+          note: creditNote,
+        },
+        session,
+      );
+    }
+
+    await session.commitTransaction();
+    return updatedCustomer;
+  } catch (error) {
+    await session.abortTransaction();
+    throw error;
+  } finally {
+    session.endSession();
+  }
+};
+
+const getCreditHistory = async (customerId, { page = 1, limit = 20 } = {}) => {
+  await getById(customerId);
+
+  const pageNumber = Math.max(1, parseInt(page, 10) || 1);
+  const limitNumber = Math.max(1, parseInt(limit, 10) || 20);
+  const skip = (pageNumber - 1) * limitNumber;
+
+  const [logs, total] = await Promise.all([
+    customerCreditLogRepository.findByCustomerId({
+      customerId,
+      skip,
+      limit: limitNumber,
+    }),
+    customerCreditLogRepository.countByCustomerId(customerId),
+  ]);
+
+  return {
+    data: logs,
+    pagination: {
+      page: pageNumber,
+      limit: limitNumber,
+      total,
+      totalPages: Math.ceil(total / limitNumber),
+    },
+  };
+};
+
 export default {
   create,
   getAll,
@@ -165,6 +237,8 @@ export default {
   getByUserId,
   updateById,
   updateByUserId,
+  updateByAdmin,
+  getCreditHistory,
   debitWallet,
   adjustWalletBalance,
 };

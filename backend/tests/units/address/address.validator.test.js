@@ -6,10 +6,13 @@ const addressId = "507f1f77bcf86cd799439011";
 
 const validAddress = {
   receiverName: "  Test Receiver ",
+  label: "  Kho xưởng A ",
   province: "  Province ",
   district: "  District ",
   ward: "  Ward ",
   detail: "  123 Main Street ",
+  latitude: 10.7769,
+  longitude: 106.7009,
   postalCode: " 12345 ",
   isDefault: true,
 };
@@ -22,10 +25,13 @@ describe("addressValidator.createSchema", () => {
     expect(error).toBeUndefined();
     expect(value).toMatchObject({
       receiverName: "Test Receiver",
+      label: "Kho xưởng A",
       province: "Province",
       district: "District",
       ward: "Ward",
       detail: "123 Main Street",
+      latitude: 10.7769,
+      longitude: 106.7009,
       postalCode: "12345",
       isDefault: true,
     });
@@ -51,6 +57,19 @@ describe("addressValidator.createSchema", () => {
     ["missing ward", { ...validAddress, ward: undefined }],
     ["blank detail", { ...validAddress, detail: " " }],
     ["postal code too long", { ...validAddress, postalCode: "1".repeat(11) }],
+    ["label too long", { ...validAddress, label: "L".repeat(101) }],
+    ["latitude below -90", { ...validAddress, latitude: -91 }],
+    ["latitude above 90", { ...validAddress, latitude: 91 }],
+    ["longitude below -180", { ...validAddress, longitude: -181 }],
+    ["longitude above 180", { ...validAddress, longitude: 181 }],
+    [
+      "latitude without longitude",
+      { ...validAddress, latitude: 10.5, longitude: undefined },
+    ],
+    [
+      "longitude without latitude",
+      { ...validAddress, latitude: undefined, longitude: 106.5 },
+    ],
     ["non-boolean default flag", { ...validAddress, isDefault: "yes" }],
   ])("rejects %s", (_case, payload) => {
     expect(addressValidator.createSchema.validate(payload).error).toBeDefined();
@@ -65,13 +84,23 @@ describe("addressValidator.updateSchema", () => {
 
     const { error, value } = addressValidator.updateSchema.validate({
       receiverName: "  Updated Receiver ",
+      label: "  Đại lý Miền Trung ",
+      latitude: 16.0544,
+      longitude: 108.2022,
       isDefault: true,
     });
     expect(error).toBeUndefined();
     expect(value).toMatchObject({
       receiverName: "Updated Receiver",
+      label: "Đại lý Miền Trung",
+      latitude: 16.0544,
+      longitude: 108.2022,
       isDefault: true,
     });
+
+    expect(
+      addressValidator.updateSchema.validate({ latitude: 10.5 }).error,
+    ).toBeDefined();
   });
 
   it("rejects oversized update values", () => {

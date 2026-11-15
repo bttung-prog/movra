@@ -18,12 +18,55 @@ describe("invoiceValidator.createInvoiceSchema", () => {
 
     expect(error).toBeUndefined();
     expect(value).toMatchObject({
-      tax: 0,
       discount: 0,
       paymentTerms: "immediate",
     });
     expect(value.items[0].description).toBe("Delivery fee");
     expect(value.items[0].quantity).toBe(2);
+  });
+
+  it("accepts consolidated orders, a billing period, and a VAT rate", () => {
+    const { error, value } = invoiceValidator.createInvoiceSchema.validate({
+      customerId: "507f1f77bcf86cd799439011",
+      orderIds: ["507f1f77bcf86cd799439012", "507f1f77bcf86cd799439013"],
+      billingPeriod: {
+        fromDate: "2026-01-01",
+        toDate: "2026-01-31",
+      },
+      vatRate: 8,
+    });
+
+    expect(error).toBeUndefined();
+    expect(value.orderIds).toHaveLength(2);
+    expect(value.vatRate).toBe(8);
+  });
+
+  it("rejects duplicate orders, inverted billing periods, and invalid VAT rates", () => {
+    const orderId = "507f1f77bcf86cd799439012";
+
+    expect(
+      invoiceValidator.createInvoiceSchema.validate({
+        customerId: "507f1f77bcf86cd799439011",
+        orderIds: [orderId, orderId],
+      }).error,
+    ).toBeDefined();
+
+    expect(
+      invoiceValidator.createInvoiceSchema.validate({
+        customerId: "507f1f77bcf86cd799439011",
+        billingPeriod: {
+          fromDate: "2026-02-01",
+          toDate: "2026-01-01",
+        },
+      }).error,
+    ).toBeDefined();
+
+    expect(
+      invoiceValidator.createInvoiceSchema.validate({
+        customerId: "507f1f77bcf86cd799439011",
+        vatRate: 101,
+      }).error,
+    ).toBeDefined();
   });
 
   it("requires a customer or order and validates their IDs", () => {

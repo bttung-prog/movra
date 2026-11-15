@@ -4,6 +4,7 @@ const mocks = vi.hoisted(() => ({
   startSession: vi.fn(),
   getCustomerById: vi.fn(),
   getCustomerByUserId: vi.fn(),
+  assertCreditAvailable: vi.fn(),
   debitWallet: vi.fn(),
   updateCustomerById: vi.fn(),
   getGoodsCategoryById: vi.fn(),
@@ -30,6 +31,7 @@ const mocks = vi.hoisted(() => ({
   findLoadsByTripId: vi.fn(),
   findPublicTrackingLogsByOrderId: vi.fn(),
   findRawByFilter: vi.fn(),
+  findBillableByCustomer: vi.fn(),
   countUnfinishedOrdersByTrip: vi.fn(),
   generateCode: vi.fn(),
   loggerError: vi.fn(),
@@ -50,6 +52,12 @@ vi.mock("../../../src/modules/customer/customer.service.js", () => ({
     getByUserId: mocks.getCustomerByUserId,
     debitWallet: mocks.debitWallet,
     updateById: mocks.updateCustomerById,
+  },
+}));
+
+vi.mock("../../../src/modules/customer/customerCredit.service.js", () => ({
+  default: {
+    assertCreditAvailable: mocks.assertCreditAvailable,
   },
 }));
 
@@ -112,6 +120,7 @@ vi.mock("../../../src/modules/order/order.repository.js", () => ({
     findLoadsByTripId: mocks.findLoadsByTripId,
     findPublicTrackingLogsByOrderId: mocks.findPublicTrackingLogsByOrderId,
     findRawByFilter: mocks.findRawByFilter,
+    findBillableByCustomer: mocks.findBillableByCustomer,
     countUnfinishedOrdersByTrip: mocks.countUnfinishedOrdersByTrip,
   },
 }));
@@ -125,6 +134,7 @@ vi.mock("../../../src/configs/logger.js", () => ({
 }));
 
 import {
+  CUSTOMER_MESSAGES,
   ORDER_MESSAGES,
   WAREHOUSE_MESSAGES,
 } from "../../../src/constants/messages.js";
@@ -169,9 +179,14 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.startSession.mockResolvedValue(transaction);
   mocks.getCustomerById.mockResolvedValue({
+    _id: "customer-1",
     walletBalance: 100000,
+    creditLimit: 0,
+    defaultPaymentTerms: "immediate",
+    contractDiscountRate: 0,
     userId: { _id: "user-1" },
   });
+  mocks.assertCreditAvailable.mockResolvedValue(null);
   mocks.getNearestWarehouse.mockResolvedValue({
     warehouse: { _id: "warehouse-nearest" },
     distanceKm: 3.2,
@@ -414,6 +429,7 @@ describe("orderService.create", () => {
       distance: 3.2,
       routeId: "route-1",
       goodsCategoryId: "category-1",
+      contractDiscountRate: 0,
     });
     expect(mocks.createOrder).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -425,11 +441,13 @@ describe("orderService.create", () => {
         totalAmount: 30000,
         status: "created",
         paymentMethod: null,
+        paymentTerms: "immediate",
         paymentStatus: "pending",
         paymentTime: null,
       }),
       transaction,
     );
+    expect(mocks.assertCreditAvailable).not.toHaveBeenCalled();
     expect(mocks.debitWallet).not.toHaveBeenCalled();
     expect(mocks.updateCustomerById).not.toHaveBeenCalled();
     expect(mocks.recordTransaction).not.toHaveBeenCalled();
@@ -442,6 +460,90 @@ describe("orderService.create", () => {
     );
     expect(transaction.commitTransaction).not.toHaveBeenCalled();
     expect(transaction.endSession).not.toHaveBeenCalled();
+  });
+
+  it("checks the credit limit and snapshots payment terms for postpaid customers", async () => {
+    mocks.getCustomerById.mockResolvedValue({
+      _id: "customer-1",
+      userId: { _id: "user-1" },
+      walletBalance: 0,
+      creditLimit: 500000,
+      defaultPaymentTerms: "net_30",
+    });
+
+    await orderService.create({ ...validCreatePayload }, transaction);
+
+    expect(mocks.assertCreditAvailable).toHaveBeenCalledWith({
+      customer: expect.objectContaining({ _id: "customer-1" }),
+      paymentTerms: "net_30",
+      additionalAmount: 25000,
+    });
+    expect(mocks.createOrder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        customerId: "customer-1",
+        paymentTerms: "net_30",
+        shippingFee: 25000,
+      }),
+      transaction,
+    );
+  });
+
+  it("rejects a postpaid order when the credit limit is exceeded", async () => {
+    const message = CUSTOMER_MESSAGES.CREDIT_LIMIT_EXCEEDED(10000, 25000);
+    mocks.getCustomerById.mockResolvedValue({
+      _id: "customer-1",
+      userId: { _id: "user-1" },
+      walletBalance: 0,
+      creditLimit: 10000,
+      defaultPaymentTerms: "net_30",
+    });
+    mocks.assertCreditAvailable.mockRejectedValue({
+      statusCode: 409,
+      message,
+    });
+
+    await expect(
+      orderService.create({ ...validCreatePayload }, transaction),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      message,
+    });
+
+    expect(mocks.createOrder).not.toHaveBeenCalled();
+    expect(mocks.createTrackingLog).not.toHaveBeenCalled();
+  });
+
+  it("applies the customer's contract discount and snapshots the pricing breakdown", async () => {
+    mocks.getCustomerById.mockResolvedValue({
+      _id: "customer-1",
+      userId: { _id: "user-1" },
+      walletBalance: 0,
+      creditLimit: 0,
+      defaultPaymentTerms: "immediate",
+      contractDiscountRate: 5,
+    });
+    mocks.calculateFee.mockResolvedValue({
+      totalShippingFee: 23750,
+      shippingFeeBeforeDiscount: 25000,
+      discountRate: 5,
+      discountAmount: 1250,
+    });
+
+    await orderService.create({ ...validCreatePayload }, transaction);
+
+    expect(mocks.calculateFee).toHaveBeenCalledWith(
+      expect.objectContaining({ contractDiscountRate: 5 }),
+    );
+    expect(mocks.createOrder).toHaveBeenCalledWith(
+      expect.objectContaining({
+        shippingFee: 23750,
+        shippingFeeBeforeDiscount: 25000,
+        discountRateApplied: 5,
+        discountAmount: 1250,
+        totalAmount: 28750,
+      }),
+      transaction,
+    );
   });
 
   it("creates an express order and passes serviceType to pricing", async () => {
@@ -460,6 +562,7 @@ describe("orderService.create", () => {
       distance: 3.2,
       routeId: "route-1",
       goodsCategoryId: "category-1",
+      contractDiscountRate: 0,
     });
     expect(mocks.createOrder).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1338,7 +1441,7 @@ describe("orderService.cancelOrder", () => {
     expect(transaction.commitTransaction).toHaveBeenCalled();
   });
 
-  it("refunds wallet balance without deducting loyalty points when cancelling an undelivered order paid via wallet", async () => {
+  it("refunds wallet balance when cancelling an undelivered order paid via wallet", async () => {
     mocks.findById.mockResolvedValue({
       ...existingOrder,
       status: "created",
@@ -1346,7 +1449,6 @@ describe("orderService.cancelOrder", () => {
       shippingFeePaid: true,
       shippingFeePaidAmount: 30000,
       shippingFee: 30000,
-      loyaltyPointsAwarded: false,
       customerId: { _id: "cust-1" },
     });
     mocks.updateById.mockResolvedValue({
@@ -1357,7 +1459,6 @@ describe("orderService.cancelOrder", () => {
     mocks.getCustomerById.mockResolvedValue({
       _id: "cust-1",
       walletBalance: 10000,
-      loyaltyPoints: 0,
       totalSpent: 0,
     });
     mocks.updateCustomerById.mockResolvedValue({ _id: "cust-1" });
@@ -1587,14 +1688,13 @@ describe("orderService.markAsDelivered", () => {
     );
   });
 
-  it("marks as delivered and awards loyalty points and totalSpent when shippingFee is paid", async () => {
+  it("marks as delivered and records customer spending without awarding loyalty points", async () => {
     mocks.findById.mockResolvedValue({
       ...deliveryOrder,
       codAmount: 0,
       shippingFee: 50000,
       shippingFeePaid: true,
       shippingFeePaidAmount: 50000,
-      loyaltyPointsAwarded: false,
       customerId: { _id: "cust-1", userId: { _id: "user-1" } },
     });
     mocks.getTripById.mockResolvedValue({ _id: "trip-1" });
@@ -1602,7 +1702,6 @@ describe("orderService.markAsDelivered", () => {
       ...deliveryOrder,
       codAmount: 0,
       status: "delivered",
-      loyaltyPointsAwarded: true,
     });
     mocks.createTrackingLog.mockResolvedValue({ _id: "log-1" });
     mocks.updateCustomerById.mockResolvedValue({ _id: "cust-1" });
@@ -1617,6 +1716,13 @@ describe("orderService.markAsDelivered", () => {
       "order-1",
       expect.objectContaining({
         status: "delivered",
+      }),
+      transaction,
+      expect.any(Object),
+    );
+    expect(mocks.updateById).toHaveBeenCalledWith(
+      "order-1",
+      expect.not.objectContaining({
         loyaltyPointsAwarded: true,
       }),
       transaction,
@@ -1624,24 +1730,21 @@ describe("orderService.markAsDelivered", () => {
     );
     expect(mocks.updateCustomerById).toHaveBeenCalledWith(
       "cust-1",
-      expect.objectContaining({
-        $inc: {
-          totalSpent: 50000,
-          loyaltyPoints: 5,
-        },
-      }),
+      {
+        $inc: { totalSpent: 50000 },
+        lastPurchaseDate: expect.any(Date),
+      },
       transaction,
     );
   });
 
-  it("does not award loyalty points when order is delivered but not fully paid", async () => {
+  it("records customer spending at delivery even when the shipping fee is not fully paid", async () => {
     mocks.findById.mockResolvedValue({
       ...deliveryOrder,
       codAmount: 0,
       shippingFeePaid: false,
       shippingFeePaidAmount: 20000,
       shippingFee: 50000,
-      loyaltyPointsAwarded: false,
       customerId: { _id: "cust-1", userId: { _id: "user-1" } },
     });
     mocks.getTripById.mockResolvedValue({ _id: "trip-1" });
@@ -1649,9 +1752,9 @@ describe("orderService.markAsDelivered", () => {
       ...deliveryOrder,
       codAmount: 0,
       status: "delivered",
-      loyaltyPointsAwarded: false,
     });
     mocks.createTrackingLog.mockResolvedValue({ _id: "log-1" });
+    mocks.updateCustomerById.mockResolvedValue({ _id: "cust-1" });
 
     const result = await orderService.markAsDelivered({
       orderId: "order-1",
@@ -1667,7 +1770,14 @@ describe("orderService.markAsDelivered", () => {
       transaction,
       expect.any(Object),
     );
-    expect(mocks.updateCustomerById).not.toHaveBeenCalled();
+    expect(mocks.updateCustomerById).toHaveBeenCalledWith(
+      "cust-1",
+      {
+        $inc: { totalSpent: 50000 },
+        lastPurchaseDate: expect.any(Date),
+      },
+      transaction,
+    );
   });
 
   describe("Trip Completion and Cancellation Order Management", () => {
@@ -1777,5 +1887,104 @@ describe("orderService.markAsDelivered", () => {
         transaction,
       );
     });
+  });
+});
+
+describe("orderService invoice billing helpers", () => {
+  it("allocates an invoice payment sequentially across its orders", async () => {
+    mocks.findByIds.mockResolvedValue([
+      {
+        _id: "order-2",
+        shippingFee: 1500,
+        createdAt: new Date("2026-01-02T00:00:00.000Z"),
+      },
+      {
+        _id: "order-1",
+        shippingFee: 2500,
+        createdAt: new Date("2026-01-01T00:00:00.000Z"),
+      },
+    ]);
+
+    const updatedCount = await orderService.applyInvoicePayment({
+      orderIds: ["order-1", "order-2"],
+      paidAmount: 3000,
+      paymentMethod: "bank",
+      paymentTime: new Date("2026-02-01T00:00:00.000Z"),
+      session: transaction,
+    });
+
+    expect(updatedCount).toBe(2);
+    expect(mocks.updateById).toHaveBeenCalledWith(
+      "order-1",
+      expect.objectContaining({
+        shippingFeePaidAmount: 2500,
+        shippingFeePaid: true,
+        paymentStatus: "completed",
+        paymentMethod: "bank",
+      }),
+      transaction,
+    );
+    expect(mocks.updateById).toHaveBeenCalledWith(
+      "order-2",
+      expect.objectContaining({
+        shippingFeePaidAmount: 500,
+        shippingFeePaid: false,
+        paymentStatus: "pending",
+      }),
+      transaction,
+    );
+  });
+
+  it("marks every order paid when the invoice covers all shipping fees", async () => {
+    mocks.findByIds.mockResolvedValue([
+      {
+        _id: "order-1",
+        shippingFee: 2500,
+        createdAt: new Date("2026-01-01T00:00:00.000Z"),
+      },
+      {
+        _id: "order-2",
+        shippingFee: 1500,
+        createdAt: new Date("2026-01-02T00:00:00.000Z"),
+      },
+    ]);
+
+    await orderService.applyInvoicePayment({
+      orderIds: ["order-1", "order-2"],
+      paidAmount: 4000,
+      session: transaction,
+    });
+
+    expect(mocks.updateById).toHaveBeenCalledWith(
+      "order-2",
+      expect.objectContaining({
+        shippingFeePaidAmount: 1500,
+        shippingFeePaid: true,
+        paymentStatus: "completed",
+      }),
+      transaction,
+    );
+  });
+
+  it("returns billable orders for a billing period", async () => {
+    const fromDate = new Date("2026-01-01T00:00:00.000Z");
+    const toDate = new Date("2026-01-31T00:00:00.000Z");
+    const orders = [{ _id: "order-1" }];
+    mocks.findBillableByCustomer.mockResolvedValue(orders);
+
+    const result = await orderService.getBillableOrdersForInvoice({
+      customerId: "customer-1",
+      fromDate,
+      toDate,
+      excludeOrderIds: ["order-9"],
+    });
+
+    expect(mocks.findBillableByCustomer).toHaveBeenCalledWith({
+      customerId: "customer-1",
+      fromDate,
+      toDate,
+      excludeOrderIds: ["order-9"],
+    });
+    expect(result).toEqual(orders);
   });
 });

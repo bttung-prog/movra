@@ -1,5 +1,7 @@
 import mongoose from "mongoose";
 
+import { PAYMENT_TERMS } from "../../constants/paymentTerms.js";
+
 const customerSchema = new mongoose.Schema(
   {
     userId: {
@@ -9,10 +11,50 @@ const customerSchema = new mongoose.Schema(
       required: true,
     },
 
-    gender: {
+    companyName: {
       type: String,
-      enum: ["male", "female", "other"],
-      default: "male",
+      trim: true,
+    },
+
+    taxCode: {
+      type: String,
+      trim: true,
+      unique: true,
+      sparse: true,
+    },
+
+    companyAddress: {
+      type: String,
+      trim: true,
+    },
+
+    contactPerson: {
+      type: String,
+      trim: true,
+    },
+
+    contactPhone: {
+      type: String,
+      trim: true,
+    },
+
+    creditLimit: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    defaultPaymentTerms: {
+      type: String,
+      enum: Object.values(PAYMENT_TERMS),
+      default: PAYMENT_TERMS.IMMEDIATE,
+    },
+
+    contractDiscountRate: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100,
     },
 
     walletBalance: {
@@ -21,11 +63,6 @@ const customerSchema = new mongoose.Schema(
     },
 
     totalSpent: {
-      type: Number,
-      default: 0,
-    },
-
-    loyaltyPoints: {
       type: Number,
       default: 0,
     },
@@ -41,8 +78,8 @@ const customerSchema = new mongoose.Schema(
 
 customerSchema.index({ walletBalance: -1 });
 customerSchema.index({ totalSpent: -1 });
-customerSchema.index({ loyaltyPoints: -1 });
 customerSchema.index({ lastPurchaseDate: -1 });
+customerSchema.index({ companyName: 1 });
 
 const Customer = mongoose.model("Customer", customerSchema);
 
