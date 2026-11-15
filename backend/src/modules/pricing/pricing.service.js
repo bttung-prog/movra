@@ -4,10 +4,13 @@ import {
   DEFAULT_RATES_BY_SERVICE_TYPE,
 } from "../../constants/defaultShippingRate.js";
 import { SHIPPING_MODES } from "../../constants/shippingModes.js";
-import { hasValidCoordinates } from "../../utils/distance.util.js";
+import { SERVICE_TYPES } from "../../constants/serviceTypes.js";
 
+import { hasValidCoordinates } from "../../utils/distance.util.js";
+import { applyContractDiscount } from "../../utils/discount.util.js";
 import ApiError from "../../utils/ApiError.js";
 
+import customerService from "../customer/customer.service.js";
 import goodsCategoryService from "../goodsCategory/goodsCategory.service.js";
 import routeService from "../route/route.service.js";
 
@@ -17,7 +20,7 @@ import { resolveOrderRouting } from "../route/routing.helper.js";
 const VOLUMETRIC_WEIGHT_DIVISOR = 3333;
 
 const calculateFee = async ({
-  serviceType = "standard",
+  serviceType = SERVICE_TYPES.STANDARD,
   shippingMode = SHIPPING_MODES.CONSOLIDATED,
   weight = 1,
   volume = 0,
@@ -27,7 +30,15 @@ const calculateFee = async ({
   pickupLocation = null,
   deliveryLocation = null,
   goodsCategoryId = null,
+  customerId = null,
+  contractDiscountRate = undefined,
 }) => {
+  let resolvedDiscountRate = contractDiscountRate;
+  if (resolvedDiscountRate === undefined && customerId) {
+    const customer = await customerService.getById(customerId);
+    resolvedDiscountRate = customer.contractDiscountRate || 0;
+  }
+
   let routingBreakdown = null;
 
   if (
@@ -102,7 +113,12 @@ const calculateFee = async ({
     }
   }
 
-  const totalShippingFee = Math.round(subTotal + surchargeAmount);
+  const shippingFeeBeforeDiscount = Math.round(subTotal + surchargeAmount);
+  const discount = applyContractDiscount(
+    shippingFeeBeforeDiscount,
+    resolvedDiscountRate,
+  );
+  const totalShippingFee = discount.netAmount;
 
   return {
     serviceType: rate.serviceType,
@@ -113,11 +129,17 @@ const calculateFee = async ({
     billableWeight,
     distance,
     ...(routingBreakdown ? { routingBreakdown } : {}),
+    shippingFeeBeforeDiscount: discount.grossAmount,
+    discountRate: discount.discountRate,
+    discountAmount: discount.discountAmount,
     breakdown: {
       basePrice: rate.basePrice,
       weightFee,
       distanceFee,
       surchargeAmount,
+      shippingFeeBeforeDiscount: discount.grossAmount,
+      discountRate: discount.discountRate,
+      discountAmount: discount.discountAmount,
       totalShippingFee,
     },
     totalShippingFee,

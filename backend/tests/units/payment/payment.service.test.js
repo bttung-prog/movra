@@ -13,6 +13,25 @@ const mocks = vi.hoisted(() => ({
   getStats: vi.fn(),
   getByOrderId: vi.fn(),
   getInvoiceById: vi.fn(),
+  getInvoiceOrderIds: vi.fn((invoice) => {
+    const orderIds = [];
+    const seen = new Set();
+    const addOrderId = (value) => {
+      const id = value?._id || value;
+      if (!id) return;
+      const key = String(id);
+      if (seen.has(key)) return;
+      seen.add(key);
+      orderIds.push(id);
+    };
+
+    addOrderId(invoice?.orderId);
+    for (const id of invoice?.orderIds || []) {
+      addOrderId(id);
+    }
+
+    return orderIds;
+  }),
   issueInvoice: vi.fn(),
   reservePendingPayment: vi.fn(),
   releasePendingPayment: vi.fn(),
@@ -21,6 +40,7 @@ const mocks = vi.hoisted(() => ({
   getOrderById: vi.fn(),
   getOrderIdsByWarehouseId: vi.fn(),
   updateOrderById: vi.fn(),
+  applyInvoicePayment: vi.fn(),
   getTripById: vi.fn(),
   getTripIdsByWarehouseId: vi.fn(),
   getCustomerById: vi.fn(),
@@ -57,6 +77,7 @@ vi.mock("../../../src/modules/invoice/invoice.service.js", () => ({
   default: {
     getByOrderId: mocks.getByOrderId,
     getById: mocks.getInvoiceById,
+    getInvoiceOrderIds: mocks.getInvoiceOrderIds,
     issueInvoice: mocks.issueInvoice,
     reservePendingPayment: mocks.reservePendingPayment,
     releasePendingPayment: mocks.releasePendingPayment,
@@ -70,6 +91,7 @@ vi.mock("../../../src/modules/order/order.service.js", () => ({
     getById: mocks.getOrderById,
     getIdsByWarehouseId: mocks.getOrderIdsByWarehouseId,
     updateById: mocks.updateOrderById,
+    applyInvoicePayment: mocks.applyInvoicePayment,
   },
 }));
 
@@ -220,7 +242,7 @@ describe("paymentService.create", () => {
     expect(transaction.commitTransaction).toHaveBeenCalled();
   });
 
-  it("awards loyalty points and totalSpent when paying for an already delivered order", async () => {
+  it("records the wallet debit without awarding loyalty points for an already delivered order", async () => {
     const invoice = {
       _id: "invoice-1",
       orderId,
@@ -240,7 +262,6 @@ describe("paymentService.create", () => {
       shippingFee: 10000,
       shippingFeePaid: false,
       shippingFeePaidAmount: 0,
-      loyaltyPointsAwarded: false,
     });
     mocks.updateOrderById.mockResolvedValue({ _id: orderId });
     mocks.getCustomerById.mockResolvedValue({
@@ -265,10 +286,9 @@ describe("paymentService.create", () => {
     expect(mocks.updateCustomerById).toHaveBeenCalledWith(
       customerId,
       expect.objectContaining({
+        lastPurchaseDate: expect.any(Date),
         $inc: {
           walletBalance: -10000,
-          totalSpent: 10000,
-          loyaltyPoints: 1,
         },
       }),
       transaction,
@@ -277,14 +297,14 @@ describe("paymentService.create", () => {
     expect(mocks.updateOrderById).toHaveBeenCalledWith(
       expect.objectContaining({
         orderId,
-        updateData: expect.objectContaining({
+        updateData: expect.not.objectContaining({
           loyaltyPointsAwarded: true,
         }),
       }),
     );
   });
 
-  it("does not award loyalty points when payment is only partial for a delivered order", async () => {
+  it("does not add spending totals or loyalty points for a partial payment", async () => {
     const invoice = {
       _id: "invoice-1",
       orderId,
@@ -304,7 +324,6 @@ describe("paymentService.create", () => {
       shippingFee: 10000,
       shippingFeePaid: false,
       shippingFeePaidAmount: 0,
-      loyaltyPointsAwarded: false,
     });
     mocks.updateOrderById.mockResolvedValue({ _id: orderId });
     mocks.getCustomerById.mockResolvedValue({
@@ -329,9 +348,20 @@ describe("paymentService.create", () => {
     expect(mocks.updateCustomerById).toHaveBeenCalledWith(
       customerId,
       expect.objectContaining({
+        lastPurchaseDate: expect.any(Date),
         $inc: {
           walletBalance: -4000,
         },
+      }),
+      transaction,
+      { walletBalance: { $gte: 4000 } },
+    );
+    expect(mocks.updateCustomerById).toHaveBeenCalledWith(
+      customerId,
+      expect.not.objectContaining({
+        $inc: expect.objectContaining({
+          totalSpent: expect.anything(),
+        }),
       }),
       transaction,
       { walletBalance: { $gte: 4000 } },
@@ -827,6 +857,7 @@ describe("paymentService.createDriverRemittance", () => {
     expect(mocks.findPendingRemittanceByOrderIds).toHaveBeenCalledWith([
       orderId,
     ]);
+
     expect(mocks.create).not.toHaveBeenCalled();
   });
 
@@ -901,5 +932,132 @@ describe("paymentService.createDriverRemittance", () => {
       paymentStatus: PAYMENT_STATUSES.PENDING,
       paymentAmount: 5000,
     });
+  });
+});
+
+describe("paymentService.refundPayment", () => {
+  const basePayment = {
+    _id: paymentId,
+    paymentStatus: PAYMENT_STATUSES.COMPLETED,
+    paymentAmount: 10000,
+    refundedAmount: 0,
+    paymentMethod: PAYMENT_METHODS.CASH,
+    payerType: PAYER_TYPES.CUSTOMER,
+    customerId,
+    orderId,
+    invoiceId: null,
+  };
+
+  it("reverses recognized spending when refunding a delivered order payment", async () => {
+    mocks.findById.mockResolvedValue(basePayment);
+    mocks.updateById.mockResolvedValue({ _id: paymentId });
+    mocks.getOrderById.mockResolvedValue({
+      _id: orderId,
+      status: "delivered",
+      shippingFee: 10000,
+      shippingFeePaid: true,
+      shippingFeePaidAmount: 10000,
+    });
+    mocks.getCustomerById.mockResolvedValue({
+      _id: customerId,
+      totalSpent: 10000,
+      walletBalance: 0,
+    });
+    mocks.updateCustomerById.mockResolvedValue({ _id: customerId });
+
+    await paymentService.refundPayment(
+      paymentId,
+      { reason: "Damaged goods", refundAmount: 4000 },
+      { role: ROLES.ACCOUNTANT, userId: "user-9" },
+    );
+
+    expect(mocks.updateCustomerById).toHaveBeenCalledWith(
+      customerId,
+      { $inc: { totalSpent: -4000 } },
+      transaction,
+      { totalSpent: { $gte: 4000 } },
+    );
+  });
+
+  it("does not reverse spending when refunding an order that was not delivered", async () => {
+    mocks.findById.mockResolvedValue(basePayment);
+    mocks.updateById.mockResolvedValue({ _id: paymentId });
+    mocks.getOrderById.mockResolvedValue({
+      _id: orderId,
+      status: "transporting",
+      shippingFee: 10000,
+      shippingFeePaid: true,
+      shippingFeePaidAmount: 10000,
+    });
+    mocks.getCustomerById.mockResolvedValue({
+      _id: customerId,
+      totalSpent: 0,
+      walletBalance: 0,
+    });
+
+    await paymentService.refundPayment(
+      paymentId,
+      { reason: "Customer request", refundAmount: 4000 },
+      { role: ROLES.ACCOUNTANT, userId: "user-9" },
+    );
+
+    expect(mocks.updateCustomerById).not.toHaveBeenCalled();
+  });
+});
+
+describe("paymentService multi-order invoices", () => {
+  it("allocates a completed invoice payment across all linked orders", async () => {
+    const multiInvoice = {
+      _id: "invoice-1",
+      orderId: null,
+      orderIds: [orderId, "order-2"],
+      customerId,
+      status: "issued",
+      paidAmount: 0,
+      remainingAmount: 4000,
+      pendingAmount: 0,
+    };
+    mocks.getInvoiceById.mockResolvedValue(multiInvoice);
+    mocks.getOrderById.mockResolvedValue({
+      _id: orderId,
+      customerId,
+      status: "delivered",
+      shippingFee: 2500,
+      shippingFeePaid: false,
+    });
+    mocks.updatePaymentProgress.mockResolvedValue({ _id: "invoice-1" });
+    mocks.getCustomerById.mockResolvedValue({
+      _id: customerId,
+      walletBalance: 5000,
+    });
+    mocks.updateCustomerById.mockResolvedValue({
+      _id: customerId,
+      walletBalance: 3000,
+    });
+    mocks.applyInvoicePayment.mockResolvedValue(2);
+
+    await paymentService.create(
+      {
+        invoiceId: "invoice-1",
+        paymentAmount: 2000,
+        paymentMethod: PAYMENT_METHODS.WALLET_BALANCE,
+      },
+      { role: ROLES.CUSTOMER, customerId },
+    );
+
+    expect(mocks.updatePaymentProgress).toHaveBeenCalledWith(
+      "invoice-1",
+      expect.objectContaining({ paidAmount: 2000, remainingAmount: 2000 }),
+      transaction,
+      expect.any(Object),
+    );
+    expect(mocks.applyInvoicePayment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderIds: [orderId, "order-2"],
+        paidAmount: 2000,
+        paymentMethod: PAYMENT_METHODS.WALLET_BALANCE,
+        session: transaction,
+      }),
+    );
   });
 });

@@ -53,7 +53,10 @@ const getAll = async (req, res, next) => {
     }
 
     if (orderId) {
-      filter.orderId = orderId;
+      filter.$and = [
+        ...(filter.$and || []),
+        { $or: [{ orderId }, { orderIds: orderId }] },
+      ];
     }
 
     if (startDate || endDate) {

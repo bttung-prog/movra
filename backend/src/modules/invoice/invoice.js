@@ -55,6 +55,46 @@ const invoicesSchema = new mongoose.Schema(
       default: null,
     },
 
+    orderIds: {
+      type: [
+        {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Order",
+        },
+      ],
+      default: [],
+    },
+
+    billingPeriod: {
+      fromDate: {
+        type: Date,
+        default: null,
+      },
+
+      toDate: {
+        type: Date,
+        default: null,
+      },
+    },
+
+    companyName: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+
+    taxCode: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+
+    companyAddress: {
+      type: String,
+      trim: true,
+      default: null,
+    },
+
     items: {
       type: [invoiceItemSchema],
       default: [],
@@ -67,6 +107,13 @@ const invoicesSchema = new mongoose.Schema(
     tax: integerMoney({
       default: 0,
     }),
+
+    vatRate: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100,
+    },
 
     discount: integerMoney({
       default: 0,
@@ -126,6 +173,7 @@ const invoicesSchema = new mongoose.Schema(
 );
 
 invoicesSchema.index({ customerId: 1, status: 1 });
+invoicesSchema.index({ orderIds: 1 });
 invoicesSchema.index(
   { orderId: 1 },
   {

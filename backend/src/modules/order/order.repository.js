@@ -8,7 +8,8 @@ import OrderTrackingLog from "./order_tracking_log.js";
 const ORDER_POPULATE = [
   {
     path: "customerId",
-    select: "userId gender walletBalance",
+    select:
+      "userId companyName taxCode creditLimit defaultPaymentTerms walletBalance",
     populate: { path: "userId", select: "fullName phone email" },
   },
   {
@@ -148,6 +149,27 @@ const findRawByFilter = (filter, session = null) => {
   return query;
 };
 
+const findBillableByCustomer = ({
+  customerId,
+  fromDate,
+  toDate,
+  excludeOrderIds = [],
+}) => {
+  const filter = {
+    customerId,
+    deletedAt: null,
+    status: { $ne: ORDER_STATUSES.CANCELLED },
+    shippingFeePaid: { $ne: true },
+    createdAt: { $gte: new Date(fromDate), $lte: new Date(toDate) },
+  };
+
+  if (excludeOrderIds.length > 0) {
+    filter._id = { $nin: excludeOrderIds };
+  }
+
+  return Order.find(filter).sort({ createdAt: 1, _id: 1 }).lean();
+};
+
 const countUnfinishedOrdersByTrip = (tripId, tripType, session = null) => {
   const filter = {
     tripId,
@@ -176,6 +198,46 @@ const countUnfinishedOrdersByTrip = (tripId, tripType, session = null) => {
   const query = Order.countDocuments(filter);
   if (session) query.session(session);
   return query;
+};
+
+const sumUnbilledShippingFeeByCustomer = async (
+  customerId,
+  excludedOrderIds = [],
+) => {
+  const filter = {
+    customerId: mongoose.Types.ObjectId.createFromHexString(String(customerId)),
+    deletedAt: null,
+    status: { $ne: ORDER_STATUSES.CANCELLED },
+    shippingFeePaid: { $ne: true },
+  };
+
+  if (excludedOrderIds.length > 0) {
+    filter._id = { $nin: excludedOrderIds };
+  }
+
+  const remainingShippingFee = {
+    $subtract: ["$shippingFee", { $ifNull: ["$shippingFeePaidAmount", 0] }],
+  };
+
+  const [result] = await Order.aggregate([
+    { $match: filter },
+    {
+      $group: {
+        _id: null,
+        total: {
+          $sum: {
+            $cond: [
+              { $gt: [remainingShippingFee, 0] },
+              remainingShippingFee,
+              0,
+            ],
+          },
+        },
+      },
+    },
+  ]);
+
+  return Number(result?.total || 0);
 };
 
 const updateById = (orderId, updateData, session = null, conditions = {}) => {
@@ -267,9 +329,8 @@ const warehouseScopeStages = (warehouseId) =>
         { $unwind: "$dashboardDriver" },
         {
           $match: {
-            "dashboardDriver.warehouseId": new mongoose.Types.ObjectId(
-              warehouseId,
-            ),
+            "dashboardDriver.warehouseId":
+              mongoose.Types.ObjectId.createFromHexString(String(warehouseId)),
           },
         },
       ]
@@ -374,7 +435,9 @@ export default {
   countByTripId,
   findLoadsByTripId,
   findRawByFilter,
+  findBillableByCustomer,
   countUnfinishedOrdersByTrip,
+  sumUnbilledShippingFeeByCustomer,
   updateById,
   recordFailureAttempt,
   updateMany,

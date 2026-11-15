@@ -1,3 +1,5 @@
+import mongoose from "mongoose";
+
 import Invoice from "./invoice.js";
 
 import { INVOICE_STATUSES } from "../../constants/invoiceStatuses.js";
@@ -5,11 +7,17 @@ import { INVOICE_STATUSES } from "../../constants/invoiceStatuses.js";
 const INVOICE_POPULATE = [
   {
     path: "customerId",
-    select: "userId gender walletBalance totalSpent",
+    select:
+      "userId companyName taxCode companyAddress creditLimit defaultPaymentTerms walletBalance totalSpent",
     populate: { path: "userId", select: "fullName phone email" },
   },
   {
     path: "orderId",
+    select:
+      "orderCode recipientName recipientPhone shippingFee codAmount totalAmount status paymentStatus",
+  },
+  {
+    path: "orderIds",
     select:
       "orderCode recipientName recipientPhone shippingFee codAmount totalAmount status paymentStatus",
   },
@@ -42,7 +50,59 @@ const countAll = ({ filter = {} } = {}) => {
 };
 
 const findIdsByOrderIds = (orderIds = []) => {
-  return Invoice.distinct("_id", { orderId: { $in: orderIds } });
+  return Invoice.distinct("_id", {
+    $or: [{ orderId: { $in: orderIds } }, { orderIds: { $in: orderIds } }],
+  });
+};
+
+const findActiveOrderLinksByCustomer = (customerId) => {
+  return Invoice.find({
+    customerId,
+    status: { $ne: INVOICE_STATUSES.CANCELLED },
+    $or: [{ orderId: { $ne: null } }, { "orderIds.0": { $exists: true } }],
+  })
+    .select("orderId orderIds")
+    .lean();
+};
+
+const findActiveByOrderIds = (orderIds = []) => {
+  return Invoice.findOne({
+    $or: [{ orderId: { $in: orderIds } }, { orderIds: { $in: orderIds } }],
+    status: { $ne: INVOICE_STATUSES.CANCELLED },
+  })
+    .select("invoiceCode orderId orderIds status")
+    .lean();
+};
+
+const sumOutstandingByCustomer = async (customerId) => {
+  const [result] = await Invoice.aggregate([
+    {
+      $match: {
+        customerId: mongoose.Types.ObjectId.createFromHexString(
+          String(customerId),
+        ),
+        status: {
+          $in: [
+            INVOICE_STATUSES.ISSUED,
+            INVOICE_STATUSES.PARTIALLY_PAID,
+            INVOICE_STATUSES.OVERDUE,
+          ],
+        },
+      },
+    },
+    {
+      $group: {
+        _id: null,
+        total: {
+          $sum: {
+            $cond: [{ $gt: ["$remainingAmount", 0] }, "$remainingAmount", 0],
+          },
+        },
+      },
+    },
+  ]);
+
+  return Number(result?.total || 0);
 };
 
 const findById = (id, session = null) => {
@@ -59,7 +119,7 @@ const findByCode = (invoiceCode) => {
 
 const findByOrderId = (orderId) => {
   return Invoice.findOne({
-    orderId,
+    $or: [{ orderId }, { orderIds: orderId }],
     status: { $ne: INVOICE_STATUSES.CANCELLED },
   }).populate(INVOICE_POPULATE);
 };
@@ -119,6 +179,9 @@ export default {
   findAll,
   countAll,
   findIdsByOrderIds,
+  findActiveOrderLinksByCustomer,
+  findActiveByOrderIds,
+  sumOutstandingByCustomer,
   findById,
   findByCode,
   findByOrderId,

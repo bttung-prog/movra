@@ -1,4 +1,5 @@
 import { PRICING_MESSAGES } from "../../constants/messages.js";
+import { ROLES } from "../../constants/roles.js";
 
 import ApiResponse from "../../utils/ApiResponse.js";
 
@@ -6,7 +7,12 @@ import pricingService from "./pricing.service.js";
 
 const calculate = async (req, res, next) => {
   try {
-    const result = await pricingService.calculateFee(req.body);
+    const payload = { ...req.body };
+    if (req.user?.role === ROLES.CUSTOMER) {
+      payload.customerId = req.user.customerId;
+    }
+
+    const result = await pricingService.calculateFee(payload);
     return ApiResponse.success(res, result, PRICING_MESSAGES.CALCULATE_SUCCESS);
   } catch (error) {
     next(error);

@@ -89,6 +89,24 @@ describe("pricingValidator.calculateFeeSchema", () => {
       ).toBeDefined();
     },
   );
+
+  it("accepts an optional customerId and rejects malformed IDs", () => {
+    expect(
+      pricingValidator.calculateFeeSchema.validate({
+        weight: 2,
+        distance: 10,
+        customerId: "507f1f77bcf86cd799439011",
+      }).error,
+    ).toBeUndefined();
+
+    expect(
+      pricingValidator.calculateFeeSchema.validate({
+        weight: 2,
+        distance: 10,
+        customerId: "customer-1",
+      }).error,
+    ).toBeDefined();
+  });
 });
 
 describe("pricingValidator.createShippingRateSchema", () => {

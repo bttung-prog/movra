@@ -3,6 +3,8 @@ import logger from "../../configs/logger.js";
 import { INVOICE_STATUSES } from "../../constants/invoiceStatuses.js";
 import { PAYMENT_TERMS } from "../../constants/paymentTerms.js";
 import { ROLES } from "../../constants/roles.js";
+import { DEFAULT_VAT_RATE } from "../../constants/vat.js";
+import { ORDER_STATUSES } from "../../constants/orderStatuses.js";
 import { INVOICE_MESSAGES, ORDER_MESSAGES } from "../../constants/messages.js";
 
 import ApiError from "../../utils/ApiError.js";
@@ -49,22 +51,63 @@ const sumInvoiceItems = (items) => {
   return subTotal;
 };
 
+const getInvoiceOrderIds = (invoice) => {
+  const orderIds = [];
+  const seen = new Set();
+
+  const addOrderId = (value) => {
+    const id = value?._id || value;
+    if (!id) return;
+
+    const key = String(id);
+    if (seen.has(key)) return;
+
+    seen.add(key);
+    orderIds.push(id);
+  };
+
+  addOrderId(invoice?.orderId);
+  for (const id of invoice?.orderIds || []) {
+    addOrderId(id);
+  }
+
+  return orderIds;
+};
+
 const assertInvoiceWarehouseAccess = async (invoice, actor) => {
   if (actor?.role !== ROLES.DISPATCHER) return;
 
-  const orderId = invoice.orderId?._id || invoice.orderId;
-  if (!orderId) {
+  const orderIds = getInvoiceOrderIds(invoice);
+  if (orderIds.length === 0) {
     throw new ApiError(403, INVOICE_MESSAGES.DISPATCHER_ORDER_LINK_REQUIRED);
   }
-  await orderService.getById(orderId, true, actor);
+
+  let lastError = null;
+
+  for (const orderId of orderIds) {
+    try {
+      await orderService.getById(orderId, true, actor);
+      return;
+    } catch (error) {
+      lastError = error;
+      if (error?.statusCode && error.statusCode !== 403) {
+        throw error;
+      }
+    }
+  }
+
+  throw lastError || new ApiError(403, INVOICE_MESSAGES.ACCESS_DENIED);
 };
 
 const create = async (payload, session = null, actor = null) => {
   const {
     orderId,
+    orderIds: inputOrderIds,
+    billingPeriod,
     customerId,
     subTotal: inputSubTotal,
-    tax = 0,
+    tax: inputTax,
+    vatRate: inputVatRate,
     discount = 0,
     dueDate: inputDueDate,
     paymentTerms = PAYMENT_TERMS.IMMEDIATE,
@@ -74,67 +117,96 @@ const create = async (payload, session = null, actor = null) => {
   } = payload;
 
   let finalCustomerId = customerId;
-  let finalSubTotal = inputSubTotal;
   let finalItems = inputItems || [];
-  let linkedOrder = null;
+  let targetOrders = [];
 
   if (orderId) {
-    linkedOrder = await orderService.getById(orderId, true, actor);
+    targetOrders = [await orderService.getById(orderId, true, actor)];
+  } else if (inputOrderIds?.length > 0) {
+    targetOrders = await orderService.getByIds(inputOrderIds);
+    if (targetOrders.length !== new Set(inputOrderIds.map(String)).size) {
+      throw new ApiError(400, ORDER_MESSAGES.ORDERS_NOT_FOUND);
+    }
+  } else if (billingPeriod) {
+    if (!customerId) {
+      throw new ApiError(400, INVOICE_MESSAGES.CUSTOMER_REQUIRED);
+    }
 
-    if (linkedOrder.status === "cancelled") {
+    const activeOrderIds = await getActiveOrderIdsByCustomer(customerId);
+    targetOrders = await orderService.getBillableOrdersForInvoice({
+      customerId,
+      fromDate: billingPeriod.fromDate,
+      toDate: billingPeriod.toDate,
+      excludeOrderIds: activeOrderIds,
+    });
+
+    if (targetOrders.length === 0) {
+      throw new ApiError(400, INVOICE_MESSAGES.NO_ELIGIBLE_ORDERS);
+    }
+  }
+
+  const finalOrderIds = [];
+  const seenOrderIds = new Set();
+
+  for (const order of targetOrders) {
+    if (order.deletedAt) {
+      throw new ApiError(400, ORDER_MESSAGES.ALREADY_DELETED);
+    }
+
+    if (order.status === ORDER_STATUSES.CANCELLED) {
       throw new ApiError(400, ORDER_MESSAGES.CANCELLED_ORDER_CANNOT_BE_BILLED);
     }
 
-    if (linkedOrder.shippingFeePaid) {
+    if (order.shippingFeePaid) {
       throw new ApiError(400, ORDER_MESSAGES.SHIPPING_FEE_ALREADY_PAID);
     }
 
-    const existingInvoice = await invoiceRepository.findByOrderId(orderId);
-    if (
-      existingInvoice &&
-      existingInvoice.status !== INVOICE_STATUSES.CANCELLED
-    ) {
-      throw new ApiError(400, INVOICE_MESSAGES.ALREADY_EXISTS);
-    }
-
-    if (!finalCustomerId && linkedOrder.customerId) {
-      finalCustomerId = linkedOrder.customerId?._id || linkedOrder.customerId;
+    const orderCustomerId = order.customerId?._id || order.customerId;
+    if (!finalCustomerId) {
+      finalCustomerId = orderCustomerId;
     }
     if (
       finalCustomerId &&
-      linkedOrder.customerId &&
-      finalCustomerId.toString() !==
-        (linkedOrder.customerId?._id || linkedOrder.customerId).toString()
+      orderCustomerId &&
+      finalCustomerId.toString() !== orderCustomerId.toString()
     ) {
       throw new ApiError(400, INVOICE_MESSAGES.CUSTOMER_ORDER_MISMATCH);
     }
 
-    if (finalSubTotal === undefined || finalSubTotal === null) {
-      finalSubTotal = linkedOrder.shippingFee;
-    }
-
-    if (finalItems.length === 0) {
-      finalItems = [
-        {
-          description: `Cước vận chuyển cho đơn hàng ${linkedOrder.orderCode}`,
-          quantity: 1,
-          unitPrice: finalSubTotal,
-          amount: finalSubTotal,
-        },
-      ];
+    const key = String(order._id);
+    if (!seenOrderIds.has(key)) {
+      seenOrderIds.add(key);
+      finalOrderIds.push(order._id);
     }
   }
 
-  if (actor?.role === ROLES.DISPATCHER && !orderId) {
-    throw new ApiError(403, INVOICE_MESSAGES.DISPATCHER_ORDER_REQUIRED);
+  if (finalOrderIds.length > 0) {
+    const existingInvoice =
+      await invoiceRepository.findActiveByOrderIds(finalOrderIds);
+    if (existingInvoice) {
+      throw new ApiError(400, INVOICE_MESSAGES.ALREADY_EXISTS);
+    }
+
+    if (finalItems.length === 0) {
+      finalItems = targetOrders.map((order) => {
+        const shippingFee = Number(order.shippingFee || 0);
+        return {
+          description: `Cước vận chuyển cho đơn hàng ${order.orderCode}`,
+          quantity: 1,
+          unitPrice: shippingFee,
+          amount: shippingFee,
+        };
+      });
+    }
   }
 
   if (!finalCustomerId) {
     throw new ApiError(400, INVOICE_MESSAGES.CUSTOMER_REQUIRED);
   }
 
-  await customerService.getById(finalCustomerId);
+  const customer = await customerService.getById(finalCustomerId);
 
+  let finalSubTotal = inputSubTotal;
   if (finalItems.length > 0) {
     finalItems = validateInvoiceItems(finalItems);
     const itemsSubTotal = sumInvoiceItems(finalItems);
@@ -146,9 +218,20 @@ const create = async (payload, session = null, actor = null) => {
       throw new ApiError(400, INVOICE_MESSAGES.SUBTOTAL_ITEMS_MISMATCH);
     }
     finalSubTotal = itemsSubTotal;
-  } else if (finalSubTotal === undefined || finalSubTotal < 0) {
+  } else if (
+    finalSubTotal === undefined ||
+    finalSubTotal === null ||
+    finalSubTotal < 0
+  ) {
     finalSubTotal = 0;
   }
+
+  const vatRate =
+    inputVatRate === undefined ? DEFAULT_VAT_RATE : Number(inputVatRate);
+  const tax =
+    inputTax === undefined
+      ? Math.round((finalSubTotal * vatRate) / 100)
+      : inputTax;
 
   if (discount > finalSubTotal + tax) {
     throw new ApiError(400, INVOICE_MESSAGES.DISCOUNT_EXCEEDS_TOTAL);
@@ -164,10 +247,16 @@ const create = async (payload, session = null, actor = null) => {
   const invoiceData = {
     invoiceCode,
     customerId: finalCustomerId,
-    orderId: orderId || null,
+    orderId: orderId || (finalOrderIds.length === 1 ? finalOrderIds[0] : null),
+    orderIds: finalOrderIds,
+    billingPeriod: billingPeriod || undefined,
+    companyName: customer.companyName || null,
+    taxCode: customer.taxCode || null,
+    companyAddress: customer.companyAddress || null,
     items: finalItems,
     subTotal: finalSubTotal,
     tax,
+    vatRate,
     discount,
     totalAmount,
     paidAmount: 0,
@@ -204,7 +293,15 @@ const getAll = async ({
   if (actor?.role === ROLES.DISPATCHER) {
     const orderIds = await orderService.getIdsByWarehouseId(actor.warehouseId);
     queryFilter = {
-      $and: [filter, { orderId: { $in: orderIds } }],
+      $and: [
+        filter,
+        {
+          $or: [
+            { orderId: { $in: orderIds } },
+            { orderIds: { $in: orderIds } },
+          ],
+        },
+      ],
     };
   }
 
@@ -356,7 +453,6 @@ const updateById = async (invoiceId, updateData, actor = null) => {
 
   const subTotal =
     updateData.subTotal !== undefined ? updateData.subTotal : invoice.subTotal;
-  const tax = updateData.tax !== undefined ? updateData.tax : invoice.tax;
   const discount =
     updateData.discount !== undefined ? updateData.discount : invoice.discount;
   let items = updateData.items;
@@ -376,6 +472,18 @@ const updateById = async (invoiceId, updateData, actor = null) => {
     }
   }
 
+  const vatRate =
+    updateData.vatRate !== undefined
+      ? Number(updateData.vatRate)
+      : Number(invoice.vatRate || 0);
+
+  const tax =
+    updateData.tax !== undefined
+      ? updateData.tax
+      : updateData.vatRate !== undefined
+        ? Math.round((finalSubTotal * vatRate) / 100)
+        : (invoice.tax ?? 0);
+
   if (discount > finalSubTotal + tax) {
     throw new ApiError(400, INVOICE_MESSAGES.DISCOUNT_EXCEEDS_TOTAL);
   }
@@ -391,6 +499,7 @@ const updateById = async (invoiceId, updateData, actor = null) => {
     {
       ...updateData,
       ...(items ? { items } : {}),
+      ...(updateData.vatRate !== undefined ? { vatRate } : {}),
       subTotal: finalSubTotal,
       tax,
       discount,
@@ -467,7 +576,17 @@ const cancelInvoice = async (invoiceId, reason, actor = null) => {
 const getStats = async (filter = {}, actor = null) => {
   if (actor?.role === ROLES.DISPATCHER) {
     const orderIds = await orderService.getIdsByWarehouseId(actor.warehouseId);
-    filter = { $and: [filter, { orderId: { $in: orderIds } }] };
+    filter = {
+      $and: [
+        filter,
+        {
+          $or: [
+            { orderId: { $in: orderIds } },
+            { orderIds: { $in: orderIds } },
+          ],
+        },
+      ],
+    };
   }
   return invoiceRepository.getStats(filter);
 };
@@ -478,6 +597,31 @@ const getByOrderId = async (orderId, actor = null) => {
     await assertInvoiceWarehouseAccess(invoice, actor);
   }
   return invoice;
+};
+
+const getActiveOrderIdsByCustomer = async (customerId) => {
+  const invoices =
+    await invoiceRepository.findActiveOrderLinksByCustomer(customerId);
+
+  const orderIds = [];
+  const seen = new Set();
+
+  for (const invoice of invoices) {
+    for (const orderId of getInvoiceOrderIds(invoice)) {
+      const key = String(orderId);
+      if (seen.has(key)) {
+        continue;
+      }
+      seen.add(key);
+      orderIds.push(orderId);
+    }
+  }
+
+  return orderIds;
+};
+
+const sumOutstandingByCustomer = (customerId) => {
+  return invoiceRepository.sumOutstandingByCustomer(customerId);
 };
 
 const getIdsByWarehouseId = async (warehouseId) => {
@@ -545,7 +689,8 @@ const processOverdueInvoices = async (cutoffDate = new Date()) => {
             data: {
               invoiceId: candidate._id,
               invoiceCode: candidate.invoiceCode,
-              orderId: candidate.orderId?._id || candidate.orderId,
+              orderId: getInvoiceOrderIds(candidate)[0] || null,
+              orderIds: getInvoiceOrderIds(candidate),
             },
           });
         } catch (notifError) {
@@ -570,6 +715,9 @@ export default {
   getById,
   getByCode,
   getByOrderId,
+  getActiveOrderIdsByCustomer,
+  sumOutstandingByCustomer,
+  getInvoiceOrderIds,
   getIdsByWarehouseId,
   issueInvoice,
   reservePendingPayment,

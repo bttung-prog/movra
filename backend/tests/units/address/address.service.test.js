@@ -60,10 +60,13 @@ describe("addressService.create", () => {
     await addressService.create({
       customerId,
       receiverName: "Test Receiver",
+      label: "Kho A",
       province: "Province",
       district: "District",
       ward: "Ward",
       detail: "123 Main Street",
+      latitude: 10.7769,
+      longitude: 106.7009,
       postalCode: undefined,
       isDefault: false,
     });
@@ -71,10 +74,13 @@ describe("addressService.create", () => {
     expect(mocks.create).toHaveBeenCalledWith({
       customerId,
       receiverName: "Test Receiver",
+      label: "Kho A",
       province: "Province",
       district: "District",
       ward: "Ward",
       detail: "123 Main Street",
+      latitude: 10.7769,
+      longitude: 106.7009,
       postalCode: undefined,
       isDefault: true,
     });

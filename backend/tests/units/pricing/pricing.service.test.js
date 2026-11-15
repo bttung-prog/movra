@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   deleteById: vi.fn(),
   getRouteById: vi.fn(),
   getGoodsCategoryById: vi.fn(),
+  getCustomerById: vi.fn(),
 }));
 
 vi.mock("../../../src/modules/pricing/pricing.repository.js", () => ({
@@ -40,6 +41,10 @@ vi.mock("../../../src/modules/warehouse/warehouse.service.js", () => ({
 
 vi.mock("../../../src/modules/goodsCategory/goodsCategory.service.js", () => ({
   default: { getById: mocks.getGoodsCategoryById },
+}));
+
+vi.mock("../../../src/modules/customer/customer.service.js", () => ({
+  default: { getById: mocks.getCustomerById },
 }));
 
 import pricingService from "../../../src/modules/pricing/pricing.service.js";
@@ -298,6 +303,51 @@ describe("pricingService.calculateFee", () => {
       statusCode: 400,
       message: "Khoảng cách vận chuyển phải lớn hơn 0",
     });
+  });
+
+  it("applies the customer's contract discount when customerId is provided", async () => {
+    const customerId = "507f1f77bcf86cd799439013";
+    mocks.findActiveByServiceType.mockResolvedValue(null);
+    mocks.getCustomerById.mockResolvedValue({
+      _id: customerId,
+      contractDiscountRate: 10,
+    });
+
+    const result = await pricingService.calculateFee({
+      serviceType: "standard",
+      weight: 3,
+      distance: 15,
+      customerId,
+    });
+
+    expect(mocks.getCustomerById).toHaveBeenCalledWith(customerId);
+    expect(result).toMatchObject({
+      shippingFeeBeforeDiscount: 47500,
+      discountRate: 10,
+      discountAmount: 4750,
+      totalShippingFee: 42750,
+    });
+    expect(result.breakdown).toMatchObject({
+      shippingFeeBeforeDiscount: 47500,
+      discountRate: 10,
+      discountAmount: 4750,
+      totalShippingFee: 42750,
+    });
+  });
+
+  it("applies an explicit contractDiscountRate without loading the customer and rounds the discount", async () => {
+    mocks.findActiveByServiceType.mockResolvedValue(null);
+
+    const result = await pricingService.calculateFee({
+      serviceType: "standard",
+      weight: 3,
+      distance: 15,
+      contractDiscountRate: 7.5,
+    });
+
+    expect(mocks.getCustomerById).not.toHaveBeenCalled();
+    expect(result.discountAmount).toBe(3563);
+    expect(result.totalShippingFee).toBe(43937);
   });
 });
 

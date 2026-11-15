@@ -23,13 +23,14 @@ import {
 import { SERVICE_TYPES } from "../../constants/serviceTypes.js";
 import { SHIPPING_MODES } from "../../constants/shippingModes.js";
 import { PAYMENT_STATUSES } from "../../constants/paymentStatuses.js";
+import { PAYMENT_TERMS } from "../../constants/paymentTerms.js";
 
 import ApiError from "../../utils/ApiError.js";
 import generateCode from "../../utils/generateCode.js";
-import checkWarehouseAccess from "../../utils/checkWarehouseAccess.js";
 import logger from "../../configs/logger.js";
 
 import customerService from "../customer/customer.service.js";
+import customerCreditService from "../customer/customerCredit.service.js";
 import goodsCategoryService from "../goodsCategory/goodsCategory.service.js";
 import routeService from "../route/route.service.js";
 import tripService from "../trip/trip.service.js";
@@ -318,12 +319,18 @@ const create = async (
   session = null,
   user = null,
 ) => {
+  if (createdBy) {
+    await userService.getById(createdBy);
+  }
+
   await goodsCategoryService.getById(goodCategory);
 
   if (!customerId) {
     throw new ApiError(400, ORDER_MESSAGES.CUSTOMER_REQUIRED);
   }
   const customer = await customerService.getById(customerId);
+  const paymentTerms = customer.defaultPaymentTerms || PAYMENT_TERMS.IMMEDIATE;
+  const contractDiscountRate = Number(customer.contractDiscountRate || 0);
 
   const routing = await resolveOrderRouting({
     shippingMode,
@@ -343,10 +350,6 @@ const create = async (
     deliveryDistanceKm,
     totalDistanceKm,
   } = routing;
-
-  if (createdBy) {
-    await userService.getById(createdBy);
-  }
 
   let orderCode;
   let isUnique = false;
@@ -374,10 +377,27 @@ const create = async (
     ...(totalDistanceKm !== undefined ? { distance: totalDistanceKm } : {}),
     routeId,
     goodsCategoryId: goodCategory,
+    contractDiscountRate,
   });
   const effectiveShippingFee = Number(feeResult.totalShippingFee);
   if (!Number.isFinite(effectiveShippingFee) || effectiveShippingFee < 0) {
     throw new ApiError(500, ORDER_MESSAGES.INVALID_SHIPPING_FEE);
+  }
+
+  const shippingFeeBeforeDiscount = Number(
+    feeResult.shippingFeeBeforeDiscount ?? effectiveShippingFee,
+  );
+  const discountAmount = Number(feeResult.discountAmount ?? 0);
+  const discountRateApplied = Number(
+    feeResult.discountRate ?? contractDiscountRate,
+  );
+
+  if (paymentTerms !== PAYMENT_TERMS.IMMEDIATE) {
+    await customerCreditService.assertCreditAvailable({
+      customer,
+      paymentTerms,
+      additionalAmount: effectiveShippingFee,
+    });
   }
 
   const calculatedTotal = effectiveShippingFee + Number(codAmount || 0);
@@ -410,15 +430,18 @@ const create = async (
         quantity,
         codAmount,
         shippingFee: effectiveShippingFee,
+        shippingFeeBeforeDiscount,
+        discountRateApplied,
+        discountAmount,
         shippingFeePaid: false,
         shippingFeePaidAmount: 0,
-        loyaltyPointsAwarded: false,
         totalAmount: calculatedTotal,
         routeId,
         warehouseId,
         destinationWarehouseId,
         type,
         shippingMode: routing.shippingMode,
+        paymentTerms,
         paymentMethod: null,
         paymentStatus: PAYMENT_STATUSES.PENDING,
         paymentTime: null,
@@ -845,12 +868,6 @@ const markAsDelivered = async ({
 
   try {
     const now = new Date();
-    const isFullyPaid = order.shippingFeePaid === true;
-    const shouldAwardPoints = isFullyPaid && !order.loyaltyPointsAwarded;
-    const totalShippingFee = shouldAwardPoints
-      ? Number(order.shippingFee || order.shippingFeePaidAmount || 0)
-      : 0;
-    const pointsToAward = Math.floor(totalShippingFee / 10000);
 
     const updatedOrder = await orderRepository.updateById(
       orderId,
@@ -867,7 +884,6 @@ const markAsDelivered = async ({
               codCollected: true,
             }
           : {}),
-        ...(shouldAwardPoints ? { loyaltyPointsAwarded: true } : {}),
       },
       session,
       {
@@ -887,21 +903,16 @@ const markAsDelivered = async ({
       throw new ApiError(409, ORDER_MESSAGES.ORDER_ASSIGNMENT_CHANGED);
     }
 
-    if (shouldAwardPoints) {
-      const customerId = order.customerId?._id || order.customerId;
-      if (customerId && (pointsToAward > 0 || totalShippingFee > 0)) {
-        await customerService.updateById(
-          customerId,
-          {
-            $inc: {
-              totalSpent: totalShippingFee,
-              loyaltyPoints: pointsToAward,
-            },
-            lastPurchaseDate: now,
-          },
-          session,
-        );
-      }
+    const customerId = order.customerId?._id || order.customerId;
+    if (customerId) {
+      await customerService.updateById(
+        customerId,
+        {
+          $inc: { totalSpent: Number(order.shippingFee || 0) },
+          lastPurchaseDate: now,
+        },
+        session,
+      );
     }
 
     const trackingLog = await orderRepository.createTrackingLog(
@@ -995,24 +1006,6 @@ const refundShippingFeeToWallet = async (order, amount, session, reason) => {
     },
   };
   const occConditions = {};
-
-  if (order.loyaltyPointsAwarded) {
-    const calculatedPointsToReverse = Math.floor(amount / 10000);
-    const currentPoints = Math.max(0, Number(customer.loyaltyPoints || 0));
-    const pointsToReverse = Math.min(currentPoints, calculatedPointsToReverse);
-
-    const currentSpent = Math.max(0, Number(customer.totalSpent || 0));
-    const spentToReverse = Math.min(currentSpent, amount);
-
-    if (pointsToReverse > 0) {
-      customerUpdate.$inc.loyaltyPoints = -pointsToReverse;
-      occConditions.loyaltyPoints = { $gte: pointsToReverse };
-    }
-    if (spentToReverse > 0) {
-      customerUpdate.$inc.totalSpent = -spentToReverse;
-      occConditions.totalSpent = { $gte: spentToReverse };
-    }
-  }
 
   const updatedCustomer = await customerService.updateById(
     customerId,
@@ -1932,6 +1925,90 @@ const markOrderAsFeedbacked = (orderId, session = null) => {
   return orderRepository.updateById(orderId, { isFeedbacked: true }, session);
 };
 
+const getByIds = async (orderIds = [], session = null) => {
+  if (!Array.isArray(orderIds) || orderIds.length === 0) {
+    return [];
+  }
+
+  return orderRepository.findByIds(orderIds, session);
+};
+
+const getBillableOrdersForInvoice = async ({
+  customerId,
+  fromDate,
+  toDate,
+  excludeOrderIds = [],
+}) => {
+  if (!customerId || !fromDate || !toDate) {
+    throw new ApiError(400, ORDER_MESSAGES.CUSTOMER_REQUIRED);
+  }
+
+  return orderRepository.findBillableByCustomer({
+    customerId,
+    fromDate,
+    toDate,
+    excludeOrderIds,
+  });
+};
+
+const sumUnbilledShippingFeeByCustomer = (
+  customerId,
+  excludedOrderIds = [],
+) => {
+  return orderRepository.sumUnbilledShippingFeeByCustomer(
+    customerId,
+    excludedOrderIds,
+  );
+};
+
+const applyInvoicePayment = async ({
+  orderIds = [],
+  paidAmount = 0,
+  paymentMethod = null,
+  paymentTime = new Date(),
+  session = null,
+}) => {
+  const orders = await getByIds(orderIds, session);
+  const sortedOrders = [...orders].sort((first, second) => {
+    const firstTime = new Date(first.createdAt || 0).getTime();
+    const secondTime = new Date(second.createdAt || 0).getTime();
+
+    if (firstTime !== secondTime) {
+      return firstTime - secondTime;
+    }
+
+    return String(first._id).localeCompare(String(second._id));
+  });
+
+  let remainingPaidAmount = Math.max(0, Number(paidAmount) || 0);
+  let updatedCount = 0;
+
+  for (const order of sortedOrders) {
+    const shippingFee = Number(order.shippingFee || 0);
+    const allocation = Math.min(shippingFee, remainingPaidAmount);
+    remainingPaidAmount -= allocation;
+    const isFullyPaid = allocation >= shippingFee;
+
+    await orderRepository.updateById(
+      order._id,
+      {
+        shippingFeePaidAmount: allocation,
+        shippingFeePaid: isFullyPaid,
+        paymentStatus: isFullyPaid
+          ? PAYMENT_STATUSES.COMPLETED
+          : PAYMENT_STATUSES.PENDING,
+        ...(paymentMethod ? { paymentMethod } : {}),
+        ...(paymentTime ? { paymentTime } : {}),
+      },
+      session,
+    );
+
+    updatedCount += 1;
+  }
+
+  return updatedCount;
+};
+
 export default {
   create,
   getAll,
@@ -1945,6 +2022,9 @@ export default {
   countRouteMismatchesByTripId,
   getMyOrders,
   getById,
+  getByIds,
+  getBillableOrdersForInvoice,
+  sumUnbilledShippingFeeByCustomer,
   getByCode,
   getPublicTrackingByCode,
   getByTripId,
@@ -1956,6 +2036,7 @@ export default {
   getRecentTrends,
   claimForCodSettlement,
   releaseCodSettlement,
+  applyInvoicePayment,
 
   // Dedicated Business methods
   markAsDelivered,

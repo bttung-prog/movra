@@ -8,8 +8,20 @@ const mocks = vi.hoisted(() => ({
   findByUserId: vi.fn(),
   updateById: vi.fn(),
   getUserById: vi.fn(),
-  searchPaginated: vi.fn(),
+  startSession: vi.fn(),
+  createCreditLog: vi.fn(),
+  findCreditLogsByCustomerId: vi.fn(),
+  countCreditLogsByCustomerId: vi.fn(),
 }));
+
+vi.mock("mongoose", async (importOriginal) => {
+  const actual = await importOriginal();
+
+  return {
+    ...actual,
+    default: { ...actual.default, startSession: mocks.startSession },
+  };
+});
 
 vi.mock("../../../src/modules/customer/customer.repository.js", () => ({
   default: {
@@ -22,16 +34,27 @@ vi.mock("../../../src/modules/customer/customer.repository.js", () => ({
   },
 }));
 
+vi.mock(
+  "../../../src/modules/customer/customerCreditLog.repository.js",
+  () => ({
+    default: {
+      create: mocks.createCreditLog,
+      findByCustomerId: mocks.findCreditLogsByCustomerId,
+      countByCustomerId: mocks.countCreditLogsByCustomerId,
+    },
+  }),
+);
+
 vi.mock("../../../src/modules/user/user.service.js", () => ({
   default: {
     getById: mocks.getUserById,
-    searchPaginated: mocks.searchPaginated,
   },
 }));
 
 import { CUSTOMER_MESSAGES } from "../../../src/constants/messages.js";
 import { ROLES } from "../../../src/constants/roles.js";
 import customerService from "../../../src/modules/customer/customer.service.js";
+import { escapeRegex } from "../../../src/utils/regexUtils.js";
 
 const customerId = "customer-1";
 const userId = "user-1";
@@ -51,6 +74,8 @@ beforeEach(() => {
   mocks.countAll.mockResolvedValue(21);
   mocks.findById.mockResolvedValue(customer);
   mocks.updateById.mockResolvedValue(customer);
+  mocks.findCreditLogsByCustomerId.mockResolvedValue([]);
+  mocks.countCreditLogsByCustomerId.mockResolvedValue(0);
 });
 
 describe("customerService.create", () => {
@@ -78,17 +103,17 @@ describe("customerService.create", () => {
 describe("customerService.getAll", () => {
   it("paginates customers without a search term", async () => {
     const result = await customerService.getAll({
-      filter: { gender: "female" },
+      filter: { companyName: "Movra" },
       page: 2,
       limit: 10,
     });
 
     expect(mocks.findAll).toHaveBeenCalledWith({
-      filter: { gender: "female" },
+      filter: { companyName: "Movra" },
       skip: 10,
       limit: 10,
     });
-    expect(mocks.countAll).toHaveBeenCalledWith({ gender: "female" });
+    expect(mocks.countAll).toHaveBeenCalledWith({ companyName: "Movra" });
     expect(result).toEqual({
       data: [customer],
       pagination: {
@@ -98,62 +123,66 @@ describe("customerService.getAll", () => {
         totalPages: 3,
       },
     });
-    expect(mocks.searchPaginated).not.toHaveBeenCalled();
   });
 
-  it("searches users first and restores their result order in customer data", async () => {
-    const firstUser = { _id: "user-2" };
-    const secondUser = { _id: "user-3" };
-    const firstCustomer = { _id: "customer-2", userId: "user-2" };
-    const secondCustomer = { _id: "customer-3", userId: "user-3" };
-    mocks.searchPaginated.mockResolvedValue({
-      data: [firstUser, secondUser],
-      pagination: { totalUsers: 12, totalPages: 2 },
-    });
-    mocks.findAll.mockResolvedValue([secondCustomer, firstCustomer]);
+  it("searches customers by company name or tax code", async () => {
+    const firstCustomer = { _id: "customer-2", companyName: "Movra" };
+    const secondCustomer = {
+      _id: "customer-3",
+      companyName: "Movra Logistics",
+    };
+    mocks.findAll.mockResolvedValue([firstCustomer, secondCustomer]);
+    mocks.countAll.mockResolvedValue(12);
 
     const result = await customerService.getAll({
-      filter: { gender: "male" },
+      filter: { creditLimit: { $gt: 0 } },
       page: 2,
       limit: 5,
-      search: "  Linh ",
+      search: "  Movra (JSC) ",
     });
 
-    expect(mocks.searchPaginated).toHaveBeenCalledWith("Linh", {
-      page: 2,
-      limit: 5,
-      filter: { role: ROLES.CUSTOMER },
-    });
+    const keyword = escapeRegex("Movra (JSC)");
+    const expectedFilter = {
+      $and: [
+        { creditLimit: { $gt: 0 } },
+        {
+          $or: [
+            { companyName: { $regex: keyword, $options: "i" } },
+            { taxCode: { $regex: keyword, $options: "i" } },
+          ],
+        },
+      ],
+    };
+
     expect(mocks.findAll).toHaveBeenCalledWith({
-      filter: {
-        gender: "male",
-        userId: { $in: ["user-2", "user-3"] },
-      },
-      skip: 0,
-      limit: 2,
+      filter: expectedFilter,
+      skip: 5,
+      limit: 5,
     });
+    expect(mocks.countAll).toHaveBeenCalledWith(expectedFilter);
     expect(result).toEqual({
       data: [firstCustomer, secondCustomer],
       pagination: {
         page: 2,
         limit: 5,
         totalCustomers: 12,
-        totalPages: 2,
+        totalPages: 3,
       },
     });
-    expect(mocks.countAll).not.toHaveBeenCalled();
   });
 
-  it("does not query customers when a user search has no matches", async () => {
-    mocks.searchPaginated.mockResolvedValue({
-      data: [],
-      pagination: { totalUsers: 0, totalPages: 0 },
-    });
+  it("returns an empty page when the keyword has no matches", async () => {
+    mocks.findAll.mockResolvedValue([]);
+    mocks.countAll.mockResolvedValue(0);
 
     const result = await customerService.getAll({ search: "missing" });
 
     expect(result.data).toEqual([]);
-    expect(mocks.findAll).not.toHaveBeenCalled();
+    expect(result.pagination.totalCustomers).toBe(0);
+    expect(mocks.findAll).toHaveBeenCalledWith(
+      expect.objectContaining({ skip: 0, limit: 10 }),
+    );
+    expect(mocks.countAll).toHaveBeenCalled();
   });
 });
 
@@ -206,11 +235,11 @@ describe("customerService lookups and updates", () => {
 
   it("updates a customer profile using its user ID", async () => {
     mocks.findByUserId.mockResolvedValueOnce(customer);
-    await customerService.updateByUserId(userId, { gender: "female" });
+    await customerService.updateByUserId(userId, { companyName: "Movra" });
 
     expect(mocks.findByUserId).toHaveBeenCalledWith(userId, null);
     expect(mocks.updateById).toHaveBeenCalledWith(customerId, {
-      gender: "female",
+      companyName: "Movra",
     });
   });
 });
@@ -265,5 +294,125 @@ describe("customerService wallet operations", () => {
         }),
       );
     }
+  });
+});
+
+const createSession = () => ({
+  startTransaction: vi.fn(),
+  commitTransaction: vi.fn().mockResolvedValue(undefined),
+  abortTransaction: vi.fn().mockResolvedValue(undefined),
+  endSession: vi.fn(),
+});
+
+describe("customerService credit audit", () => {
+  it("updates non-credit fields without writing an audit log", async () => {
+    const updatedCustomer = { ...customer, companyName: "Movra" };
+    mocks.updateById.mockResolvedValue(updatedCustomer);
+
+    const result = await customerService.updateByAdmin(
+      customerId,
+      { companyName: "Movra" },
+      "admin-1",
+    );
+
+    expect(result).toBe(updatedCustomer);
+    expect(mocks.updateById).toHaveBeenCalledWith(customerId, {
+      companyName: "Movra",
+    });
+    expect(mocks.startSession).not.toHaveBeenCalled();
+    expect(mocks.createCreditLog).not.toHaveBeenCalled();
+  });
+
+  it("writes an audit log when credit terms change", async () => {
+    const session = createSession();
+    mocks.startSession.mockResolvedValue(session);
+    mocks.findById.mockResolvedValue({
+      ...customer,
+      creditLimit: 0,
+      defaultPaymentTerms: "immediate",
+      contractDiscountRate: 0,
+    });
+    mocks.updateById.mockResolvedValue({
+      ...customer,
+      creditLimit: 50000000,
+      defaultPaymentTerms: "net_30",
+    });
+    mocks.createCreditLog.mockResolvedValue({ _id: "log-1" });
+
+    await customerService.updateByAdmin(
+      customerId,
+      {
+        creditLimit: 50000000,
+        defaultPaymentTerms: "net_30",
+        contractDiscountRate: 0,
+        creditNote: "Approved by CFO",
+      },
+      "admin-1",
+    );
+
+    expect(mocks.updateById).toHaveBeenCalledWith(
+      customerId,
+      {
+        creditLimit: 50000000,
+        defaultPaymentTerms: "net_30",
+        contractDiscountRate: 0,
+      },
+      session,
+    );
+    expect(mocks.createCreditLog).toHaveBeenCalledWith(
+      {
+        customerId,
+        changedBy: "admin-1",
+        changes: {
+          creditLimit: { from: 0, to: 50000000 },
+          defaultPaymentTerms: { from: "immediate", to: "net_30" },
+        },
+        note: "Approved by CFO",
+      },
+      session,
+    );
+    expect(session.commitTransaction).toHaveBeenCalled();
+    expect(session.endSession).toHaveBeenCalled();
+  });
+
+  it("rolls back the update when the audit log cannot be written", async () => {
+    const session = createSession();
+    mocks.startSession.mockResolvedValue(session);
+    mocks.findById.mockResolvedValue({ ...customer, creditLimit: 0 });
+    mocks.updateById.mockResolvedValue({ ...customer, creditLimit: 1000 });
+    mocks.createCreditLog.mockRejectedValue(new Error("audit failed"));
+
+    await expect(
+      customerService.updateByAdmin(
+        customerId,
+        { creditLimit: 1000 },
+        "admin-1",
+      ),
+    ).rejects.toThrow("audit failed");
+
+    expect(session.abortTransaction).toHaveBeenCalled();
+    expect(session.endSession).toHaveBeenCalled();
+  });
+
+  it("returns paginated credit history for an existing customer", async () => {
+    mocks.findById.mockResolvedValue(customer);
+    mocks.findCreditLogsByCustomerId.mockResolvedValue([{ _id: "log-1" }]);
+    mocks.countCreditLogsByCustomerId.mockResolvedValue(21);
+
+    const result = await customerService.getCreditHistory(customerId, {
+      page: 2,
+      limit: 10,
+    });
+
+    expect(mocks.findCreditLogsByCustomerId).toHaveBeenCalledWith({
+      customerId,
+      skip: 10,
+      limit: 10,
+    });
+    expect(mocks.countCreditLogsByCustomerId).toHaveBeenCalledWith(customerId);
+    expect(result).toEqual({
+      data: [{ _id: "log-1" }],
+      pagination: { page: 2, limit: 10, total: 21, totalPages: 3 },
+    });
   });
 });

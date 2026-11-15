@@ -256,6 +256,7 @@ export const CUSTOMER_MESSAGES = {
   GET_ALL_SUCCESS: "Lấy danh sách khách hàng thành công",
   GET_ONE_SUCCESS: "Lấy thông tin khách hàng thành công",
   GET_PROFILE_SUCCESS: "Lấy thông tin cá nhân thành công",
+  GET_CREDIT_HISTORY_SUCCESS: "Lấy lịch sử thay đổi hạn mức công nợ thành công",
   UPDATE_SUCCESS: "Cập nhật thông tin khách hàng thành công",
   UPDATE_PROFILE_SUCCESS: "Cập nhật thông tin cá nhân thành công",
   DELETE_SUCCESS: "Xóa khách hàng thành công",
@@ -264,6 +265,10 @@ export const CUSTOMER_MESSAGES = {
   INVALID_WALLET_DEBIT_AMOUNT: "Số tiền trừ ví không hợp lệ",
   INVALID_WALLET_ADJUSTMENT_AMOUNT: "Số tiền điều chỉnh ví không hợp lệ",
   CODE_GEN_FAILED: "Không thể tạo mã khách hàng duy nhất. Vui lòng thử lại.",
+  CREDIT_LIMIT_NOT_APPROVED:
+    "Khách hàng chưa được cấp hạn mức công nợ cho thanh toán trả sau",
+  CREDIT_LIMIT_EXCEEDED: (availableCredit, requiredAmount) =>
+    `Hạn mức công nợ không đủ: còn ${Number(availableCredit).toLocaleString("vi-VN")}đ, cần ${Number(requiredAmount).toLocaleString("vi-VN")}đ cho đơn hàng mới`,
 };
 
 export const ADDRESS_MESSAGES = {
@@ -781,8 +786,6 @@ export const INVOICE_MESSAGES = {
   PROCESS_OVERDUE_SUCCESS: "Quét và cập nhật hóa đơn quá hạn thành công",
   NOT_FOUND: "Không tìm thấy hóa đơn",
   CUSTOMER_REQUIRED: "Mã khách hàng là bắt buộc để lập hóa đơn",
-  DISPATCHER_ORDER_REQUIRED:
-    "Điều phối viên chỉ được lập hóa đơn cho đơn hàng thuộc kho",
   DISPATCHER_ORDER_LINK_REQUIRED:
     "Hóa đơn phải được liên kết với đơn hàng thuộc kho",
   ACCESS_DENIED: "Bạn không có quyền truy cập hóa đơn này",

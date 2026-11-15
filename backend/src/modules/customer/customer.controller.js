@@ -52,15 +52,33 @@ const getMyProfile = async (req, res, next) => {
 
 const update = async (req, res, next) => {
   try {
-    const updatedCustomer = await customerService.updateById(
+    const updatedCustomer = await customerService.updateByAdmin(
       req.params.customerId,
       req.body,
+      req.user?.userId,
     );
 
     return ApiResponse.success(
       res,
       updatedCustomer,
       CUSTOMER_MESSAGES.UPDATE_SUCCESS,
+    );
+  } catch (error) {
+    next(error);
+  }
+};
+
+const getCreditHistory = async (req, res, next) => {
+  try {
+    const result = await customerService.getCreditHistory(
+      req.params.customerId,
+      req.query,
+    );
+
+    return ApiResponse.success(
+      res,
+      result,
+      CUSTOMER_MESSAGES.GET_CREDIT_HISTORY_SUCCESS,
     );
   } catch (error) {
     next(error);
@@ -88,6 +106,7 @@ export default {
   getAll,
   getById,
   getMyProfile,
+  getCreditHistory,
   update,
   updateMyProfile,
 };
