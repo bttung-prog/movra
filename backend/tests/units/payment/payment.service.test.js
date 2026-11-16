@@ -182,7 +182,7 @@ describe("paymentService.create", () => {
   it("completes wallet payments through the linked invoice and updates the order", async () => {
     const invoice = {
       _id: "invoice-1",
-      orderId,
+      orderIds: [orderId],
       customerId,
       status: "issued",
       paidAmount: 0,
@@ -244,7 +244,7 @@ describe("paymentService.create", () => {
   it("records the wallet debit without awarding loyalty points for an already delivered order", async () => {
     const invoice = {
       _id: "invoice-1",
-      orderId,
+      orderIds: [orderId],
       customerId,
       status: "issued",
       paidAmount: 0,
@@ -306,7 +306,7 @@ describe("paymentService.create", () => {
   it("does not add spending totals or loyalty points for a partial payment", async () => {
     const invoice = {
       _id: "invoice-1",
-      orderId,
+      orderIds: [orderId],
       customerId,
       status: "issued",
       paidAmount: 0,
@@ -381,7 +381,7 @@ describe("paymentService.create", () => {
     vi.stubEnv("VIETQR_ACCOUNT_NAME", "MOVRA");
     const invoice = {
       _id: "invoice-1",
-      orderId,
+      orderIds: [orderId],
       customerId,
       status: "issued",
       remainingAmount: 1000,
@@ -418,7 +418,7 @@ describe("paymentService.create", () => {
     mocks.getInvoiceById.mockResolvedValue({
       _id: "invoice-1",
       customerId,
-      orderId: null,
+      orderIds: [],
       status: "draft",
       remainingAmount: 3000,
       pendingAmount: 0,
@@ -457,7 +457,7 @@ describe("paymentService.create", () => {
     mocks.getInvoiceById.mockResolvedValue({
       _id: "invoice-1",
       customerId,
-      orderId: null,
+      orderIds: [],
       status: "draft",
       remainingAmount: 3000,
       pendingAmount: 0,
@@ -549,7 +549,7 @@ describe("paymentService.create", () => {
   it("rejects an invoice that belongs to a different order", async () => {
     mocks.getInvoiceById.mockResolvedValue({
       _id: "invoice-1",
-      orderId: "another-order",
+      orderIds: ["another-order"],
       customerId,
       status: "issued",
       remainingAmount: 1000,
@@ -618,7 +618,7 @@ describe("paymentService.verifyPayment", () => {
     });
     mocks.getInvoiceById.mockResolvedValue({
       _id: "invoice-1",
-      orderId: "another-order",
+      orderIds: ["another-order"],
       status: "issued",
       paidAmount: 0,
       remainingAmount: 1000,
@@ -1008,7 +1008,6 @@ describe("paymentService multi-order invoices", () => {
   it("allocates a completed invoice payment across all linked orders", async () => {
     const multiInvoice = {
       _id: "invoice-1",
-      orderId: null,
       orderIds: [orderId, "order-2"],
       customerId,
       status: "issued",

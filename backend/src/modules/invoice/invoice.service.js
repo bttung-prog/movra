@@ -294,10 +294,7 @@ const getAll = async ({
   if (actor?.role === ROLES.DISPATCHER) {
     const orderIds = await orderService.getIdsByWarehouseId(actor.warehouseId);
     queryFilter = {
-      $and: [
-        filter,
-        { orderIds: { $in: orderIds } },
-      ],
+      $and: [filter, { orderIds: { $in: orderIds } }],
     };
   }
 
@@ -573,10 +570,7 @@ const getStats = async (filter = {}, actor = null) => {
   if (actor?.role === ROLES.DISPATCHER) {
     const orderIds = await orderService.getIdsByWarehouseId(actor.warehouseId);
     filter = {
-      $and: [
-        filter,
-        { orderIds: { $in: orderIds } },
-      ],
+      $and: [filter, { orderIds: { $in: orderIds } }],
     };
   }
   return invoiceRepository.getStats(filter);
