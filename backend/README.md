@@ -169,8 +169,7 @@ Customer listing (`GET /api/v1/customers?search=`) searches by company name or t
 
 `POST /api/v1/invoices` accepts one of:
 
-- `orderId` for a single order (legacy).
-- `orderIds` for a specific set of orders.
+- `orderIds` for one or more orders (e.g. `[orderId]` for a single order or `[id1, id2]` for consolidated orders).
 - `billingPeriod: { fromDate, toDate }` together with `customerId` to collect every billable order created in that period that is not already on an active invoice.
 
 Order-linked invoices generate one line item per order. Every order must belong to the same customer, must not be cancelled, must not have its shipping fee paid, and must not already belong to an active invoice.

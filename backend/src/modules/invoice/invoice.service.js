@@ -66,7 +66,6 @@ const getInvoiceOrderIds = (invoice) => {
     orderIds.push(id);
   };
 
-  addOrderId(invoice?.orderId);
   for (const id of invoice?.orderIds || []) {
     addOrderId(id);
   }
@@ -247,7 +246,6 @@ const create = async (payload, session = null, actor = null) => {
   const invoiceData = {
     invoiceCode,
     customerId: finalCustomerId,
-    orderId: orderId || (finalOrderIds.length === 1 ? finalOrderIds[0] : null),
     orderIds: finalOrderIds,
     billingPeriod: billingPeriod || undefined,
     companyName: customer.companyName || null,
@@ -271,7 +269,10 @@ const create = async (payload, session = null, actor = null) => {
   try {
     return await invoiceRepository.create(invoiceData, session);
   } catch (error) {
-    if (error.code === 11000 && error.keyPattern?.orderId) {
+    if (
+      error.code === 11000 &&
+      (error.keyPattern?.orderIds || error.keyPattern?.orderId)
+    ) {
       throw new ApiError(409, INVOICE_MESSAGES.ALREADY_EXISTS);
     }
     throw error;
@@ -293,15 +294,7 @@ const getAll = async ({
   if (actor?.role === ROLES.DISPATCHER) {
     const orderIds = await orderService.getIdsByWarehouseId(actor.warehouseId);
     queryFilter = {
-      $and: [
-        filter,
-        {
-          $or: [
-            { orderId: { $in: orderIds } },
-            { orderIds: { $in: orderIds } },
-          ],
-        },
-      ],
+      $and: [filter, { orderIds: { $in: orderIds } }],
     };
   }
 
@@ -577,15 +570,7 @@ const getStats = async (filter = {}, actor = null) => {
   if (actor?.role === ROLES.DISPATCHER) {
     const orderIds = await orderService.getIdsByWarehouseId(actor.warehouseId);
     filter = {
-      $and: [
-        filter,
-        {
-          $or: [
-            { orderId: { $in: orderIds } },
-            { orderIds: { $in: orderIds } },
-          ],
-        },
-      ],
+      $and: [filter, { orderIds: { $in: orderIds } }],
     };
   }
   return invoiceRepository.getStats(filter);
