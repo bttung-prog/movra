@@ -49,12 +49,6 @@ const invoicesSchema = new mongoose.Schema(
       required: true,
     },
 
-    orderId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Order",
-      default: null,
-    },
-
     orderIds: {
       type: [
         {
@@ -173,14 +167,13 @@ const invoicesSchema = new mongoose.Schema(
 );
 
 invoicesSchema.index({ customerId: 1, status: 1 });
-invoicesSchema.index({ orderIds: 1 });
 invoicesSchema.index(
-  { orderId: 1 },
+  { orderIds: 1 },
   {
     name: "one_active_invoice_per_order",
     unique: true,
     partialFilterExpression: {
-      orderId: { $type: "objectId" },
+      "orderIds.0": { $exists: true },
       status: {
         $in: [
           INVOICE_STATUSES.DRAFT,

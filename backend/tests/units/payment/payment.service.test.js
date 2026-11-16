@@ -25,7 +25,6 @@ const mocks = vi.hoisted(() => ({
       orderIds.push(id);
     };
 
-    addOrderId(invoice?.orderId);
     for (const id of invoice?.orderIds || []) {
       addOrderId(id);
     }

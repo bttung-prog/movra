@@ -101,7 +101,7 @@ const draftInvoice = {
   _id: invoiceId,
   invoiceCode,
   customerId,
-  orderId,
+  orderIds: [orderId],
   status: INVOICE_STATUSES.DRAFT,
   subTotal: 3000,
   tax: 0,
@@ -148,7 +148,6 @@ describe("invoiceService.create", () => {
       expect.objectContaining({
         invoiceCode,
         customerId,
-        orderId,
         orderIds: [orderId],
         subTotal: linkedOrder.shippingFee,
         tax: 250,
@@ -188,7 +187,6 @@ describe("invoiceService.create", () => {
     expect(mocks.create).toHaveBeenCalledWith(
       expect.objectContaining({
         customerId,
-        orderId: null,
         orderIds: [orderId, secondOrderId],
         companyName: "Movra JSC",
         taxCode: "0312345678",
@@ -217,7 +215,7 @@ describe("invoiceService.create", () => {
     const fromDate = new Date("2026-01-01T00:00:00.000Z");
     const toDate = new Date("2026-01-31T00:00:00.000Z");
     mocks.findActiveOrderLinksByCustomer.mockResolvedValue([
-      { orderId: "order-9", orderIds: [] },
+      { orderIds: ["order-9"] },
     ]);
     mocks.getBillableOrdersForInvoice.mockResolvedValue([
       linkedOrder,
@@ -318,7 +316,7 @@ describe("invoiceService.create", () => {
     expect(mocks.create).toHaveBeenCalledWith(
       expect.objectContaining({
         customerId,
-        orderId: null,
+        orderIds: [],
         items,
         subTotal: 3000,
         tax: 500,
@@ -381,7 +379,7 @@ describe("invoiceService.create", () => {
   it("maps duplicate-order database conflicts to an invoice conflict", async () => {
     mocks.create.mockRejectedValue({
       code: 11000,
-      keyPattern: { orderId: 1 },
+      keyPattern: { orderIds: 1 },
     });
 
     await expect(invoiceService.create({ orderId })).rejects.toMatchObject({
@@ -392,10 +390,10 @@ describe("invoiceService.create", () => {
 });
 
 describe("invoiceService.getActiveOrderIdsByCustomer", () => {
-  it("flattens and deduplicates orderId and orderIds across active invoices", async () => {
+  it("flattens and deduplicates orderIds across active invoices", async () => {
     mocks.findActiveOrderLinksByCustomer.mockResolvedValue([
-      { orderId: "order-1", orderIds: ["order-2"] },
-      { orderId: null, orderIds: ["order-2", "order-3"] },
+      { orderIds: ["order-1", "order-2"] },
+      { orderIds: ["order-2", "order-3"] },
     ]);
 
     const result = await invoiceService.getActiveOrderIdsByCustomer(customerId);
@@ -444,12 +442,7 @@ describe("invoiceService.getAll", () => {
         filter: {
           $and: [
             { status: INVOICE_STATUSES.ISSUED },
-            {
-              $or: [
-                { orderId: { $in: [orderId] } },
-                { orderIds: { $in: [orderId] } },
-              ],
-            },
+            { orderIds: { $in: [orderId] } },
           ],
         },
       }),
@@ -494,7 +487,7 @@ describe("invoiceService invoice access", () => {
   });
 
   it("requires dispatcher invoices to link to an accessible order", async () => {
-    mocks.findById.mockResolvedValue({ ...draftInvoice, orderId: null });
+    mocks.findById.mockResolvedValue({ ...draftInvoice, orderIds: [] });
     const actor = { role: ROLES.DISPATCHER, warehouseId };
 
     await expect(
@@ -745,7 +738,7 @@ describe("invoiceService issue, update and cancel", () => {
         status: INVOICE_STATUSES.ISSUED,
         dueDate: new Date("2026-01-01"),
         remainingAmount: 50000,
-        orderId: "order-1",
+        orderIds: ["order-1"],
         customerId: {
           _id: "cust-1",
           userId: { _id: "user-cust-1" },
@@ -783,7 +776,7 @@ describe("invoiceService issue, update and cancel", () => {
           data: expect.objectContaining({
             invoiceId: candidate._id,
             invoiceCode: candidate.invoiceCode,
-            orderId: candidate.orderId,
+            orderIds: candidate.orderIds,
           }),
         }),
       );

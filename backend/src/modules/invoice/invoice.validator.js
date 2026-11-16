@@ -35,7 +35,6 @@ const invoiceItemSchema = Joi.object({
 });
 
 const createInvoiceSchema = Joi.object({
-  orderId: objectId.optional(),
   orderIds: Joi.array().items(objectId).min(1).unique().optional(),
   billingPeriod: Joi.object({
     fromDate: Joi.date().iso().required(),
@@ -52,7 +51,7 @@ const createInvoiceSchema = Joi.object({
     .default(PAYMENT_TERMS.IMMEDIATE),
   items: Joi.array().items(invoiceItemSchema).optional(),
   notes: Joi.string().trim().allow("").optional(),
-}).or("orderId", "orderIds", "customerId", "billingPeriod");
+}).or("orderIds", "customerId", "billingPeriod");
 
 const updateInvoiceSchema = Joi.object({
   subTotal: moneyAmount().optional(),

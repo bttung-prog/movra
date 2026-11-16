@@ -69,18 +69,23 @@ describe("invoiceValidator.createInvoiceSchema", () => {
     ).toBeDefined();
   });
 
-  it("requires a customer or order and validates their IDs", () => {
+  it("requires a customer or orders and validates their IDs", () => {
     expect(
       invoiceValidator.createInvoiceSchema.validate({}).error,
     ).toBeDefined();
     expect(
       invoiceValidator.createInvoiceSchema.validate({
-        orderId: "order-1",
+        orderIds: ["order-1"],
       }).error,
     ).toBeDefined();
     expect(
       invoiceValidator.createInvoiceSchema.validate({
         customerId: "507f1f77bcf86cd799439011",
+      }).error,
+    ).toBeUndefined();
+    expect(
+      invoiceValidator.createInvoiceSchema.validate({
+        orderIds: ["507f1f77bcf86cd799439012"],
       }).error,
     ).toBeUndefined();
   });

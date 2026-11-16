@@ -12,11 +12,6 @@ const INVOICE_POPULATE = [
     populate: { path: "userId", select: "fullName phone email" },
   },
   {
-    path: "orderId",
-    select:
-      "orderCode recipientName recipientPhone shippingFee codAmount totalAmount status paymentStatus",
-  },
-  {
     path: "orderIds",
     select:
       "orderCode recipientName recipientPhone shippingFee codAmount totalAmount status paymentStatus",
@@ -51,7 +46,7 @@ const countAll = ({ filter = {} } = {}) => {
 
 const findIdsByOrderIds = (orderIds = []) => {
   return Invoice.distinct("_id", {
-    $or: [{ orderId: { $in: orderIds } }, { orderIds: { $in: orderIds } }],
+    orderIds: { $in: orderIds },
   });
 };
 
@@ -59,18 +54,18 @@ const findActiveOrderLinksByCustomer = (customerId) => {
   return Invoice.find({
     customerId,
     status: { $ne: INVOICE_STATUSES.CANCELLED },
-    $or: [{ orderId: { $ne: null } }, { "orderIds.0": { $exists: true } }],
+    "orderIds.0": { $exists: true },
   })
-    .select("orderId orderIds")
+    .select("orderIds")
     .lean();
 };
 
 const findActiveByOrderIds = (orderIds = []) => {
   return Invoice.findOne({
-    $or: [{ orderId: { $in: orderIds } }, { orderIds: { $in: orderIds } }],
+    orderIds: { $in: orderIds },
     status: { $ne: INVOICE_STATUSES.CANCELLED },
   })
-    .select("invoiceCode orderId orderIds status")
+    .select("invoiceCode orderIds status")
     .lean();
 };
 
@@ -119,7 +114,7 @@ const findByCode = (invoiceCode) => {
 
 const findByOrderId = (orderId) => {
   return Invoice.findOne({
-    $or: [{ orderId }, { orderIds: orderId }],
+    orderIds: orderId,
     status: { $ne: INVOICE_STATUSES.CANCELLED },
   }).populate(INVOICE_POPULATE);
 };
