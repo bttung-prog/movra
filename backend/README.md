@@ -139,6 +139,12 @@ By default, the API is available at `http://localhost:5000`. The server connects
 
 All routes are mounted under `/api/v1`. The route modules currently serve as the API reference; a generated OpenAPI/Swagger specification is not included.
 
+### Pricing units
+
+`POST /api/v1/pricing/calculate` requires `weight` (kg) and all three package dimensions `length`, `width`, `height` (cm). Volumetric weight is calculated as `(length × width × height / 3000) × quantity` kg and compared with actual weight; the higher value is billable.
+
+Order creation (`POST /api/v1/orders`) accepts the same dimensions and stores `volume` in cm³. Vehicle capacity fields (`capacityVolume`, `maxVolume`) remain in m³; the API converts order volume from cm³ to m³ when checking trip capacity.
+
 ### Order payment flow
 
 Creating an order does not charge the customer's wallet. It creates the order with a pending shipping-fee payment. The customer then creates a payment through `POST /api/v1/payments` with the order ID, the remaining shipping-fee amount, and a payment method:

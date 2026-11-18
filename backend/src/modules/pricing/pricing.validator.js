@@ -28,7 +28,19 @@ const calculateFeeSchema = Joi.object({
     "any.required": "Weight is required",
     "number.positive": "Weight must be greater than 0",
   }),
-  volume: Joi.number().min(0).default(0),
+  // cm — required for volumetric weight
+  length: Joi.number().positive().required().messages({
+    "any.required": "Length is required",
+    "number.positive": "Length must be greater than 0",
+  }),
+  width: Joi.number().positive().required().messages({
+    "any.required": "Width is required",
+    "number.positive": "Width must be greater than 0",
+  }),
+  height: Joi.number().positive().required().messages({
+    "any.required": "Height is required",
+    "number.positive": "Height must be greater than 0",
+  }),
   quantity: Joi.number().integer().positive().default(1),
   distance: Joi.number().positive().optional().messages({
     "number.positive": "Distance must be greater than 0",
@@ -59,10 +71,10 @@ const createShippingRateSchema = Joi.object({
   basePrice: Joi.number().min(0).required().messages({
     "any.required": "Base price is required",
   }),
-  baseWeight: Joi.number().min(0).default(2),
-  extraWeightPrice: Joi.number().min(0).default(5000),
-  baseDistance: Joi.number().min(0).default(10),
-  extraDistancePrice: Joi.number().min(0).default(2000),
+  baseWeight: Joi.number().min(0).optional(),
+  extraWeightPrice: Joi.number().min(0).optional(),
+  baseDistance: Joi.number().min(1).optional(),
+  extraDistancePrice: Joi.number().min(0).optional(),
   categorySurcharges: Joi.array()
     .items(
       Joi.object({
@@ -84,7 +96,7 @@ const updateShippingRateSchema = Joi.object({
   basePrice: Joi.number().min(0).optional(),
   baseWeight: Joi.number().min(0).optional(),
   extraWeightPrice: Joi.number().min(0).optional(),
-  baseDistance: Joi.number().min(0).optional(),
+  baseDistance: Joi.number().min(1).optional(),
   extraDistancePrice: Joi.number().min(0).optional(),
   categorySurcharges: Joi.array()
     .items(

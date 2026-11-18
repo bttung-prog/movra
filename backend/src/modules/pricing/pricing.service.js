@@ -4,10 +4,12 @@ import {
   DEFAULT_RATES_BY_SERVICE_TYPE,
 } from "../../constants/defaultShippingRate.js";
 import { SHIPPING_MODES } from "../../constants/shippingModes.js";
+import { KG_PER_TON } from "../../constants/pricingUnits.js";
 import { SERVICE_TYPES } from "../../constants/serviceTypes.js";
 
 import { hasValidCoordinates } from "../../utils/distance.util.js";
 import { applyContractDiscount } from "../../utils/discount.util.js";
+import { calculateVolumetricWeightKg } from "../../utils/volume.util.js";
 import ApiError from "../../utils/ApiError.js";
 
 import customerService from "../customer/customer.service.js";
@@ -17,13 +19,13 @@ import routeService from "../route/route.service.js";
 import pricingRepository from "./pricing.repository.js";
 import { resolveOrderRouting } from "../route/routing.helper.js";
 
-const VOLUMETRIC_WEIGHT_DIVISOR = 3333;
-
 const calculateFee = async ({
   serviceType = SERVICE_TYPES.STANDARD,
   shippingMode = SHIPPING_MODES.CONSOLIDATED,
   weight = 1,
-  volume = 0,
+  length = 0,
+  width = 0,
+  height = 0,
   quantity = 1,
   distance = undefined,
   routeId = null,
@@ -81,17 +83,19 @@ const calculateFee = async ({
   }
 
   const totalWeight = weight * quantity;
-  const totalVolume = volume * quantity;
-  const volumetricWeight =
-    totalVolume > 0
-      ? Number((totalVolume / VOLUMETRIC_WEIGHT_DIVISOR).toFixed(2))
-      : 0;
+  const volumetricWeight = calculateVolumetricWeightKg(
+    length,
+    width,
+    height,
+    quantity,
+  );
   const billableWeight = Math.max(totalWeight, volumetricWeight);
 
   const extraWeight = Math.max(0, billableWeight - rate.baseWeight);
+  const extraWeightTons = Math.ceil(extraWeight / KG_PER_TON);
   const extraDistance = Math.max(0, distance - rate.baseDistance);
 
-  const weightFee = Math.ceil(extraWeight) * rate.extraWeightPrice;
+  const weightFee = extraWeightTons * rate.extraWeightPrice;
   const distanceFee = Math.ceil(extraDistance) * rate.extraDistancePrice;
 
   const subTotal = rate.basePrice + weightFee + distanceFee;
@@ -155,10 +159,22 @@ const validateSurcharges = async (categorySurcharges = []) => {
 };
 
 const createRate = async (payload) => {
-  if (payload.categorySurcharges?.length > 0) {
-    await validateSurcharges(payload.categorySurcharges);
+  const defaults =
+    DEFAULT_RATES_BY_SERVICE_TYPE[payload.serviceType] ?? DEFAULT_RATE;
+
+  const rateData = {
+    ...payload,
+    baseWeight: payload.baseWeight ?? defaults.baseWeight,
+    extraWeightPrice: payload.extraWeightPrice ?? defaults.extraWeightPrice,
+    baseDistance: payload.baseDistance ?? defaults.baseDistance,
+    extraDistancePrice:
+      payload.extraDistancePrice ?? defaults.extraDistancePrice,
+  };
+
+  if (rateData.categorySurcharges?.length > 0) {
+    await validateSurcharges(rateData.categorySurcharges);
   }
-  return pricingRepository.create(payload);
+  return pricingRepository.create(rateData);
 };
 
 const getAllRates = async ({

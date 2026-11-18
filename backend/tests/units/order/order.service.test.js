@@ -161,7 +161,9 @@ const validCreatePayload = {
   recipientAddress: "Recipient address",
   goodCategory: "category-1",
   weight: 2,
-  volume: 1,
+  length: 100,
+  width: 100,
+  height: 100,
   quantity: 1,
   codAmount: 5000,
   pickupLocation: { latitude: 10.78, longitude: 106.69 },
@@ -424,7 +426,9 @@ describe("orderService.create", () => {
       serviceType: "standard",
       shippingMode: "consolidated",
       weight: 2,
-      volume: 1,
+      length: 100,
+      width: 100,
+      height: 100,
       quantity: 3,
       distance: 3.2,
       routeId: "route-1",
@@ -435,6 +439,10 @@ describe("orderService.create", () => {
       expect.objectContaining({
         orderCode: "ORD-0001",
         customerId: "customer-1",
+        length: 100,
+        width: 100,
+        height: 100,
+        volume: 1000000,
         shippingFee: 25000,
         shippingFeePaid: false,
         shippingFeePaidAmount: 0,
@@ -557,7 +565,9 @@ describe("orderService.create", () => {
       serviceType: "express",
       shippingMode: "consolidated",
       weight: 2,
-      volume: 1,
+      length: 100,
+      width: 100,
+      height: 100,
       quantity: 1,
       distance: 3.2,
       routeId: "route-1",
@@ -794,11 +804,12 @@ describe("orderService.assignOrdersToTrip", () => {
         routeId: "route-1",
         warehouseId: "warehouse-1",
         weight: 30,
-        volume: 1,
+        volume: 1000000,
+        quantity: 2,
       },
     ]);
     mocks.findLoadsByTripId.mockResolvedValue([
-      { _id: "other-1", weight: 80, volume: 2 },
+      { _id: "other-1", weight: 80, volume: 2000000, quantity: 1 },
     ]);
 
     await expect(
@@ -808,7 +819,7 @@ describe("orderService.assignOrdersToTrip", () => {
       }),
     ).rejects.toMatchObject({
       statusCode: 400,
-      message: ORDER_MESSAGES.EXCEED_VEHICLE_WEIGHT(110, 100),
+      message: ORDER_MESSAGES.EXCEED_VEHICLE_WEIGHT(140, 100),
     });
     expect(mocks.startSession).not.toHaveBeenCalled();
   });
@@ -834,11 +845,12 @@ describe("orderService.assignOrdersToTrip", () => {
         routeId: "route-1",
         warehouseId: "warehouse-1",
         weight: 20,
-        volume: 2,
+        volume: 2000000,
+        quantity: 2,
       },
     ]);
     mocks.findLoadsByTripId.mockResolvedValue([
-      { _id: "other-1", weight: 50, volume: 4 },
+      { _id: "other-1", weight: 50, volume: 4000000, quantity: 1 },
     ]);
 
     await expect(
@@ -848,7 +860,7 @@ describe("orderService.assignOrdersToTrip", () => {
       }),
     ).rejects.toMatchObject({
       statusCode: 400,
-      message: ORDER_MESSAGES.EXCEED_VEHICLE_VOLUME(6, 5),
+      message: ORDER_MESSAGES.EXCEED_VEHICLE_VOLUME(8, 5),
     });
     expect(mocks.startSession).not.toHaveBeenCalled();
   });
@@ -874,12 +886,13 @@ describe("orderService.assignOrdersToTrip", () => {
       routeId: "route-1",
       warehouseId: "warehouse-1",
       weight: 50,
-      volume: 1,
+      volume: 1000000,
+      quantity: 2,
     };
     mocks.getTripById.mockResolvedValue(trip);
     mocks.findByIds.mockResolvedValue([order]);
     mocks.findLoadsByTripId.mockResolvedValue([
-      { _id: "other-1", weight: 100, volume: 2 },
+      { _id: "other-1", weight: 100, volume: 2000000, quantity: 1 },
     ]);
     mocks.updateMany.mockResolvedValue({ modifiedCount: 1 });
 
@@ -1124,18 +1137,18 @@ describe("orderService.unassignOrdersFromTrip", () => {
 });
 
 describe("orderService.getTripLoadMetrics", () => {
-  it("calculates total weight and volume excluding specified orders", async () => {
+  it("calculates total weight and volume in cm³ excluding specified orders", async () => {
     mocks.findLoadsByTripId.mockResolvedValue([
-      { _id: "order-1", weight: 15, volume: 1 },
-      { _id: "order-2", weight: 25, volume: 2 },
-      { _id: "order-3", weight: 10, volume: 0.5 },
+      { _id: "order-1", weight: 15, volume: 1000000, quantity: 2 },
+      { _id: "order-2", weight: 25, volume: 2000000, quantity: 1 },
+      { _id: "order-3", weight: 10, volume: 500000, quantity: 3 },
     ]);
 
     const result = await orderService.getTripLoadMetrics("trip-1", ["order-2"]);
 
     expect(result).toEqual({
-      totalWeight: 25,
-      totalVolume: 1.5,
+      totalWeight: 60,
+      totalVolumeCm3: 3500000,
       count: 2,
     });
     expect(mocks.findLoadsByTripId).toHaveBeenCalledWith("trip-1", null);
@@ -1146,7 +1159,7 @@ describe("orderService.getTripLoadMetrics", () => {
 
     expect(result).toEqual({
       totalWeight: 0,
-      totalVolume: 0,
+      totalVolumeCm3: 0,
       count: 0,
     });
     expect(mocks.findLoadsByTripId).not.toHaveBeenCalled();
@@ -1379,7 +1392,7 @@ describe("orderService.getPublicTrackingByCode", () => {
       ...existingOrder,
       status: "delivered",
       weight: 2,
-      volume: 1,
+      volume: 1000000,
       type: "standard",
       deliveredAt,
       createdAt,
@@ -1392,7 +1405,7 @@ describe("orderService.getPublicTrackingByCode", () => {
       orderCode: "ORD-0001",
       status: "delivered",
       weight: 2,
-      volume: 1,
+      volume: 1000000,
       type: "standard",
       deliveredAt,
       createdAt,

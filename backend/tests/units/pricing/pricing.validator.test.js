@@ -6,6 +6,9 @@ describe("pricingValidator.calculateFeeSchema", () => {
   it("accepts a valid distance-based quote with defaults", () => {
     const { error, value } = pricingValidator.calculateFeeSchema.validate({
       weight: 2,
+      length: 30,
+      width: 20,
+      height: 10,
       distance: 15,
     });
 
@@ -14,15 +17,59 @@ describe("pricingValidator.calculateFeeSchema", () => {
       serviceType: "standard",
       shippingMode: "consolidated",
       weight: 2,
-      volume: 0,
+      length: 30,
+      width: 20,
+      height: 10,
       quantity: 1,
       distance: 15,
     });
   });
 
+  it("requires all three package dimensions", () => {
+    expect(
+      pricingValidator.calculateFeeSchema.validate({
+        weight: 2,
+        distance: 15,
+      }).error,
+    ).toBeDefined();
+
+    expect(
+      pricingValidator.calculateFeeSchema.validate({
+        weight: 2,
+        distance: 15,
+        length: 30,
+      }).error,
+    ).toBeDefined();
+
+    expect(
+      pricingValidator.calculateFeeSchema.validate({
+        weight: 2,
+        distance: 15,
+        length: 30,
+        width: 20,
+      }).error,
+    ).toBeDefined();
+  });
+
+  it("rejects the legacy volume field", () => {
+    expect(
+      pricingValidator.calculateFeeSchema.validate({
+        weight: 2,
+        length: 30,
+        width: 20,
+        height: 10,
+        distance: 15,
+        volume: 1,
+      }).error,
+    ).toBeDefined();
+  });
+
   it("accepts pickupLocation and deliveryLocation instead of distance or routeId", () => {
     const { error, value } = pricingValidator.calculateFeeSchema.validate({
       weight: 10,
+      length: 30,
+      width: 20,
+      height: 10,
       shippingMode: "direct",
       pickupLocation: { latitude: 10.77, longitude: 106.69 },
       deliveryLocation: { latitude: 21.02, longitude: 105.83 },
@@ -36,6 +83,9 @@ describe("pricingValidator.calculateFeeSchema", () => {
     expect(
       pricingValidator.calculateFeeSchema.validate({
         weight: 5,
+        length: 30,
+        width: 20,
+        height: 10,
         pickupLocation: { latitude: 10.77, longitude: 106.69 },
       }).error,
     ).toBeDefined();
@@ -43,6 +93,9 @@ describe("pricingValidator.calculateFeeSchema", () => {
     expect(
       pricingValidator.calculateFeeSchema.validate({
         weight: 5,
+        length: 30,
+        width: 20,
+        height: 10,
         deliveryLocation: { latitude: 21.02, longitude: 105.83 },
       }).error,
     ).toBeDefined();
@@ -50,12 +103,20 @@ describe("pricingValidator.calculateFeeSchema", () => {
 
   it("requires either distance or routeId and rejects invalid values", () => {
     expect(
-      pricingValidator.calculateFeeSchema.validate({ weight: 2 }).error,
+      pricingValidator.calculateFeeSchema.validate({
+        weight: 2,
+        length: 30,
+        width: 20,
+        height: 10,
+      }).error,
     ).toBeDefined();
 
     expect(
       pricingValidator.calculateFeeSchema.validate({
         weight: 0,
+        length: 30,
+        width: 20,
+        height: 10,
         distance: 5,
       }).error,
     ).toBeDefined();
@@ -63,6 +124,9 @@ describe("pricingValidator.calculateFeeSchema", () => {
     expect(
       pricingValidator.calculateFeeSchema.validate({
         weight: 2,
+        length: 30,
+        width: 20,
+        height: 10,
         serviceType: "overnight",
         distance: 10,
       }).error,
@@ -71,6 +135,9 @@ describe("pricingValidator.calculateFeeSchema", () => {
     expect(
       pricingValidator.calculateFeeSchema.validate({
         weight: 2,
+        length: 30,
+        width: 20,
+        height: 10,
         quantity: 1.5,
         distance: 10,
       }).error,
@@ -83,6 +150,9 @@ describe("pricingValidator.calculateFeeSchema", () => {
       expect(
         pricingValidator.calculateFeeSchema.validate({
           weight: 2,
+          length: 30,
+          width: 20,
+          height: 10,
           quantity,
           distance: 10,
         }).error,
@@ -94,6 +164,9 @@ describe("pricingValidator.calculateFeeSchema", () => {
     expect(
       pricingValidator.calculateFeeSchema.validate({
         weight: 2,
+        length: 30,
+        width: 20,
+        height: 10,
         distance: 10,
         customerId: "507f1f77bcf86cd799439011",
       }).error,
@@ -102,6 +175,9 @@ describe("pricingValidator.calculateFeeSchema", () => {
     expect(
       pricingValidator.calculateFeeSchema.validate({
         weight: 2,
+        length: 30,
+        width: 20,
+        height: 10,
         distance: 10,
         customerId: "customer-1",
       }).error,
@@ -114,7 +190,7 @@ describe("pricingValidator.createShippingRateSchema", () => {
     const result = pricingValidator.createShippingRateSchema.validate({
       name: "Standard Rate",
       serviceType: "standard",
-      basePrice: 16500,
+      basePrice: 3000,
       categorySurcharges: [
         {
           goodsCategoryId: "507f1f77bcf86cd799439011",
@@ -129,8 +205,33 @@ describe("pricingValidator.createShippingRateSchema", () => {
     expect(result.value).toMatchObject({
       name: "Standard Rate",
       serviceType: "standard",
-      basePrice: 16500,
+      basePrice: 3000,
     });
+  });
+
+  it("does not apply pricing defaults so the service can resolve them by service type", () => {
+    const result = pricingValidator.createShippingRateSchema.validate({
+      name: "Express Rate",
+      serviceType: "express",
+      basePrice: 4500,
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.value.baseWeight).toBeUndefined();
+    expect(result.value.extraWeightPrice).toBeUndefined();
+    expect(result.value.baseDistance).toBeUndefined();
+    expect(result.value.extraDistancePrice).toBeUndefined();
+  });
+
+  it("rejects baseDistance below 1 km", () => {
+    expect(
+      pricingValidator.createShippingRateSchema.validate({
+        name: "Invalid Distance",
+        serviceType: "standard",
+        basePrice: 3000,
+        baseDistance: 0,
+      }).error,
+    ).toBeDefined();
   });
 
   it("requires a name and valid category IDs", () => {

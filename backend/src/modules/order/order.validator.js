@@ -70,14 +70,26 @@ const createOrderSchema = Joi.object({
     "any.required": "goodCategory is required",
   }),
 
+  // kg
   weight: Joi.number().positive().required().messages({
     "any.required": "Weight is required",
     "number.positive": "Weight must be greater than 0",
   }),
 
-  volume: Joi.number().positive().required().messages({
-    "any.required": "Volume is required",
-    "number.positive": "Volume must be greater than 0",
+  // cm
+  length: Joi.number().positive().required().messages({
+    "any.required": "Length is required",
+    "number.positive": "Length must be greater than 0",
+  }),
+
+  width: Joi.number().positive().required().messages({
+    "any.required": "Width is required",
+    "number.positive": "Width must be greater than 0",
+  }),
+
+  height: Joi.number().positive().required().messages({
+    "any.required": "Height is required",
+    "number.positive": "Height must be greater than 0",
   }),
 
   quantity: Joi.number().integer().positive().required().messages({

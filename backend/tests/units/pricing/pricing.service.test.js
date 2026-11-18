@@ -47,6 +47,9 @@ vi.mock("../../../src/modules/customer/customer.service.js", () => ({
   default: { getById: mocks.getCustomerById },
 }));
 
+import { DEFAULT_RATES_BY_SERVICE_TYPE } from "../../../src/constants/defaultShippingRate.js";
+import { SERVICE_TYPES } from "../../../src/constants/serviceTypes.js";
+
 import pricingService from "../../../src/modules/pricing/pricing.service.js";
 import routeService from "../../../src/modules/route/route.service.js";
 import warehouseService from "../../../src/modules/warehouse/warehouse.service.js";
@@ -82,13 +85,13 @@ describe("pricingService.calculateFee", () => {
       distance: 15,
     });
     expect(result.breakdown).toMatchObject({
-      basePrice: 16500,
-      weightFee: 5000,
-      distanceFee: 26000,
+      basePrice: 3000,
+      weightFee: 0,
+      distanceFee: 42000,
       surchargeAmount: 0,
-      totalShippingFee: 47500,
+      totalShippingFee: 45000,
     });
-    expect(result.totalShippingFee).toBe(47500);
+    expect(result.totalShippingFee).toBe(45000);
   });
 
   it("falls back to the express default rate when there is no active rate for express", async () => {
@@ -109,13 +112,13 @@ describe("pricingService.calculateFee", () => {
       distance: 10,
     });
     expect(result.breakdown).toMatchObject({
-      basePrice: 25000,
-      weightFee: 7000,
-      distanceFee: 28000,
+      basePrice: 4500,
+      weightFee: 0,
+      distanceFee: 45000,
       surchargeAmount: 0,
-      totalShippingFee: 60000,
+      totalShippingFee: 49500,
     });
-    expect(result.totalShippingFee).toBe(60000);
+    expect(result.totalShippingFee).toBe(49500);
   });
 
   it("uses route distance and applies matched category surcharge", async () => {
@@ -123,7 +126,7 @@ describe("pricingService.calculateFee", () => {
       serviceType: "express",
       name: "Express",
       basePrice: 10000,
-      baseWeight: 2,
+      baseWeight: 1000,
       extraWeightPrice: 2000,
       baseDistance: 12,
       extraDistancePrice: 1000,
@@ -139,7 +142,9 @@ describe("pricingService.calculateFee", () => {
     const result = await pricingService.calculateFee({
       serviceType: "express",
       weight: 4,
-      volume: 20000,
+      length: 100,
+      width: 100,
+      height: 2,
       routeId,
       goodsCategoryId: categoryId,
     });
@@ -150,16 +155,16 @@ describe("pricingService.calculateFee", () => {
       serviceType: "express",
       rateName: "Express",
       actualWeight: 4,
-      volumetricWeight: 6,
-      billableWeight: 6,
+      volumetricWeight: 6.67,
+      billableWeight: 6.67,
       distance: 25,
     });
     expect(result.breakdown).toMatchObject({
       basePrice: 10000,
-      weightFee: 8000,
+      weightFee: 0,
       distanceFee: 13000,
-      surchargeAmount: 3600,
-      totalShippingFee: 34600,
+      surchargeAmount: 2800,
+      totalShippingFee: 25800,
     });
   });
 
@@ -168,7 +173,7 @@ describe("pricingService.calculateFee", () => {
       serviceType: "express",
       name: "Express",
       basePrice: 10000,
-      baseWeight: 2,
+      baseWeight: 1000,
       extraWeightPrice: 2000,
       baseDistance: 12,
       extraDistancePrice: 1000,
@@ -178,7 +183,9 @@ describe("pricingService.calculateFee", () => {
     const result = await pricingService.calculateFee({
       serviceType: "express",
       weight: 2,
-      volume: 10000,
+      length: 30,
+      width: 30,
+      height: 10,
       quantity: 3,
       distance: 12,
     });
@@ -190,11 +197,56 @@ describe("pricingService.calculateFee", () => {
     });
     expect(result.breakdown).toMatchObject({
       basePrice: 10000,
-      weightFee: 14000,
+      weightFee: 0,
       distanceFee: 0,
-      totalShippingFee: 24000,
+      totalShippingFee: 10000,
     });
   });
+
+  it("calculates volumetric weight from package dimensions", async () => {
+    mocks.findActiveByServiceType.mockResolvedValue(null);
+
+    const result = await pricingService.calculateFee({
+      serviceType: "standard",
+      weight: 1,
+      length: 30,
+      width: 20,
+      height: 10,
+      distance: 1,
+    });
+
+    expect(result.volumetricWeight).toBe(2);
+    expect(result.billableWeight).toBe(2);
+  });
+
+  it.each([
+    [1000, 0],
+    [2000, 4000],
+    [2500, 8000],
+  ])(
+    "charges extra weight per started ton: %s kg -> %s VND",
+    async (weight, expectedWeightFee) => {
+      mocks.findActiveByServiceType.mockResolvedValue({
+        serviceType: "standard",
+        name: "Per ton",
+        basePrice: 10000,
+        baseWeight: 1000,
+        extraWeightPrice: 4000,
+        baseDistance: 10,
+        extraDistancePrice: 1000,
+        categorySurcharges: [],
+      });
+
+      const result = await pricingService.calculateFee({
+        serviceType: "standard",
+        weight,
+        distance: 10,
+      });
+
+      expect(result.breakdown.weightFee).toBe(expectedWeightFee);
+      expect(result.totalShippingFee).toBe(10000 + expectedWeightFee);
+    },
+  );
 
   it("resolves 3-stage inter-warehouse distance when pickupLocation and deliveryLocation are provided", async () => {
     mocks.findActiveByServiceType.mockResolvedValue(null);
@@ -273,7 +325,7 @@ describe("pricingService.calculateFee", () => {
     mocks.findActiveByServiceType.mockResolvedValue(null);
 
     const result = await pricingService.calculateFee({
-      serviceType: "heavy",
+      serviceType: "same_day",
       shippingMode: "direct",
       weight: 10,
       pickupLocation: { latitude: 10.77, longitude: 106.69 },
@@ -322,16 +374,16 @@ describe("pricingService.calculateFee", () => {
 
     expect(mocks.getCustomerById).toHaveBeenCalledWith(customerId);
     expect(result).toMatchObject({
-      shippingFeeBeforeDiscount: 47500,
+      shippingFeeBeforeDiscount: 45000,
       discountRate: 10,
-      discountAmount: 4750,
-      totalShippingFee: 42750,
+      discountAmount: 4500,
+      totalShippingFee: 40500,
     });
     expect(result.breakdown).toMatchObject({
-      shippingFeeBeforeDiscount: 47500,
+      shippingFeeBeforeDiscount: 45000,
       discountRate: 10,
-      discountAmount: 4750,
-      totalShippingFee: 42750,
+      discountAmount: 4500,
+      totalShippingFee: 40500,
     });
   });
 
@@ -346,8 +398,8 @@ describe("pricingService.calculateFee", () => {
     });
 
     expect(mocks.getCustomerById).not.toHaveBeenCalled();
-    expect(result.discountAmount).toBe(3563);
-    expect(result.totalShippingFee).toBe(43937);
+    expect(result.discountAmount).toBe(3375);
+    expect(result.totalShippingFee).toBe(41625);
   });
 });
 
@@ -361,11 +413,36 @@ describe("pricingService.rate management", () => {
         { goodsCategoryId: categoryId, surchargePercentage: 5 },
       ],
     };
-    mocks.create.mockResolvedValue(payload);
+    const rateData = {
+      ...payload,
+      baseWeight: 1000,
+      extraWeightPrice: 5000,
+      baseDistance: 1,
+      extraDistancePrice: 5000,
+    };
+    mocks.create.mockResolvedValue(rateData);
 
     const result = await pricingService.createRate(payload);
 
     expect(mocks.getGoodsCategoryById).toHaveBeenCalledWith(categoryId);
+    expect(mocks.create).toHaveBeenCalledWith(rateData);
+    expect(result).toEqual(rateData);
+  });
+
+  it("keeps admin-provided pricing values over service defaults", async () => {
+    const payload = {
+      name: "Priority Express",
+      serviceType: "express",
+      basePrice: 20000,
+      baseWeight: 2000,
+      extraWeightPrice: 9000,
+      baseDistance: 3,
+      extraDistancePrice: 4000,
+    };
+    mocks.create.mockResolvedValue(payload);
+
+    const result = await pricingService.createRate(payload);
+
     expect(mocks.create).toHaveBeenCalledWith(payload);
     expect(result).toEqual(payload);
   });
@@ -423,5 +500,13 @@ describe("pricingService.rate management", () => {
 
     expect(mocks.updateById).toHaveBeenCalledWith("rate-1", updatePayload);
     expect(mocks.deleteById).toHaveBeenCalledWith("rate-1");
+  });
+});
+
+describe("pricing defaults", () => {
+  it("defines a default rate for every supported service type", () => {
+    expect(Object.keys(DEFAULT_RATES_BY_SERVICE_TYPE).sort()).toEqual(
+      Object.values(SERVICE_TYPES).sort(),
+    );
   });
 });

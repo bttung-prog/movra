@@ -137,7 +137,7 @@ const findLoadsByTripId = (tripId, session = null) => {
   if (!tripId) return Promise.resolve([]);
   const query = Order.find(
     { tripId, deletedAt: null },
-    "_id weight volume",
+    "_id weight volume quantity",
   ).lean();
   if (session) query.session(session);
   return query;

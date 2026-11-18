@@ -24,9 +24,11 @@ import { SERVICE_TYPES } from "../../constants/serviceTypes.js";
 import { SHIPPING_MODES } from "../../constants/shippingModes.js";
 import { PAYMENT_STATUSES } from "../../constants/paymentStatuses.js";
 import { PAYMENT_TERMS } from "../../constants/paymentTerms.js";
+import { CM3_PER_M3 } from "../../constants/pricingUnits.js";
 
 import ApiError from "../../utils/ApiError.js";
 import generateCode from "../../utils/generateCode.js";
+import { calculateVolumeCm3 } from "../../utils/volume.util.js";
 import logger from "../../configs/logger.js";
 
 import customerService from "../customer/customer.service.js";
@@ -130,7 +132,7 @@ const getTripLoadMetrics = async (
   session = null,
 ) => {
   if (!tripId) {
-    return { totalWeight: 0, totalVolume: 0, count: 0 };
+    return { totalWeight: 0, totalVolumeCm3: 0, count: 0 };
   }
 
   const orders = await orderRepository.findLoadsByTripId(tripId, session);
@@ -141,13 +143,15 @@ const getTripLoadMetrics = async (
   return orders.reduce(
     (acc, order) => {
       if (!excludeSet.has(order._id?.toString())) {
-        acc.totalWeight += Number(order.weight) || 0;
-        acc.totalVolume += Number(order.volume) || 0;
+        const quantity = Number(order.quantity) || 1;
+
+        acc.totalWeight += (Number(order.weight) || 0) * quantity;
+        acc.totalVolumeCm3 += (Number(order.volume) || 0) * quantity;
         acc.count += 1;
       }
       return acc;
     },
-    { totalWeight: 0, totalVolume: 0, count: 0 },
+    { totalWeight: 0, totalVolumeCm3: 0, count: 0 },
   );
 };
 
@@ -184,18 +188,19 @@ const assertTripCapacity = async (
   );
 
   const newWeight = candidateOrders.reduce(
-    (sum, o) => sum + (Number(o.weight) || 0),
+    (sum, o) => sum + (Number(o.weight) || 0) * (Number(o.quantity) || 1),
     0,
   );
-  const newVolume = candidateOrders.reduce(
-    (sum, o) => sum + (Number(o.volume) || 0),
+  const newVolumeCm3 = candidateOrders.reduce(
+    (sum, o) => sum + (Number(o.volume) || 0) * (Number(o.quantity) || 1),
     0,
   );
 
   const totalWeight =
     Math.round((existingMetrics.totalWeight + newWeight) * 100) / 100;
-  const totalVolume =
-    Math.round((existingMetrics.totalVolume + newVolume) * 100) / 100;
+  const totalVolumeCm3 =
+    Math.round((existingMetrics.totalVolumeCm3 + newVolumeCm3) * 100) / 100;
+  const totalVolumeM3 = totalVolumeCm3 / CM3_PER_M3;
 
   if (
     typeof vehicle.capacityWeight === "number" &&
@@ -211,11 +216,14 @@ const assertTripCapacity = async (
   if (
     typeof vehicle.capacityVolume === "number" &&
     vehicle.capacityVolume > 0 &&
-    totalVolume > vehicle.capacityVolume
+    totalVolumeM3 > vehicle.capacityVolume
   ) {
     throw new ApiError(
       400,
-      ORDER_MESSAGES.EXCEED_VEHICLE_VOLUME(totalVolume, vehicle.capacityVolume),
+      ORDER_MESSAGES.EXCEED_VEHICLE_VOLUME(
+        Number(totalVolumeM3.toFixed(2)),
+        vehicle.capacityVolume,
+      ),
     );
   }
 };
@@ -306,7 +314,9 @@ const create = async (
     deliveryLocation,
     goodCategory,
     weight,
-    volume,
+    length,
+    width,
+    height,
     quantity,
     codAmount = 0,
     routeId,
@@ -368,11 +378,15 @@ const create = async (
     throw new ApiError(500, ORDER_MESSAGES.CODE_GEN_FAILED);
   }
 
+  const volume = calculateVolumeCm3(length, width, height);
+
   const feeResult = await pricingService.calculateFee({
     serviceType: type,
     shippingMode: routing.shippingMode,
     weight,
-    volume,
+    length,
+    width,
+    height,
     quantity,
     ...(totalDistanceKm !== undefined ? { distance: totalDistanceKm } : {}),
     routeId,
@@ -426,6 +440,9 @@ const create = async (
         totalDistanceKm,
         goodCategory,
         weight,
+        length,
+        width,
+        height,
         volume,
         quantity,
         codAmount,
