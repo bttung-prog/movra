@@ -94,9 +94,30 @@ const orderSchema = new mongoose.Schema(
       required: true,
     },
 
+    // cm
+    length: {
+      type: Number,
+      required: true,
+      min: 1,
+    },
+
+    width: {
+      type: Number,
+      required: true,
+      min: 1,
+    },
+
+    height: {
+      type: Number,
+      required: true,
+      min: 1,
+    },
+
+    // cm³
     volume: {
       type: Number,
       required: true,
+      min: 0,
     },
 
     quantity: {

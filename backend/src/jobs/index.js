@@ -7,10 +7,10 @@ import { runInvoiceOverdueJob } from "./invoiceOverdue.job.js";
 let scheduledTasks = [];
 
 /**
- * Khởi tạo các cron job định kỳ trong hệ thống
+ * Set up recurring cron jobs within the system
  */
 export const initSchedulers = () => {
-  // Quét hóa đơn quá hạn mỗi ngày vào lúc 00:00 (nửa đêm) theo giờ Việt Nam
+  // Scan overdue invoices every day at 00:00 (midnight) in Vietnam time
   const invoiceOverdueTask = cron.schedule(
     "0 0 * * *",
     async () => {
@@ -32,7 +32,7 @@ export const initSchedulers = () => {
 };
 
 /**
- * Dừng tất cả các cron job khi server tắt
+ * Stop all cron jobs when the server shuts down
  */
 export const stopSchedulers = () => {
   scheduledTasks.forEach((task) => {

@@ -13,7 +13,9 @@ const validOrderPayload = {
   recipientAddress: "Recipient address",
   goodCategory: "507f1f77bcf86cd799439011",
   weight: 2,
-  volume: 1,
+  length: 30,
+  width: 20,
+  height: 10,
   quantity: 1,
 };
 
@@ -32,6 +34,10 @@ describe("orderValidator.createOrderSchema", () => {
   it.each([
     ["invalid sender phone", { senderPhone: "123" }],
     ["non-positive weight", { weight: 0 }],
+    ["missing length", { length: undefined }],
+    ["non-positive width", { width: 0 }],
+    ["missing height", { height: undefined }],
+    ["legacy volume field", { volume: 1 }],
     ["fractional quantity", { quantity: 1.5 }],
     ["missing category ID", { goodCategory: undefined }],
     ["malformed category ID", { goodCategory: "category-1" }],
@@ -65,7 +71,7 @@ describe("orderValidator.createOrderSchema", () => {
     expect(result.error).toBeUndefined();
   });
 
-  it.each(["standard", "express", "heavy", "same_day"])(
+  it.each(["standard", "express", "same_day"])(
     "accepts supported service type: %s",
     (type) => {
       const result = orderValidator.createOrderSchema.validate({

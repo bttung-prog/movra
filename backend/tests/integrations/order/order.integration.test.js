@@ -82,7 +82,9 @@ describe("Order API integration", () => {
       recipientAddress: "456 B Street",
       goodCategory: "507f1f77bcf86cd799439012",
       weight: 2,
-      volume: 1,
+      length: 30,
+      width: 20,
+      height: 10,
       quantity: 1,
       codAmount: 500000,
       type: "standard",
@@ -139,7 +141,9 @@ describe("Order API integration", () => {
         recipientAddress: "456 B Street",
         goodCategory: "507f1f77bcf86cd799439012",
         weight: 2,
-        volume: 1,
+        length: 30,
+        width: 20,
+        height: 10,
         quantity: 1,
       });
 
@@ -164,7 +168,9 @@ describe("Order API integration", () => {
       recipientAddress: "456 B Street",
       goodCategory: "507f1f77bcf86cd799439012",
       weight: 2,
-      volume: 1,
+      length: 30,
+      width: 20,
+      height: 10,
       quantity: 1,
     };
 

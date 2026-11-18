@@ -37,7 +37,6 @@ const shippingRateSchema = new mongoose.Schema(
     serviceType: {
       type: String,
       enum: Object.values(SERVICE_TYPES),
-      default: SERVICE_TYPES.STANDARD,
       required: true,
     },
 
@@ -49,25 +48,25 @@ const shippingRateSchema = new mongoose.Schema(
 
     baseWeight: {
       type: Number,
-      default: 2,
+      default: 1000,
       min: 0,
     },
 
     extraWeightPrice: {
       type: Number,
-      default: 5000,
+      required: true,
       min: 0,
     },
 
     baseDistance: {
       type: Number,
-      default: 10,
-      min: 0,
+      default: 1,
+      min: 1,
     },
 
     extraDistancePrice: {
       type: Number,
-      default: 2000,
+      required: true,
       min: 0,
     },
 
