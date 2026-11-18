@@ -43,37 +43,44 @@ const create = async ({
     destinationWarehouseId,
   );
 
-  const existingRouteByPoints = await routeRepository.findByWarehousePair(
-    originWarehouseId,
-    destinationWarehouseId,
+  const pairTakenMessage = ROUTE_MESSAGES.ALREADY_EXISTS(
+    originWarehouse.warehouseName,
+    destinationWarehouse.warehouseName,
   );
 
-  if (existingRouteByPoints && existingRouteByPoints.deletedAt === null) {
-    throw new ApiError(
-      409,
-      ROUTE_MESSAGES.ALREADY_EXISTS(
-        originWarehouse.warehouseName,
-        destinationWarehouse.warehouseName,
-      ),
+  try {
+    const existingRouteByPoints = await routeRepository.findByWarehousePair(
+      originWarehouseId,
+      destinationWarehouseId,
     );
-  }
 
-  if (existingRouteByPoints && existingRouteByPoints.deletedAt !== null) {
-    return routeRepository.updateById(existingRouteByPoints._id, {
+    if (existingRouteByPoints && existingRouteByPoints.deletedAt === null) {
+      throw new ApiError(409, pairTakenMessage);
+    }
+
+    if (existingRouteByPoints && existingRouteByPoints.deletedAt !== null) {
+      return await routeRepository.updateById(existingRouteByPoints._id, {
+        originWarehouseId,
+        destinationWarehouseId,
+        distance,
+        expectedDuration,
+        deletedAt: null,
+      });
+    }
+
+    return await routeRepository.create({
       originWarehouseId,
       destinationWarehouseId,
       distance,
       expectedDuration,
-      deletedAt: null,
     });
-  }
+  } catch (error) {
+    if (error?.code !== 11000) {
+      throw error;
+    }
 
-  return routeRepository.create({
-    originWarehouseId,
-    destinationWarehouseId,
-    distance,
-    expectedDuration,
-  });
+    throw new ApiError(409, pairTakenMessage);
+  }
 };
 
 const getAll = async ({
@@ -119,9 +126,10 @@ const getActiveByWarehousePair = (
   originWarehouseId,
   destinationWarehouseId,
 ) => {
-  return routeRepository.findActiveByWarehousePair(
+  return routeRepository.findByWarehousePair(
     originWarehouseId,
     destinationWarehouseId,
+    { deletedAt: null },
   );
 };
 
@@ -165,12 +173,12 @@ const updateById = async (routeId, updateData) => {
     const routePairTaken = await routeRepository.findByWarehousePair(
       mergedOriginWarehouseId,
       mergedDestinationWarehouseId,
+      { deletedAt: null },
     );
 
     if (
       routePairTaken &&
-      routePairTaken._id.toString() !== routeId.toString() &&
-      routePairTaken.deletedAt === null
+      routePairTaken._id.toString() !== routeId.toString()
     ) {
       throw new ApiError(
         409,
@@ -198,7 +206,21 @@ const updateById = async (routeId, updateData) => {
 
   const payload = { ...updateData };
 
-  return routeRepository.updateById(routeId, payload);
+  try {
+    return await routeRepository.updateById(routeId, payload);
+  } catch (error) {
+    if (error?.code !== 11000) {
+      throw error;
+    }
+
+    throw new ApiError(
+      409,
+      ROUTE_MESSAGES.ALREADY_EXISTS(
+        originWarehouse.warehouseName,
+        destinationWarehouse.warehouseName,
+      ),
+    );
+  }
 };
 
 const deleteById = async (routeId) => {
