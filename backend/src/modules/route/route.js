@@ -34,11 +34,10 @@ const routeSchema = new mongoose.Schema(
 
 routeSchema.index(
   { originWarehouseId: 1, destinationWarehouseId: 1 },
-  { unique: true, partialFilterExpression: { deletedAt: null } },
+  { unique: true },
 );
 routeSchema.index({ deletedAt: -1 });
 
 const Route = mongoose.model("Route", routeSchema);
 
 export default Route;
-

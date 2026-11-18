@@ -5,7 +5,6 @@ const mocks = vi.hoisted(() => ({
   countTrips: vi.fn(),
   countOrders: vi.fn(),
   findByWarehousePair: vi.fn(),
-  findActiveByWarehousePair: vi.fn(),
   createRoute: vi.fn(),
   findAllRoutes: vi.fn(),
   countAllRoutes: vi.fn(),
@@ -30,7 +29,6 @@ vi.mock("../../../src/modules/order/order.service.js", () => ({
 vi.mock("../../../src/modules/route/route.repository.js", () => ({
   default: {
     findByWarehousePair: mocks.findByWarehousePair,
-    findActiveByWarehousePair: mocks.findActiveByWarehousePair,
     create: mocks.createRoute,
     findAll: mocks.findAllRoutes,
     countAll: mocks.countAllRoutes,
@@ -94,7 +92,7 @@ describe("routeService.create", () => {
   });
 
   it("looks up active route by warehouse pair", async () => {
-    mocks.findActiveByWarehousePair.mockResolvedValue({
+    mocks.findByWarehousePair.mockResolvedValue({
       _id: routeId,
       distance: 150,
       deletedAt: null,
@@ -105,9 +103,10 @@ describe("routeService.create", () => {
       destinationWarehouseId,
     );
 
-    expect(mocks.findActiveByWarehousePair).toHaveBeenCalledWith(
+    expect(mocks.findByWarehousePair).toHaveBeenCalledWith(
       originWarehouseId,
       destinationWarehouseId,
+      { deletedAt: null },
     );
     expect(route).toMatchObject({ _id: routeId, distance: 150 });
   });
@@ -165,6 +164,26 @@ describe("routeService.create", () => {
       message: ROUTE_MESSAGES.ALREADY_EXISTS("Warehouse A", "Warehouse B"),
     });
     expect(mocks.createRoute).not.toHaveBeenCalled();
+  });
+
+  it("maps duplicate key races to a route conflict", async () => {
+    mocks.findByWarehousePair.mockResolvedValue(null);
+    mocks.createRoute.mockRejectedValue({
+      code: 11000,
+      keyPattern: { originWarehouseId: 1 },
+    });
+
+    await expect(
+      routeService.create({
+        originWarehouseId,
+        destinationWarehouseId,
+        distance: 100,
+        expectedDuration: 5,
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      message: ROUTE_MESSAGES.ALREADY_EXISTS("Warehouse A", "Warehouse B"),
+    });
   });
 });
 
@@ -296,6 +315,31 @@ describe("routeService.updateById", () => {
       message: ROUTE_MESSAGES.IDENTICAL_ORIGIN_DEST,
     });
     expect(mocks.updateRouteById).not.toHaveBeenCalled();
+  });
+
+  it("maps duplicate key races during update to a route conflict", async () => {
+    const newOrigin = "507f1f77bcf86cd799439016";
+    const newDestination = "507f1f77bcf86cd799439017";
+    mocks.findRouteById.mockResolvedValue({
+      _id: routeId,
+      originWarehouseId,
+      destinationWarehouseId,
+      deletedAt: null,
+    });
+    mocks.findByWarehousePair.mockResolvedValue(null);
+    mocks.updateRouteById.mockRejectedValue({
+      code: 11000,
+      keyPattern: { originWarehouseId: 1 },
+    });
+
+    await expect(
+      routeService.updateById(routeId, {
+        originWarehouseId: newOrigin,
+        destinationWarehouseId: newDestination,
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+    });
   });
 });
 
