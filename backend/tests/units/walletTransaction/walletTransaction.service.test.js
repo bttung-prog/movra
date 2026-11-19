@@ -37,7 +37,7 @@ vi.mock("../../../src/modules/payment/payment.service.js", () => ({
 }));
 
 vi.mock("../../../src/utils/generateCode.js", () => ({
-  default: mocks.generateCode,
+  generateCode: mocks.generateCode,
 }));
 
 import { WALLET_TRANSACTION_MESSAGES } from "../../../src/constants/messages.js";

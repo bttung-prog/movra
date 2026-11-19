@@ -69,7 +69,7 @@ vi.mock("../../../src/modules/warehouse/warehouse.service.js", () => ({
   default: { getById: mocks.getWarehouseById },
 }));
 
-import ApiError from "../../../src/utils/ApiError.js";
+import { ApiError } from "../../../src/utils/ApiError.js";
 import {
   VEHICLE_MESSAGES,
   WAREHOUSE_MESSAGES,

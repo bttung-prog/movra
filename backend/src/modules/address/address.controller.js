@@ -1,6 +1,6 @@
 import { ADDRESS_MESSAGES } from "../../constants/messages.js";
 
-import ApiResponse from "../../utils/ApiResponse.js";
+import { ApiResponse } from "../../utils/ApiResponse.js";
 
 import addressService from "./address.service.js";
 

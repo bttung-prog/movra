@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import request from "supertest";
 
-import ApiError from "../../../src/utils/ApiError.js";
+import { ApiError } from "../../../src/utils/ApiError.js";
 
 const orderServiceMock = vi.hoisted(() => ({
   create: vi.fn(),

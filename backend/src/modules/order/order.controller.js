@@ -1,8 +1,8 @@
 import { ROLES } from "../../constants/roles.js";
 import { ORDER_MESSAGES } from "../../constants/messages.js";
 
-import ApiResponse from "../../utils/ApiResponse.js";
-import storageUtil from "../../utils/storage.util.js";
+import { ApiResponse } from "../../utils/ApiResponse.js";
+import { getFileUrl } from "../../utils/storage.util.js";
 
 import orderService from "./order.service.js";
 
@@ -264,7 +264,7 @@ const markAsDelivered = async (req, res, next) => {
   try {
     let podImageUrl = req.body.podImageUrl || null;
     if (req.file) {
-      podImageUrl = storageUtil.getFileUrl(req, req.file);
+      podImageUrl = getFileUrl(req, req.file);
     }
 
     const payload = {

@@ -1,6 +1,6 @@
 import { COMMON_MESSAGES } from "../constants/messages.js";
 
-import ApiError from "../utils/ApiError.js";
+import { ApiError } from "../utils/ApiError.js";
 
 const validate = (schema, source = "body") => {
   return async (req, res, next) => {

@@ -21,7 +21,7 @@ vi.mock("../../../src/modules/accountant/accountant.repository.js", () => ({
 }));
 
 vi.mock("../../../src/utils/generateCode.js", () => ({
-  default: { generateCode: mocks.generateCode },
+  generateCode: mocks.generateCode,
 }));
 
 import { ROLES } from "../../../src/constants/roles.js";

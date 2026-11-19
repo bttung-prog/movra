@@ -1,6 +1,6 @@
 import { COD_SETTLEMENT_MESSAGES } from "../../constants/messages.js";
 
-import ApiResponse from "../../utils/ApiResponse.js";
+import { ApiResponse } from "../../utils/ApiResponse.js";
 import { toEndOfDay } from "../../utils/dateUtils.js";
 
 import codSettlementService from "./codSettlement.service.js";

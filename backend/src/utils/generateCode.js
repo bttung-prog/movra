@@ -9,4 +9,4 @@ const generateCode = (prefix) => {
   return `${prefix}${generate()}`;
 };
 
-export default { generateCode, generateOtp };
+export { generateCode, generateOtp };

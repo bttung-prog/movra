@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 import { CREDIT_AUDIT_FIELDS } from "../../constants/creditAuditFields.js";
 import { CUSTOMER_MESSAGES } from "../../constants/messages.js";
 
-import ApiError from "../../utils/ApiError.js";
+import { ApiError } from "../../utils/ApiError.js";
 import { escapeRegex } from "../../utils/regexUtils.js";
 
 import userService from "../user/user.service.js";

@@ -82,7 +82,7 @@ vi.mock("../../../src/modules/inventory/inventory.service.js", () => ({
 }));
 
 vi.mock("../../../src/utils/generateCode.js", () => ({
-  default: mocks.generateCode,
+  generateCode: mocks.generateCode,
 }));
 
 import {

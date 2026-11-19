@@ -74,7 +74,7 @@ vi.mock("../../../src/modules/trip/trip.service.js", () => ({
 }));
 
 vi.mock("../../../src/utils/generateCode.js", () => ({
-  default: mocks.generateCode,
+  generateCode: mocks.generateCode,
 }));
 
 import {

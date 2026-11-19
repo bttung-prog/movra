@@ -2,7 +2,7 @@ import { ORDER_MESSAGES, PRICING_MESSAGES } from "../../constants/messages.js";
 import { ROLES } from "../../constants/roles.js";
 import { SHIPPING_MODES } from "../../constants/shippingModes.js";
 
-import ApiError from "../../utils/ApiError.js";
+import { ApiError } from "../../utils/ApiError.js";
 import {
   calculateHaversineDistanceKm,
   hasValidCoordinates,
@@ -39,7 +39,7 @@ const resolvePickupWarehouse = async ({ pickupLocation, warehouseId }) => {
  * and stage distances (A -> Warehouse A -> Warehouse B -> B, or A -> B for direct FTL).
  * Shared by pricing calculation and order creation to guarantee quote/order parity.
  */
-export const resolveOrderRouting = async ({
+const resolveOrderRouting = async ({
   shippingMode = SHIPPING_MODES.CONSOLIDATED,
   pickupLocation = null,
   deliveryLocation = null,
@@ -260,3 +260,5 @@ export const resolveOrderRouting = async ({
     totalDistanceKm,
   };
 };
+
+export default { resolveOrderRouting };

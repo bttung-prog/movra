@@ -1,7 +1,7 @@
 import { INVOICE_MESSAGES } from "../../constants/messages.js";
 import { INVOICE_STATUSES } from "../../constants/invoiceStatuses.js";
 
-import ApiResponse from "../../utils/ApiResponse.js";
+import { ApiResponse } from "../../utils/ApiResponse.js";
 import { escapeRegex } from "../../utils/regexUtils.js";
 
 import invoiceService from "./invoice.service.js";

@@ -1,6 +1,6 @@
 import { DISPATCHER_MESSAGES } from "../../constants/messages.js";
 
-import ApiResponse from "../../utils/ApiResponse.js";
+import { ApiResponse } from "../../utils/ApiResponse.js";
 
 import dispatcherService from "./dispatcher.service.js";
 

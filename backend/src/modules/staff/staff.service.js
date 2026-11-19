@@ -1,7 +1,7 @@
 import { STAFF_MESSAGES } from "../../constants/messages.js";
 
-import ApiError from "../../utils/ApiError.js";
-import generateCode from "../../utils/generateCode.js";
+import { ApiError } from "../../utils/ApiError.js";
+import { generateCode } from "../../utils/generateCode.js";
 import { escapeRegex } from "../../utils/regexUtils.js";
 
 import userService from "../user/user.service.js";

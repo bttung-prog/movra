@@ -1,6 +1,6 @@
 import { STAFF_MESSAGES } from "../../constants/messages.js";
 
-import ApiResponse from "../../utils/ApiResponse.js";
+import { ApiResponse } from "../../utils/ApiResponse.js";
 
 import staffService from "./staff.service.js";
 

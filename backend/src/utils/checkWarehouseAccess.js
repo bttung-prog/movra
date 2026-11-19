@@ -1,4 +1,4 @@
-import ApiError from "./ApiError.js";
+import { ApiError } from "./ApiError.js";
 import { WAREHOUSE_MESSAGES } from "../constants/messages.js";
 
 const WAREHOUSE_SCOPED_ROLES = ["warehouse_staff", "dispatcher"];
@@ -38,5 +38,3 @@ export const checkWarehouseAccess = (
     }
   }
 };
-
-export default checkWarehouseAccess;

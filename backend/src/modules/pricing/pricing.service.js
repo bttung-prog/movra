@@ -10,14 +10,14 @@ import { SERVICE_TYPES } from "../../constants/serviceTypes.js";
 import { hasValidCoordinates } from "../../utils/distance.util.js";
 import { applyContractDiscount } from "../../utils/discount.util.js";
 import { calculateVolumetricWeightKg } from "../../utils/volume.util.js";
-import ApiError from "../../utils/ApiError.js";
+import { ApiError } from "../../utils/ApiError.js";
 
 import customerService from "../customer/customer.service.js";
 import goodsCategoryService from "../goodsCategory/goodsCategory.service.js";
 import routeService from "../route/route.service.js";
 
 import pricingRepository from "./pricing.repository.js";
-import { resolveOrderRouting } from "../route/routing.helper.js";
+import routingHelper from "../route/routing.helper.js";
 
 const calculateFee = async ({
   serviceType = SERVICE_TYPES.STANDARD,
@@ -48,7 +48,7 @@ const calculateFee = async ({
     hasValidCoordinates(pickupLocation) &&
     hasValidCoordinates(deliveryLocation)
   ) {
-    const routing = await resolveOrderRouting({
+    const routing = await routingHelper.resolveOrderRouting({
       shippingMode,
       pickupLocation,
       deliveryLocation,

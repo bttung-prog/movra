@@ -1,6 +1,6 @@
 import { NOTIFICATION_MESSAGES } from "../../constants/messages.js";
 
-import ApiResponse from "../../utils/ApiResponse.js";
+import { ApiResponse } from "../../utils/ApiResponse.js";
 
 import notificationService from "./notification.service.js";
 

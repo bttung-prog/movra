@@ -42,7 +42,7 @@ vi.mock("../../../src/modules/staff/staff.repository.js", () => ({
 }));
 
 vi.mock("../../../src/utils/generateCode.js", () => ({
-  default: mocks.generateCode,
+  generateCode: mocks.generateCode,
 }));
 
 import { STAFF_MESSAGES } from "../../../src/constants/messages.js";

@@ -33,8 +33,3 @@ export const getFileUrl = (req, file) => {
   const relativeFolder = path.basename(path.dirname(file.path));
   return `/uploads/${relativeFolder}/${file.filename}`;
 };
-
-export default {
-  ensureDirectoryExists,
-  getFileUrl,
-};

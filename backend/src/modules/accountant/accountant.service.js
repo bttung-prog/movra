@@ -5,8 +5,8 @@ import {
 import { ROLES } from "../../constants/roles.js";
 import { USER_STATUSES } from "../../constants/userStatuses.js";
 
-import ApiError from "../../utils/ApiError.js";
-import generateCode from "../../utils/generateCode.js";
+import { ApiError } from "../../utils/ApiError.js";
+import { generateCode } from "../../utils/generateCode.js";
 
 import userService from "../user/user.service.js";
 
@@ -30,7 +30,7 @@ const create = async ({ userId }, session = null) => {
   let attempts = 0;
 
   while (!isUnique && attempts < 5) {
-    accountantCode = generateCode.generateCode("ACC-");
+    accountantCode = generateCode("ACC-");
     if (!(await accountantRepository.findByCode(accountantCode))) {
       isUnique = true;
     }

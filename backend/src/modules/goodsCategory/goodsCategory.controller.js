@@ -1,6 +1,6 @@
 import { GOODS_CATEGORY_MESSAGES } from "../../constants/messages.js";
 
-import ApiResponse from "../../utils/ApiResponse.js";
+import { ApiResponse } from "../../utils/ApiResponse.js";
 
 import goodsCategoryService from "./goodsCategory.service.js";
 

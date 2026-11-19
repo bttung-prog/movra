@@ -1,7 +1,7 @@
 import { ROLES } from "../../constants/roles.js";
 import { FAILURE_REASON_MESSAGES } from "../../constants/messages.js";
 
-import ApiResponse from "../../utils/ApiResponse.js";
+import { ApiResponse } from "../../utils/ApiResponse.js";
 
 import failureReasonService from "./failureReason.service.js";
 

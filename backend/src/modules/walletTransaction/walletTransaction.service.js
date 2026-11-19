@@ -6,8 +6,8 @@ import { WALLET_TRANSACTION_MESSAGES } from "../../constants/messages.js";
 import { WALLET_TRANSACTION_TYPES } from "../../constants/walletTransactionTypes.js";
 import { WALLET_TRANSACTION_STATUSES } from "../../constants/walletTransactionStatuses.js";
 
-import ApiError from "../../utils/ApiError.js";
-import generateCode from "../../utils/generateCode.js";
+import { ApiError } from "../../utils/ApiError.js";
+import { generateCode } from "../../utils/generateCode.js";
 
 import customerService from "../customer/customer.service.js";
 import paymentService from "../payment/payment.service.js";
