@@ -1,6 +1,6 @@
 import { FEEDBACK_MESSAGES } from "../../constants/messages.js";
 
-import ApiResponse from "../../utils/ApiResponse.js";
+import { ApiResponse } from "../../utils/ApiResponse.js";
 
 import feedbackService from "./feedback.service.js";
 

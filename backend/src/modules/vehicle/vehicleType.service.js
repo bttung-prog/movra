@@ -1,5 +1,5 @@
 import { VEHICLE_MESSAGES } from "../../constants/messages.js";
-import ApiError from "../../utils/ApiError.js";
+import { ApiError } from "../../utils/ApiError.js";
 
 import vehicleRepository from "./vehicle.repository.js";
 import vehicleTypeRepository from "./vehicleType.repository.js";

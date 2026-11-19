@@ -57,7 +57,6 @@ vi.mock("../../../src/utils/password.js", () => ({
 }));
 
 vi.mock("../../../src/utils/generateCode.js", () => ({
-  default: vi.fn(),
   generateOtp: mocks.generateOtp,
 }));
 
@@ -121,7 +120,7 @@ import {
 } from "../../../src/constants/messages.js";
 import { ROLES } from "../../../src/constants/roles.js";
 import { USER_STATUSES } from "../../../src/constants/userStatuses.js";
-import ApiError from "../../../src/utils/ApiError.js";
+import { ApiError } from "../../../src/utils/ApiError.js";
 import authService from "../../../src/modules/auth/auth.service.js";
 
 const activeUser = {

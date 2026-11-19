@@ -4,8 +4,8 @@ import { ROLES } from "../../constants/roles.js";
 import { VEHICLE_MESSAGES } from "../../constants/messages.js";
 import { VEHICLE_STATUSES } from "../../constants/vehicleStatuses.js";
 
-import ApiError from "../../utils/ApiError.js";
-import checkWarehouseAccess from "../../utils/checkWarehouseAccess.js";
+import { ApiError } from "../../utils/ApiError.js";
+import { checkWarehouseAccess } from "../../utils/checkWarehouseAccess.js";
 
 import driverService from "../driver/driver.service.js";
 import tripService from "../trip/trip.service.js";

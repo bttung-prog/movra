@@ -25,5 +25,3 @@ export const applyContractDiscount = (amount, rate = 0) => {
     netAmount: grossAmount - discountAmount,
   };
 };
-
-export default { applyContractDiscount };

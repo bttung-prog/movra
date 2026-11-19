@@ -1,6 +1,6 @@
 import { VEHICLE_MESSAGES } from "../../constants/messages.js";
 
-import ApiResponse from "../../utils/ApiResponse.js";
+import { ApiResponse } from "../../utils/ApiResponse.js";
 
 import vehicleService from "./vehicle.service.js";
 import vehicleTypeService from "./vehicleType.service.js";

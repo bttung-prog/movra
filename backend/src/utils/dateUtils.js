@@ -37,8 +37,3 @@ export const toStartOfDay = (value) => {
   }
   return date;
 };
-
-export default {
-  toEndOfDay,
-  toStartOfDay,
-};

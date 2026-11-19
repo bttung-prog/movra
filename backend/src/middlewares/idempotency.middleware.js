@@ -5,7 +5,7 @@ import {
   COMMON_MESSAGES,
   IDEMPOTENCY_MESSAGES,
 } from "../constants/messages.js";
-import ApiError from "../utils/ApiError.js";
+import { ApiError } from "../utils/ApiError.js";
 
 import idempotencyService from "../modules/idempotency/idempotency.service.js";
 

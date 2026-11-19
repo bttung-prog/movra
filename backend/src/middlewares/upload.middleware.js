@@ -6,7 +6,7 @@ import { fileURLToPath } from "url";
 import { UPLOAD_MESSAGES } from "../constants/messages.js";
 
 import { ensureDirectoryExists } from "../utils/storage.util.js";
-import ApiError from "../utils/ApiError.js";
+import { ApiError } from "../utils/ApiError.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

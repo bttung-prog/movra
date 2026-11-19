@@ -1,6 +1,6 @@
 import { RECEIPT_MESSAGES } from "../../constants/messages.js";
 
-import ApiResponse from "../../utils/ApiResponse.js";
+import { ApiResponse } from "../../utils/ApiResponse.js";
 
 import receiptService from "./receipt.service.js";
 

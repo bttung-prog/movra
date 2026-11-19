@@ -1,6 +1,6 @@
 import { TRIP_MESSAGES } from "../../constants/messages.js";
 
-import ApiResponse from "../../utils/ApiResponse.js";
+import { ApiResponse } from "../../utils/ApiResponse.js";
 
 import tripService from "./trip.service.js";
 

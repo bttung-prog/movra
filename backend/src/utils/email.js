@@ -1,5 +1,5 @@
 import nodemailer from "nodemailer";
-import ApiError from "./ApiError.js";
+import { ApiError } from "./ApiError.js";
 
 /**
  * Initialize nodemailer transporter from environment configuration

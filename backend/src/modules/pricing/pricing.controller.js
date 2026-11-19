@@ -1,7 +1,7 @@
 import { PRICING_MESSAGES } from "../../constants/messages.js";
 import { ROLES } from "../../constants/roles.js";
 
-import ApiResponse from "../../utils/ApiResponse.js";
+import { ApiResponse } from "../../utils/ApiResponse.js";
 
 import pricingService from "./pricing.service.js";
 

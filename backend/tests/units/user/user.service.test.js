@@ -91,7 +91,7 @@ import {
   COMMON_MESSAGES,
   USER_MESSAGES,
 } from "../../../src/constants/messages.js";
-import ApiError from "../../../src/utils/ApiError.js";
+import { ApiError } from "../../../src/utils/ApiError.js";
 import { ROLES } from "../../../src/constants/roles.js";
 import { USER_STATUSES } from "../../../src/constants/userStatuses.js";
 import userService from "../../../src/modules/user/user.service.js";

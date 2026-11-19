@@ -1,6 +1,6 @@
 import { CUSTOMER_MESSAGES } from "../../constants/messages.js";
 
-import ApiResponse from "../../utils/ApiResponse.js";
+import { ApiResponse } from "../../utils/ApiResponse.js";
 
 import customerService from "./customer.service.js";
 

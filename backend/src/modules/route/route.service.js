@@ -1,6 +1,6 @@
 import { ROUTE_MESSAGES } from "../../constants/messages.js";
 
-import ApiError from "../../utils/ApiError.js";
+import { ApiError } from "../../utils/ApiError.js";
 
 import warehouseService from "../warehouse/warehouse.service.js";
 import tripService from "../trip/trip.service.js";

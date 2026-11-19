@@ -1,6 +1,6 @@
 import { ACCOUNTANT_MESSAGES } from "../../constants/messages.js";
 
-import ApiResponse from "../../utils/ApiResponse.js";
+import { ApiResponse } from "../../utils/ApiResponse.js";
 
 import accountantService from "./accountant.service.js";
 

@@ -20,8 +20,8 @@ import {
 } from "../../constants/walletTransactionTypes.js";
 import { WALLET_TRANSACTION_STATUSES } from "../../constants/walletTransactionStatuses.js";
 
-import ApiError from "../../utils/ApiError.js";
-import generateCode from "../../utils/generateCode.js";
+import { ApiError } from "../../utils/ApiError.js";
+import { generateCode } from "../../utils/generateCode.js";
 
 import invoiceService from "../invoice/invoice.service.js";
 import orderService from "../order/order.service.js";

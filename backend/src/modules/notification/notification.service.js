@@ -1,6 +1,6 @@
 import { NOTIFICATION_MESSAGES } from "../../constants/messages.js";
 
-import ApiError from "../../utils/ApiError.js";
+import { ApiError } from "../../utils/ApiError.js";
 
 import notificationRepository from "./notification.repository.js";
 

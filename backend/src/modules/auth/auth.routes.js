@@ -7,7 +7,7 @@ import validate from "../../middlewares/validate.middleware.js";
 import { COMMON_MESSAGES } from "../../constants/messages.js";
 import { ROLES } from "../../constants/roles.js";
 
-import ApiError from "../../utils/ApiError.js";
+import { ApiError } from "../../utils/ApiError.js";
 
 import authValidator from "./auth.validator.js";
 import authController from "./auth.controller.js";

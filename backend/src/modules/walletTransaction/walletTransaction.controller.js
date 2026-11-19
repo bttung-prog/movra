@@ -1,6 +1,6 @@
 import { WALLET_TRANSACTION_MESSAGES } from "../../constants/messages.js";
 
-import ApiResponse from "../../utils/ApiResponse.js";
+import { ApiResponse } from "../../utils/ApiResponse.js";
 
 import walletTransactionService from "./walletTransaction.service.js";
 

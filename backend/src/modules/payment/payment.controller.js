@@ -1,7 +1,7 @@
 import { ROLES } from "../../constants/roles.js";
 import { PAYMENT_MESSAGES } from "../../constants/messages.js";
 
-import ApiResponse from "../../utils/ApiResponse.js";
+import { ApiResponse } from "../../utils/ApiResponse.js";
 
 import paymentService from "./payment.service.js";
 

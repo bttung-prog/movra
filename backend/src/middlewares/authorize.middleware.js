@@ -2,7 +2,7 @@ import { COMMON_MESSAGES } from "../constants/messages.js";
 import { WAREHOUSE_STATUSES } from "../constants/warehouseStatuses.js";
 import { ROLES } from "../constants/roles.js";
 
-import ApiError from "../utils/ApiError.js";
+import { ApiError } from "../utils/ApiError.js";
 
 import User from "../modules/user/user.js";
 import Dispatcher from "../modules/dispatcher/dispatcher.js";

@@ -1,7 +1,7 @@
 import { GOODS_CATEGORY_MESSAGES } from "../../constants/messages.js";
 import { INVENTORY_STATUSES } from "../../constants/inventoryStatuses.js";
 
-import ApiError from "../../utils/ApiError.js";
+import { ApiError } from "../../utils/ApiError.js";
 import { escapeRegex } from "../../utils/regexUtils.js";
 
 import inventoryService from "../inventory/inventory.service.js";

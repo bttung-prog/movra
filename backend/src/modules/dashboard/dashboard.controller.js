@@ -1,6 +1,6 @@
 import { DASHBOARD_MESSAGES } from "../../constants/messages.js";
 
-import ApiResponse from "../../utils/ApiResponse.js";
+import { ApiResponse } from "../../utils/ApiResponse.js";
 
 import dashboardService from "./dashboard.service.js";
 

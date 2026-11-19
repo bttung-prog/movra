@@ -129,7 +129,7 @@ vi.mock("../../../src/modules/trip/trip.repository.js", () => ({
 }));
 
 vi.mock("../../../src/utils/generateCode.js", () => ({
-  default: mocks.generateCode,
+  generateCode: mocks.generateCode,
 }));
 
 import { TRIP_MESSAGES } from "../../../src/constants/messages.js";

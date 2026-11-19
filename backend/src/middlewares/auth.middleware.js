@@ -1,6 +1,6 @@
 import { COMMON_MESSAGES, AUTH_MESSAGES } from "../constants/messages.js";
 
-import ApiError from "../utils/ApiError.js";
+import { ApiError } from "../utils/ApiError.js";
 import { verifyAccessToken } from "../utils/jwt.js";
 
 const authMiddleware = async (req, res, next) => {

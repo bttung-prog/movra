@@ -126,7 +126,7 @@ vi.mock("../../../src/modules/order/order.repository.js", () => ({
 }));
 
 vi.mock("../../../src/utils/generateCode.js", () => ({
-  default: mocks.generateCode,
+  generateCode: mocks.generateCode,
 }));
 
 vi.mock("../../../src/configs/logger.js", () => ({

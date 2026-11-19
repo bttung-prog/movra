@@ -2,7 +2,7 @@ import { ROLES } from "../../constants/roles.js";
 import { USER_STATUSES } from "../../constants/userStatuses.js";
 import { ADMIN_MESSAGES } from "../../constants/messages.js";
 
-import ApiError from "../../utils/ApiError.js";
+import { ApiError } from "../../utils/ApiError.js";
 import { hashPassword } from "../../utils/password.js";
 
 import authService from "../auth/auth.service.js";

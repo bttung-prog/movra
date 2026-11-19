@@ -1,6 +1,6 @@
 import { AUTH_MESSAGES } from "../../constants/messages.js";
 
-import ApiResponse from "../../utils/ApiResponse.js";
+import { ApiResponse } from "../../utils/ApiResponse.js";
 import {
   REFRESH_TOKEN_COOKIE,
   clearRefreshTokenCookie,

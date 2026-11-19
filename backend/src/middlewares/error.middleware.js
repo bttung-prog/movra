@@ -2,8 +2,8 @@ import logger from "../configs/logger.js";
 
 import { COMMON_MESSAGES } from "../constants/messages.js";
 
-import ApiError from "../utils/ApiError.js";
-import ApiResponse from "../utils/ApiResponse.js";
+import { ApiError } from "../utils/ApiError.js";
+import { ApiResponse } from "../utils/ApiResponse.js";
 
 const errorMiddleware = (err, req, res, next) => {
   const statusCode = err instanceof ApiError ? err.statusCode : 500;

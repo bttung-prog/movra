@@ -66,7 +66,7 @@ vi.mock("../../../src/modules/driver/driver.repository.js", () => ({
 }));
 
 vi.mock("../../../src/utils/generateCode.js", () => ({
-  default: mocks.generateCode,
+  generateCode: mocks.generateCode,
 }));
 
 import {

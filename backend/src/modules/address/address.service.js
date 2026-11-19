@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 
 import { ADDRESS_MESSAGES } from "../../constants/messages.js";
 
-import ApiError from "../../utils/ApiError.js";
+import { ApiError } from "../../utils/ApiError.js";
 
 import addressRepository from "./address.repository.js";
 

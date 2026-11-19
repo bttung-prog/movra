@@ -57,7 +57,7 @@ vi.mock(
 );
 
 vi.mock("../../../src/utils/generateCode.js", () => ({
-  default: mocks.generateCode,
+  generateCode: mocks.generateCode,
 }));
 
 import { COD_SETTLEMENT_MESSAGES } from "../../../src/constants/messages.js";

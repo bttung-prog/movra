@@ -26,8 +26,8 @@ import { PAYMENT_STATUSES } from "../../constants/paymentStatuses.js";
 import { PAYMENT_TERMS } from "../../constants/paymentTerms.js";
 import { CM3_PER_M3 } from "../../constants/pricingUnits.js";
 
-import ApiError from "../../utils/ApiError.js";
-import generateCode from "../../utils/generateCode.js";
+import { ApiError } from "../../utils/ApiError.js";
+import { generateCode } from "../../utils/generateCode.js";
 import { calculateVolumeCm3 } from "../../utils/volume.util.js";
 import logger from "../../configs/logger.js";
 
@@ -38,7 +38,7 @@ import routeService from "../route/route.service.js";
 import tripService from "../trip/trip.service.js";
 import userService from "../user/user.service.js";
 import pricingService from "../pricing/pricing.service.js";
-import { resolveOrderRouting } from "../route/routing.helper.js";
+import routingHelper from "../route/routing.helper.js";
 import notificationService from "../notification/notification.service.js";
 import walletTransactionService from "../walletTransaction/walletTransaction.service.js";
 import warehouseService from "../warehouse/warehouse.service.js";
@@ -342,7 +342,7 @@ const create = async (
   const paymentTerms = customer.defaultPaymentTerms || PAYMENT_TERMS.IMMEDIATE;
   const contractDiscountRate = Number(customer.contractDiscountRate || 0);
 
-  const routing = await resolveOrderRouting({
+  const routing = await routingHelper.resolveOrderRouting({
     shippingMode,
     pickupLocation,
     deliveryLocation,
