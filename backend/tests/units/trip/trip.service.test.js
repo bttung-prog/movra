@@ -69,10 +69,15 @@ vi.mock("../../../src/modules/vehicle/vehicle.service.js", () => ({
     getById: mocks.getVehicleById,
     assignToWarehouse: mocks.assignVehicleToWarehouse,
     getIdsByWarehouseId: mocks.getVehicleIdsByWarehouseId,
-    getUsageLogsByTripId: mocks.getUsageLogsByTripId,
-    createUsageLog: mocks.createUsageLog,
-    updateUsageLogById: mocks.updateUsageLogById,
     changeStatus: mocks.changeVehicleStatus,
+  },
+}));
+
+vi.mock("../../../src/modules/vehicle/vehicleUsageLog.service.js", () => ({
+  default: {
+    getByTripId: mocks.getUsageLogsByTripId,
+    create: mocks.createUsageLog,
+    updateById: mocks.updateUsageLogById,
   },
 }));
 

@@ -3,10 +3,12 @@ import { VEHICLE_MESSAGES } from "../../constants/messages.js";
 import ApiResponse from "../../utils/ApiResponse.js";
 
 import vehicleService from "./vehicle.service.js";
+import vehicleTypeService from "./vehicleType.service.js";
+import vehicleUsageLogService from "./vehicleUsageLog.service.js";
 
 const createType = async (req, res, next) => {
   try {
-    const vehicleType = await vehicleService.createType(req.body);
+    const vehicleType = await vehicleTypeService.create(req.body);
 
     return ApiResponse.created(
       res,
@@ -23,7 +25,7 @@ const getActiveTypes = async (req, res, next) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
 
-    const result = await vehicleService.getActiveTypes({ page, limit });
+    const result = await vehicleTypeService.getActive({ page, limit });
 
     return ApiResponse.success(
       res,
@@ -40,7 +42,7 @@ const getDeletedTypes = async (req, res, next) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
 
-    const result = await vehicleService.getDeletedTypes({ page, limit });
+    const result = await vehicleTypeService.getDeleted({ page, limit });
 
     return ApiResponse.success(
       res,
@@ -54,7 +56,7 @@ const getDeletedTypes = async (req, res, next) => {
 
 const getTypeById = async (req, res, next) => {
   try {
-    const vehicleType = await vehicleService.getTypeById(
+    const vehicleType = await vehicleTypeService.getById(
       req.params.vehicleTypeId,
     );
 
@@ -70,7 +72,7 @@ const getTypeById = async (req, res, next) => {
 
 const getTypeByName = async (req, res, next) => {
   try {
-    const vehicleType = await vehicleService.getTypeByName(
+    const vehicleType = await vehicleTypeService.getByName(
       req.params.vehicleTypeName,
     );
 
@@ -86,7 +88,7 @@ const getTypeByName = async (req, res, next) => {
 
 const updateType = async (req, res, next) => {
   try {
-    const vehicleType = await vehicleService.updateType(
+    const vehicleType = await vehicleTypeService.update(
       req.params.vehicleTypeId,
       req.body,
     );
@@ -103,7 +105,7 @@ const updateType = async (req, res, next) => {
 
 const removeType = async (req, res, next) => {
   try {
-    const vehicleType = await vehicleService.deleteType(
+    const vehicleType = await vehicleTypeService.deleteById(
       req.params.vehicleTypeId,
     );
 
@@ -119,7 +121,7 @@ const removeType = async (req, res, next) => {
 
 const restoreType = async (req, res, next) => {
   try {
-    const vehicleType = await vehicleService.restoreType(
+    const vehicleType = await vehicleTypeService.restoreById(
       req.params.vehicleTypeId,
     );
 
@@ -327,7 +329,7 @@ const renewInsurance = async (req, res, next) => {
 
 const createUsageLog = async (req, res, next) => {
   try {
-    const log = await vehicleService.createUsageLog(req.body, req.user);
+    const log = await vehicleUsageLogService.create(req.body, req.user);
 
     return ApiResponse.created(res, log, VEHICLE_MESSAGES.CHECK_IN_SUCCESS);
   } catch (error) {
@@ -365,7 +367,7 @@ const getUsageLogs = async (req, res, next) => {
       }
     }
 
-    const result = await vehicleService.getUsageLogs({
+    const result = await vehicleUsageLogService.getAll({
       filter,
       page,
       limit,
@@ -384,7 +386,7 @@ const getUsageLogs = async (req, res, next) => {
 
 const getUsageLogById = async (req, res, next) => {
   try {
-    const log = await vehicleService.getUsageLogById(
+    const log = await vehicleUsageLogService.getById(
       req.params.logId,
       req.user,
     );
@@ -400,7 +402,7 @@ const getUsageLogsByVehicleId = async (req, res, next) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
 
-    const result = await vehicleService.getUsageLogsByVehicleId({
+    const result = await vehicleUsageLogService.getByVehicleId({
       vehicleId: req.params.vehicleId,
       page,
       limit,
@@ -422,7 +424,7 @@ const getUsageLogsByDriverId = async (req, res, next) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
 
-    const result = await vehicleService.getUsageLogsByDriverId({
+    const result = await vehicleUsageLogService.getByDriverId({
       driverId: req.params.driverId,
       page,
       limit,
@@ -441,7 +443,7 @@ const getUsageLogsByDriverId = async (req, res, next) => {
 
 const getUsageLogsByTripId = async (req, res, next) => {
   try {
-    const logs = await vehicleService.getUsageLogsByTripId({
+    const logs = await vehicleUsageLogService.getByTripId({
       tripId: req.params.tripId,
       user: req.user,
     });
@@ -460,7 +462,7 @@ const getVehicleUsageStats = async (req, res, next) => {
   try {
     const { startDate, endDate } = req.query;
 
-    const stats = await vehicleService.getVehicleUsageStats({
+    const stats = await vehicleUsageLogService.getStatsByVehicleId({
       vehicleId: req.params.vehicleId,
       startDate,
       endDate,
@@ -475,7 +477,7 @@ const getVehicleUsageStats = async (req, res, next) => {
 
 const updateUsageLog = async (req, res, next) => {
   try {
-    const log = await vehicleService.updateUsageLogById(
+    const log = await vehicleUsageLogService.updateById(
       req.params.logId,
       req.body,
       null,
@@ -490,7 +492,7 @@ const updateUsageLog = async (req, res, next) => {
 
 const checkOutUsageLog = async (req, res, next) => {
   try {
-    const log = await vehicleService.checkOutUsageLog({
+    const log = await vehicleUsageLogService.checkOut({
       logId: req.params.logId,
       ...req.body,
       user: req.user,
@@ -504,7 +506,7 @@ const checkOutUsageLog = async (req, res, next) => {
 
 const removeUsageLog = async (req, res, next) => {
   try {
-    const log = await vehicleService.deleteUsageLogById(
+    const log = await vehicleUsageLogService.deleteById(
       req.params.logId,
       req.user,
     );
@@ -517,7 +519,7 @@ const removeUsageLog = async (req, res, next) => {
 
 const restoreUsageLog = async (req, res, next) => {
   try {
-    const log = await vehicleService.restoreUsageLogById(
+    const log = await vehicleUsageLogService.restoreById(
       req.params.logId,
       req.user,
     );
