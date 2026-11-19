@@ -1,12 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  createType: vi.fn(),
-  findActiveTypes: vi.fn(),
-  countActiveTypes: vi.fn(),
-  findTypeById: vi.fn(),
-  findTypeByName: vi.fn(),
-  updateType: vi.fn(),
+  getTypeById: vi.fn(),
   create: vi.fn(),
   findAll: vi.fn(),
   countAll: vi.fn(),
@@ -29,12 +24,6 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("../../../src/modules/vehicle/vehicle.repository.js", () => ({
   default: {
-    createType: mocks.createType,
-    findActiveTypes: mocks.findActiveTypes,
-    countActiveTypes: mocks.countActiveTypes,
-    findTypeById: mocks.findTypeById,
-    findTypeByName: mocks.findTypeByName,
-    updateType: mocks.updateType,
     create: mocks.create,
     findAll: mocks.findAll,
     countAll: mocks.countAll,
@@ -43,7 +32,18 @@ vi.mock("../../../src/modules/vehicle/vehicle.repository.js", () => ({
     findByPlateNumber: mocks.findByPlateNumber,
     updateById: mocks.updateById,
     setWarehouseIdIfUnassigned: mocks.setWarehouseIdIfUnassigned,
-    countOpenUsageLogsByVehicleId: mocks.countOpenUsageLogsByVehicleId,
+  },
+}));
+
+vi.mock("../../../src/modules/vehicle/vehicleType.service.js", () => ({
+  default: {
+    getById: mocks.getTypeById,
+  },
+}));
+
+vi.mock("../../../src/modules/vehicle/vehicleUsageLog.repository.js", () => ({
+  default: {
+    countOpenByVehicleId: mocks.countOpenUsageLogsByVehicleId,
   },
 }));
 
@@ -69,6 +69,7 @@ vi.mock("../../../src/modules/warehouse/warehouse.service.js", () => ({
   default: { getById: mocks.getWarehouseById },
 }));
 
+import ApiError from "../../../src/utils/ApiError.js";
 import {
   VEHICLE_MESSAGES,
   WAREHOUSE_MESSAGES,
@@ -103,93 +104,16 @@ const validVehiclePayload = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.findTypeById.mockResolvedValue({ _id: vehicleTypeId, deletedAt: null });
-  mocks.findTypeByName.mockResolvedValue(null);
+  mocks.getTypeById.mockResolvedValue({ _id: vehicleTypeId, deletedAt: null });
   mocks.findByPlateNumber.mockResolvedValue(null);
   mocks.findById.mockResolvedValue(existingVehicle);
   mocks.create.mockResolvedValue({ _id: vehicleId });
-  mocks.createType.mockResolvedValue({ _id: vehicleTypeId });
-  mocks.findActiveTypes.mockResolvedValue([]);
-  mocks.countActiveTypes.mockResolvedValue(0);
   mocks.findAll.mockResolvedValue([]);
   mocks.countAll.mockResolvedValue(0);
   mocks.updateById.mockResolvedValue(existingVehicle);
   mocks.getVehicleIdsByWarehouseId.mockResolvedValue([]);
   mocks.getByCurrentVehicleId.mockResolvedValue(null);
   mocks.countOpenUsageLogsByVehicleId.mockResolvedValue(0);
-});
-
-describe("vehicleService vehicle types", () => {
-  it("creates a vehicle type when its name is not in use", async () => {
-    const payload = {
-      name: "Truck",
-      description: "Cargo truck",
-      maxWeight: 1000,
-      maxVolume: 15,
-    };
-
-    const result = await vehicleService.createType(payload);
-
-    expect(result).toEqual({ _id: vehicleTypeId });
-    expect(mocks.createType).toHaveBeenCalledWith(payload);
-  });
-
-  it("rejects an active vehicle type with a duplicate name", async () => {
-    mocks.findTypeByName.mockResolvedValue({
-      _id: vehicleTypeId,
-      deletedAt: null,
-    });
-
-    await expect(
-      vehicleService.createType({
-        name: "Truck",
-        description: "Cargo truck",
-        maxWeight: 1000,
-        maxVolume: 15,
-      }),
-    ).rejects.toMatchObject({
-      statusCode: 409,
-      message: VEHICLE_MESSAGES.TYPE_EXISTS,
-    });
-    expect(mocks.createType).not.toHaveBeenCalled();
-  });
-
-  it("reactivates a deleted vehicle type with the requested values", async () => {
-    mocks.findTypeByName.mockResolvedValue({
-      _id: vehicleTypeId,
-      deletedAt: new Date("2024-01-01"),
-    });
-    mocks.updateType.mockResolvedValue({ _id: vehicleTypeId, deletedAt: null });
-
-    const result = await vehicleService.createType({
-      name: "Truck",
-      description: "Updated description",
-      maxWeight: 1200,
-      maxVolume: 18,
-    });
-
-    expect(mocks.updateType).toHaveBeenCalledWith(vehicleTypeId, {
-      description: "Updated description",
-      maxWeight: 1200,
-      maxVolume: 18,
-      deletedAt: null,
-    });
-    expect(result.deletedAt).toBeNull();
-    expect(mocks.createType).not.toHaveBeenCalled();
-  });
-
-  it("paginates active types and calculates total pages", async () => {
-    mocks.findActiveTypes.mockResolvedValue([{ _id: vehicleTypeId }]);
-    mocks.countActiveTypes.mockResolvedValue(21);
-
-    const result = await vehicleService.getActiveTypes({ page: 2, limit: 10 });
-
-    expect(mocks.findActiveTypes).toHaveBeenCalledWith({ skip: 10, limit: 10 });
-    expect(result).toEqual({
-      data: [{ _id: vehicleTypeId }],
-      pagination: { page: 2, limit: 10, total: 21, totalPages: 3 },
-    });
-  });
 });
 
 describe("vehicleService.create", () => {
@@ -226,7 +150,9 @@ describe("vehicleService.create", () => {
   });
 
   it("rejects a missing vehicle type", async () => {
-    mocks.findTypeById.mockResolvedValue(null);
+    mocks.getTypeById.mockRejectedValue(
+      new ApiError(404, VEHICLE_MESSAGES.TYPE_NOT_FOUND),
+    );
 
     await expect(
       vehicleService.create(validVehiclePayload),

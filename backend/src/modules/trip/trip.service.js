@@ -21,6 +21,7 @@ import checkWarehouseAccess from "../../utils/checkWarehouseAccess.js";
 
 import driverService from "../driver/driver.service.js";
 import vehicleService from "../vehicle/vehicle.service.js";
+import vehicleUsageLogService from "../vehicle/vehicleUsageLog.service.js";
 import routeService from "../route/route.service.js";
 import userService from "../user/user.service.js";
 import orderService from "../order/order.service.js";
@@ -929,7 +930,7 @@ const handleTripDeparture = async ({
   session,
 }) => {
   const actualStart = trip.actualStart || new Date();
-  const existingUsageLogs = await vehicleService.getUsageLogsByTripId({
+  const existingUsageLogs = await vehicleUsageLogService.getByTripId({
     tripId: trip._id,
   });
 
@@ -937,7 +938,7 @@ const handleTripDeparture = async ({
     const vehicle = await vehicleService.getById(targetVehicleId);
     const startOdo = odometerReading ?? (vehicle.currentOdometer || 0);
 
-    await vehicleService.createUsageLog({
+    await vehicleUsageLogService.create({
       vehicleId: targetVehicleId,
       driverId: targetDriverId,
       tripId: trip._id,
@@ -973,7 +974,7 @@ const handleTripCompletion = async ({
   await orderService.handleOrdersOnTripCompletion(trip, session, user);
 
   const actualEnd = new Date();
-  const existingUsageLogs = await vehicleService.getUsageLogsByTripId({
+  const existingUsageLogs = await vehicleUsageLogService.getByTripId({
     tripId: trip._id,
   });
 
@@ -991,7 +992,7 @@ const handleTripCompletion = async ({
         activeLog.startOdo + (trip.totalDistance || 0),
       );
 
-    await vehicleService.updateUsageLogById(
+    await vehicleUsageLogService.updateById(
       activeLog._id,
       {
         endOdo,
@@ -1032,7 +1033,7 @@ const handleTripCancellation = async ({
     );
   }
 
-  const existingUsageLogs = await vehicleService.getUsageLogsByTripId({
+  const existingUsageLogs = await vehicleUsageLogService.getByTripId({
     tripId: resolvedTripId,
   });
 
@@ -1044,7 +1045,7 @@ const handleTripCancellation = async ({
     const vehicle = await vehicleService.getById(targetVehicleId);
     const endOdo = Math.max(activeLog.startOdo, vehicle.currentOdometer || 0);
 
-    await vehicleService.updateUsageLogById(
+    await vehicleUsageLogService.updateById(
       activeLog._id,
       {
         endOdo,

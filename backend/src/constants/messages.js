@@ -182,7 +182,6 @@ export const VEHICLE_MESSAGES = {
   RENEW_INSURANCE_SUCCESS: "Gia hạn bảo hiểm phương tiện thành công",
   PLATE_EXISTS: "Biển số xe đã tồn tại",
   NOT_FOUND: "Không tìm thấy phương tiện",
-  DRIVER_PROFILE_NOT_FOUND: "Không tìm thấy hồ sơ tài xế",
   UPDATE_ODO_ONLY_ASSIGNED:
     "Bạn chỉ có thể cập nhật chỉ số công-tơ-mét cho xe được gán cho mình",
   ODO_LESS_THAN_CURRENT:
@@ -219,10 +218,7 @@ export const VEHICLE_MESSAGES = {
   END_TIME_MUST_AFTER_START:
     "Thời gian kết thúc phải sau hoặc bằng thời gian bắt đầu",
   FUEL_CONSUMED_INVALID: "Lượng nhiên liệu tiêu thụ phải lớn hơn hoặc bằng 0",
-  CHECKOUT_OWN_LOG_ONLY:
-    "Bạn chỉ có thể check-out cho nhật ký sử dụng xe của chính mình",
   LOG_ALREADY_CHECKED_OUT: "Nhật ký sử dụng xe này đã được check-out trước đó",
-  LOG_ALREADY_DELETED: "Nhật ký sử dụng xe đã bị xóa",
   LOG_NOT_DELETED: "Nhật ký sử dụng xe chưa bị xóa",
 };
 
