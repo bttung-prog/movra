@@ -13,7 +13,7 @@ vi.mock("../../../src/modules/invoice/invoice.service.js", () => ({
   },
 }));
 
-vi.mock("../../../src/modules/order/order.service.js", () => ({
+vi.mock("../../../src/modules/order/order.repository.js", () => ({
   default: {
     sumUnbilledShippingFeeByCustomer: mocks.sumUnbilledShippingFeeByCustomer,
   },

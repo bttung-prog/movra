@@ -1968,16 +1968,6 @@ const getBillableOrdersForInvoice = async ({
   });
 };
 
-const sumUnbilledShippingFeeByCustomer = (
-  customerId,
-  excludedOrderIds = [],
-) => {
-  return orderRepository.sumUnbilledShippingFeeByCustomer(
-    customerId,
-    excludedOrderIds,
-  );
-};
-
 const applyInvoicePayment = async ({
   orderIds = [],
   paidAmount = 0,
@@ -2041,7 +2031,6 @@ export default {
   getById,
   getByIds,
   getBillableOrdersForInvoice,
-  sumUnbilledShippingFeeByCustomer,
   getByCode,
   getPublicTrackingByCode,
   getByTripId,

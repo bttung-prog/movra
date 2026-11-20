@@ -4,7 +4,7 @@ import { CUSTOMER_MESSAGES } from "../../constants/messages.js";
 import { ApiError } from "../../utils/ApiError.js";
 
 import invoiceService from "../invoice/invoice.service.js";
-import orderService from "../order/order.service.js";
+import orderRepository from "../order/order.repository.js";
 
 const toNonNegativeNumber = (value) => {
   const numeric = Number(value);
@@ -25,7 +25,7 @@ const getCreditSnapshot = async (customer) => {
 
   const [invoicedDebt, unbilledCommitment] = await Promise.all([
     invoiceService.sumOutstandingByCustomer(customerId),
-    orderService.sumUnbilledShippingFeeByCustomer(
+    orderRepository.sumUnbilledShippingFeeByCustomer(
       customerId,
       activeInvoiceOrderIds,
     ),
