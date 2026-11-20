@@ -2,30 +2,21 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   startSession: vi.fn(),
-  createSchedule: vi.fn(),
-  findAllSchedules: vi.fn(),
-  countAllSchedules: vi.fn(),
-  findScheduleById: vi.fn(),
-  findSchedulesByVehicleId: vi.fn(),
-  countSchedulesByVehicleId: vi.fn(),
-  getUpcomingMaintenances: vi.fn(),
-  updateSchedule: vi.fn(),
-  deleteSchedule: vi.fn(),
-  restoreSchedule: vi.fn(),
   createLog: vi.fn(),
   findLogs: vi.fn(),
-  countAllLogs: vi.fn(),
+  countLogs: vi.fn(),
   findLogById: vi.fn(),
-  findLatestLogByVehicle: vi.fn(),
+  findLatestByVehicle: vi.fn(),
   totalCost: vi.fn(),
   totalCostByVehicle: vi.fn(),
+  getScheduleById: vi.fn(),
+  processMaintenanceComplete: vi.fn(),
   getVehicleById: vi.fn(),
   getVehicleIdsByWarehouseId: vi.fn(),
   changeVehicleStatus: vi.fn(),
   updateOdometer: vi.fn(),
   getDriverByUserId: vi.fn(),
   tripFindActiveByVehicleId: vi.fn(),
-  tripCountActiveByVehicleId: vi.fn(),
   dispatcherGetActiveByWarehouseId: vi.fn(),
   notificationCreate: vi.fn(),
 }));
@@ -41,27 +32,30 @@ vi.mock("mongoose", async (importOriginal) => {
   };
 });
 
-vi.mock("../../../src/modules/maintenance/maintenance.repository.js", () => ({
-  default: {
-    createSchedule: mocks.createSchedule,
-    findAllSchedules: mocks.findAllSchedules,
-    countAllSchedules: mocks.countAllSchedules,
-    findScheduleById: mocks.findScheduleById,
-    findSchedulesByVehicleId: mocks.findSchedulesByVehicleId,
-    countSchedulesByVehicleId: mocks.countSchedulesByVehicleId,
-    getUpcomingMaintenances: mocks.getUpcomingMaintenances,
-    updateSchedule: mocks.updateSchedule,
-    deleteSchedule: mocks.deleteSchedule,
-    restoreSchedule: mocks.restoreSchedule,
-    createLog: mocks.createLog,
-    findLogs: mocks.findLogs,
-    countAllLogs: mocks.countAllLogs,
-    findLogById: mocks.findLogById,
-    findLatestLogByVehicle: mocks.findLatestLogByVehicle,
-    totalCost: mocks.totalCost,
-    totalCostByVehicle: mocks.totalCostByVehicle,
-  },
-}));
+vi.mock(
+  "../../../src/modules/maintenance/maintenanceLog.repository.js",
+  () => ({
+    default: {
+      create: mocks.createLog,
+      findAll: mocks.findLogs,
+      countAll: mocks.countLogs,
+      findById: mocks.findLogById,
+      findLatestByVehicle: mocks.findLatestByVehicle,
+      totalCost: mocks.totalCost,
+      totalCostByVehicle: mocks.totalCostByVehicle,
+    },
+  }),
+);
+
+vi.mock(
+  "../../../src/modules/maintenance/maintenanceSchedule.service.js",
+  () => ({
+    default: {
+      getById: mocks.getScheduleById,
+      processMaintenanceComplete: mocks.processMaintenanceComplete,
+    },
+  }),
+);
 
 vi.mock("../../../src/modules/vehicle/vehicle.service.js", () => ({
   default: {
@@ -79,7 +73,6 @@ vi.mock("../../../src/modules/driver/driver.service.js", () => ({
 vi.mock("../../../src/modules/trip/trip.service.js", () => ({
   default: {
     findActiveByVehicleId: mocks.tripFindActiveByVehicleId,
-    countActiveByVehicleId: mocks.tripCountActiveByVehicleId,
   },
 }));
 
@@ -95,6 +88,7 @@ vi.mock("../../../src/modules/notification/notification.service.js", () => ({
   },
 }));
 
+import { ApiError } from "../../../src/utils/ApiError.js";
 import {
   DRIVER_MESSAGES,
   MAINTENANCE_MESSAGES,
@@ -105,7 +99,7 @@ import {
   MAINTENANCE_TYPES,
 } from "../../../src/constants/maintenanceStatuses.js";
 import { VEHICLE_STATUSES } from "../../../src/constants/vehicleStatuses.js";
-import maintenanceService from "../../../src/modules/maintenance/maintenance.service.js";
+import maintenanceLogService from "../../../src/modules/maintenance/maintenanceLog.service.js";
 
 const vehicleId = "507f1f77bcf86cd799439011";
 const scheduleId = "507f1f77bcf86cd799439012";
@@ -151,23 +145,15 @@ const session = {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.startSession.mockResolvedValue(session);
-  mocks.createSchedule.mockResolvedValue(schedule);
-  mocks.findAllSchedules.mockResolvedValue([schedule]);
-  mocks.countAllSchedules.mockResolvedValue(11);
-  mocks.findScheduleById.mockResolvedValue(schedule);
-  mocks.findSchedulesByVehicleId.mockResolvedValue([schedule]);
-  mocks.countSchedulesByVehicleId.mockResolvedValue(1);
-  mocks.getUpcomingMaintenances.mockResolvedValue([schedule]);
-  mocks.updateSchedule.mockResolvedValue(schedule);
-  mocks.deleteSchedule.mockResolvedValue({ ...schedule, isActive: false });
-  mocks.restoreSchedule.mockResolvedValue(schedule);
   mocks.createLog.mockResolvedValue(log);
   mocks.findLogs.mockResolvedValue([log]);
-  mocks.countAllLogs.mockResolvedValue(11);
+  mocks.countLogs.mockResolvedValue(11);
   mocks.findLogById.mockResolvedValue(log);
-  mocks.findLatestLogByVehicle.mockResolvedValue(log);
+  mocks.findLatestByVehicle.mockResolvedValue(log);
   mocks.totalCost.mockResolvedValue([{ totalCost: 1500 }]);
   mocks.totalCostByVehicle.mockResolvedValue([{ totalCost: 500 }]);
+  mocks.getScheduleById.mockResolvedValue(schedule);
+  mocks.processMaintenanceComplete.mockResolvedValue(schedule);
   mocks.getVehicleById.mockResolvedValue(vehicle);
   mocks.getVehicleIdsByWarehouseId.mockResolvedValue([vehicleId]);
   mocks.changeVehicleStatus.mockResolvedValue({
@@ -180,118 +166,15 @@ beforeEach(() => {
     currentVehicleId: vehicleId,
   });
   mocks.tripFindActiveByVehicleId.mockResolvedValue([]);
-  mocks.tripCountActiveByVehicleId.mockResolvedValue(0);
   mocks.dispatcherGetActiveByWarehouseId.mockResolvedValue([
     { _id: "dispatcher-1", userId: "user-disp-1" },
   ]);
   mocks.notificationCreate.mockResolvedValue({ _id: "notif-1" });
 });
 
-describe("maintenanceService.createSchedule", () => {
-  it("calculates the next kilometer threshold from the current odometer", async () => {
-    await maintenanceService.createSchedule({
-      vehicleId,
-      taskName: "Oil change",
-      frequencyMonths: 0,
-      frequencyKm: 5000,
-    });
-
-    expect(mocks.getVehicleById).toHaveBeenCalledWith(vehicleId, null);
-    expect(mocks.createSchedule).toHaveBeenCalledWith(
-      expect.objectContaining({
-        vehicleId,
-        taskName: "Oil change",
-        frequencyMonths: 0,
-        frequencyKm: 5000,
-        nextDueDate: null,
-        nextDueKm: 6000,
-      }),
-    );
-  });
-
-  it("rejects zero frequency before creating a schedule", async () => {
-    await expect(
-      maintenanceService.createSchedule({
-        vehicleId,
-        taskName: "Oil change",
-        frequencyMonths: 0,
-        frequencyKm: 0,
-      }),
-    ).rejects.toMatchObject({
-      statusCode: 400,
-      message: MAINTENANCE_MESSAGES.FREQUENCY_MUST_BE_GREATER_THAN_ZERO,
-    });
-    expect(mocks.createSchedule).not.toHaveBeenCalled();
-  });
-});
-
-describe("maintenanceService schedule queries and updates", () => {
-  it("paginates schedules and scopes dispatcher queries to warehouse vehicles", async () => {
-    const result = await maintenanceService.getAllSchedules({
-      filter: { isActive: true },
-      page: 2,
-      limit: 5,
-      user: { role: ROLES.DISPATCHER, warehouseId },
-    });
-
-    const filter = {
-      $and: [
-        { deletedAt: null, isActive: true },
-        { vehicleId: { $in: [vehicleId] } },
-      ],
-    };
-    expect(mocks.getVehicleIdsByWarehouseId).toHaveBeenCalledWith(warehouseId);
-    expect(mocks.findAllSchedules).toHaveBeenCalledWith({
-      filter,
-      skip: 5,
-      limit: 5,
-    });
-    expect(mocks.countAllSchedules).toHaveBeenCalledWith(filter);
-    expect(result.pagination).toEqual({
-      page: 2,
-      limit: 5,
-      total: 11,
-      totalPages: 3,
-    });
-  });
-
-  it("rejects updates that disable both maintenance frequencies", async () => {
-    await expect(
-      maintenanceService.updateSchedule(scheduleId, {
-        frequencyMonths: 0,
-        frequencyKm: 0,
-      }),
-    ).rejects.toMatchObject({
-      statusCode: 400,
-      message: MAINTENANCE_MESSAGES.FREQUENCY_MUST_BE_GREATER_THAN_ZERO,
-    });
-    expect(mocks.updateSchedule).not.toHaveBeenCalled();
-  });
-
-  it("restores only deleted schedules", async () => {
-    mocks.findScheduleById.mockResolvedValueOnce({
-      ...schedule,
-      deletedAt: null,
-    });
-    await expect(
-      maintenanceService.restoreSchedule(scheduleId),
-    ).rejects.toMatchObject({
-      statusCode: 400,
-      message: MAINTENANCE_MESSAGES.NOT_DELETED,
-    });
-
-    mocks.findScheduleById.mockResolvedValueOnce({
-      ...schedule,
-      deletedAt: new Date(),
-    });
-    await maintenanceService.restoreSchedule(scheduleId);
-    expect(mocks.restoreSchedule).toHaveBeenCalledWith(scheduleId);
-  });
-});
-
-describe("maintenanceService.createLog", () => {
+describe("maintenanceLogService.create", () => {
   it("creates a scheduled log for a schedule belonging to the vehicle", async () => {
-    await maintenanceService.createLog({
+    await maintenanceLogService.create({
       vehicleId,
       scheduleId,
       type: MAINTENANCE_TYPES.REPAIR,
@@ -320,7 +203,7 @@ describe("maintenanceService.createLog", () => {
       status: "retired",
     });
     await expect(
-      maintenanceService.createLog({
+      maintenanceLogService.create({
         vehicleId,
         scheduleId,
         type: MAINTENANCE_TYPES.REPAIR,
@@ -333,12 +216,12 @@ describe("maintenanceService.createLog", () => {
       message: MAINTENANCE_MESSAGES.VEHICLE_RETIRED,
     });
 
-    mocks.findScheduleById.mockResolvedValueOnce({
+    mocks.getScheduleById.mockResolvedValueOnce({
       ...schedule,
       vehicleId: "another-vehicle",
     });
     await expect(
-      maintenanceService.createLog({
+      maintenanceLogService.create({
         vehicleId,
         scheduleId,
         type: MAINTENANCE_TYPES.REPAIR,
@@ -359,7 +242,7 @@ describe("maintenanceService.createLog", () => {
     ]);
 
     await expect(
-      maintenanceService.createLog({
+      maintenanceLogService.create({
         vehicleId,
         scheduleId,
         type: MAINTENANCE_TYPES.REPAIR,
@@ -375,14 +258,14 @@ describe("maintenanceService.createLog", () => {
   });
 });
 
-describe("maintenanceService log access and cost queries", () => {
+describe("maintenanceLogService log access and cost queries", () => {
   it("returns a matching log by ID", async () => {
-    await expect(maintenanceService.getLogById(logId)).resolves.toBe(log);
+    await expect(maintenanceLogService.getById(logId)).resolves.toBe(log);
   });
 
   it("filters logs to a driver's assigned vehicle and calculates cost", async () => {
     const driver = { role: ROLES.DRIVER, userId: "driver-user" };
-    const result = await maintenanceService.getLogs({
+    const result = await maintenanceLogService.getAll({
       filter: { status: MAINTENANCE_STATUSES.COMPLETED },
       page: 2,
       limit: 5,
@@ -409,7 +292,7 @@ describe("maintenanceService log access and cost queries", () => {
     });
 
     await expect(
-      maintenanceService.getTotalCost({
+      maintenanceLogService.getTotalCost({
         startDate: "2026-01-01",
         endDate: "2026-01-31",
         user: { role: ROLES.DISPATCHER, warehouseId },
@@ -423,10 +306,10 @@ describe("maintenanceService log access and cost queries", () => {
   });
 });
 
-describe("maintenanceService.createLogEvent", () => {
+describe("maintenanceLogService.createEvent", () => {
   it("rejects invalid status transitions before starting a transaction", async () => {
     await expect(
-      maintenanceService.createLogEvent(logId, {
+      maintenanceLogService.createEvent(logId, {
         status: MAINTENANCE_STATUSES.SCHEDULED,
       }),
     ).rejects.toMatchObject({
@@ -437,14 +320,16 @@ describe("maintenanceService.createLogEvent", () => {
   });
 
   it("reports missing driver profiles and vehicle assignment mismatches", async () => {
-    mocks.getDriverByUserId.mockResolvedValueOnce(null);
+    mocks.getDriverByUserId.mockRejectedValueOnce(
+      new ApiError(404, DRIVER_MESSAGES.NOT_FOUND),
+    );
     await expect(
-      maintenanceService.getScheduleById(scheduleId, true, {
+      maintenanceLogService.getById(logId, {
         role: ROLES.DRIVER,
         userId: "driver-user",
       }),
     ).rejects.toMatchObject({
-      statusCode: 403,
+      statusCode: 404,
       message: DRIVER_MESSAGES.NOT_FOUND,
     });
 
@@ -452,7 +337,7 @@ describe("maintenanceService.createLogEvent", () => {
       currentVehicleId: "another-vehicle",
     });
     await expect(
-      maintenanceService.getLogById(logId, {
+      maintenanceLogService.getById(logId, {
         role: ROLES.DRIVER,
         userId: "driver-user",
       }),
@@ -471,7 +356,7 @@ describe("maintenanceService.createLogEvent", () => {
       status: MAINTENANCE_STATUSES.IN_PROGRESS,
     });
 
-    const result = await maintenanceService.createLogEvent(logId, {
+    const result = await maintenanceLogService.createEvent(logId, {
       status: MAINTENANCE_STATUSES.IN_PROGRESS,
     });
 
@@ -498,7 +383,7 @@ describe("maintenanceService.createLogEvent", () => {
     ]);
 
     await expect(
-      maintenanceService.createLogEvent(logId, {
+      maintenanceLogService.createEvent(logId, {
         status: MAINTENANCE_STATUSES.IN_PROGRESS,
       }),
     ).rejects.toMatchObject({
@@ -516,7 +401,7 @@ describe("maintenanceService.createLogEvent", () => {
       status: MAINTENANCE_STATUSES.IN_PROGRESS,
     };
     mocks.findLogById.mockResolvedValueOnce(inProgressLog);
-    mocks.findLatestLogByVehicle
+    mocks.findLatestByVehicle
       .mockResolvedValueOnce(inProgressLog)
       .mockResolvedValueOnce({
         ...log,
@@ -534,7 +419,7 @@ describe("maintenanceService.createLogEvent", () => {
       endDate: new Date(),
     });
 
-    await maintenanceService.createLogEvent(logId, {
+    await maintenanceLogService.createEvent(logId, {
       status: MAINTENANCE_STATUSES.COMPLETED,
     });
 
