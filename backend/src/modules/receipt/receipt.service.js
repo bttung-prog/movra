@@ -18,6 +18,7 @@ import { checkWarehouseAccess } from "../../utils/checkWarehouseAccess.js";
 import { escapeRegex } from "../../utils/regexUtils.js";
 
 import orderService from "../order/order.service.js";
+import orderTrackingLogService from "../order/orderTrackingLog.service.js";
 import goodsCategoryService from "../goodsCategory/goodsCategory.service.js";
 import warehouseService from "../warehouse/warehouse.service.js";
 import userService from "../user/user.service.js";
@@ -188,7 +189,7 @@ const create = async (
       dbSession,
     );
 
-    await orderService.addTrackingLog({
+    await orderTrackingLogService.create({
       orderId,
       tripId: order.tripId?._id || order.tripId,
       status: "stored",
@@ -417,7 +418,7 @@ const cancel = async (receiptId, { note } = {}, currentUser = null) => {
 
     let restoredStatus = existingReceipt.previousOrderStatus;
     if (!restoredStatus) {
-      const logsResult = await orderService.getTrackingLogsByOrderId({
+      const logsResult = await orderTrackingLogService.getByOrderId({
         orderId: rawOrderId,
         limit: 5,
       });
@@ -430,7 +431,7 @@ const cancel = async (receiptId, { note } = {}, currentUser = null) => {
       restoredStatus = previousLog.status;
     }
 
-    await orderService.addTrackingLog({
+    await orderTrackingLogService.create({
       orderId: rawOrderId,
       status: restoredStatus,
       notes: `Hủy phiếu nhập kho ${existingReceipt.receiptCode}`,

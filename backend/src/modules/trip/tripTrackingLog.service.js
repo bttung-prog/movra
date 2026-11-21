@@ -16,7 +16,7 @@ import driverService from "../driver/driver.service.js";
 import vehicleService from "../vehicle/vehicle.service.js";
 import vehicleUsageLogService from "../vehicle/vehicleUsageLog.service.js";
 import userService from "../user/user.service.js";
-import orderService from "../order/order.service.js";
+import orderAssignmentService from "../order/orderAssignment.service.js";
 
 import tripRepository from "./trip.repository.js";
 import tripTrackingLogRepository from "./tripTrackingLog.repository.js";
@@ -78,10 +78,8 @@ const handleTripCompletion = async ({
   session,
   user = null,
 }) => {
-  const unfinishedOrdersCount = await orderService.countUnfinishedOrdersByTrip(
-    trip,
-    session,
-  );
+  const unfinishedOrdersCount =
+    await orderAssignmentService.countUnfinishedOrdersByTrip(trip, session);
 
   if (unfinishedOrdersCount > 0) {
     throw new ApiError(
@@ -90,7 +88,11 @@ const handleTripCompletion = async ({
     );
   }
 
-  await orderService.handleOrdersOnTripCompletion(trip, session, user);
+  await orderAssignmentService.handleOrdersOnTripCompletion(
+    trip,
+    session,
+    user,
+  );
 
   const actualEnd = new Date();
   const existingUsageLogs = await vehicleUsageLogService.getByTripId({
@@ -145,7 +147,7 @@ const handleTripCancellation = async ({
     trip || (await tripRepository.findById(resolvedTripId, session));
 
   if (resolvedTrip) {
-    await orderService.handleOrdersOnTripCancellation(
+    await orderAssignmentService.handleOrdersOnTripCancellation(
       resolvedTrip,
       session,
       user,

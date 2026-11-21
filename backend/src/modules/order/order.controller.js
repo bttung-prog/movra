@@ -5,6 +5,8 @@ import { ApiResponse } from "../../utils/ApiResponse.js";
 import { getFileUrl } from "../../utils/storage.util.js";
 
 import orderService from "./order.service.js";
+import orderTrackingLogService from "./orderTrackingLog.service.js";
+import orderAssignmentService from "./orderAssignment.service.js";
 
 const create = async (req, res, next) => {
   try {
@@ -191,7 +193,7 @@ const getByCode = async (req, res, next) => {
 
 const getPublicTracking = async (req, res, next) => {
   try {
-    const trackingInfo = await orderService.getPublicTrackingByCode(
+    const trackingInfo = await orderTrackingLogService.getPublicByCode(
       req.params.orderCode,
     );
 
@@ -207,7 +209,7 @@ const getPublicTracking = async (req, res, next) => {
 
 const confirmPickup = async (req, res, next) => {
   try {
-    const trackingLog = await orderService.confirmPickup({
+    const trackingLog = await orderTrackingLogService.confirmPickup({
       orderId: req.params.orderId,
       ...req.body,
       changedBy: req.user.userId,
@@ -229,7 +231,7 @@ const getByTripId = async (req, res, next) => {
     const page = parseInt(req.query.page, 10) || 1;
     const limit = parseInt(req.query.limit, 10) || 20;
 
-    const result = await orderService.getByTripId({
+    const result = await orderAssignmentService.getByTripId({
       tripId: req.params.tripId,
       page,
       limit,
@@ -311,7 +313,10 @@ const cancelOrder = async (req, res, next) => {
 
 const assignOrdersToTrip = async (req, res, next) => {
   try {
-    const result = await orderService.assignOrdersToTrip(req.body, req.user);
+    const result = await orderAssignmentService.assignOrdersToTrip(
+      req.body,
+      req.user,
+    );
 
     return ApiResponse.success(
       res,
@@ -325,7 +330,7 @@ const assignOrdersToTrip = async (req, res, next) => {
 
 const unassignOrdersFromTrip = async (req, res, next) => {
   try {
-    const result = await orderService.unassignOrdersFromTrip(
+    const result = await orderAssignmentService.unassignOrdersFromTrip(
       req.body,
       req.user,
     );
@@ -429,7 +434,7 @@ const addTrackingLog = async (req, res, next) => {
       user: req.user,
     };
 
-    const trackingLog = await orderService.addTrackingLog(payload);
+    const trackingLog = await orderTrackingLogService.create(payload);
 
     return ApiResponse.created(
       res,
@@ -446,7 +451,7 @@ const getTrackingLogsByOrderId = async (req, res, next) => {
     const page = parseInt(req.query.page, 10) || 1;
     const limit = parseInt(req.query.limit, 10) || 20;
 
-    const result = await orderService.getTrackingLogsByOrderId({
+    const result = await orderTrackingLogService.getByOrderId({
       orderId: req.params.orderId,
       page,
       limit,
@@ -465,7 +470,7 @@ const getTrackingLogsByOrderId = async (req, res, next) => {
 
 const getLatestTrackingLog = async (req, res, next) => {
   try {
-    const log = await orderService.getLatestTrackingLog({
+    const log = await orderTrackingLogService.getLatestByOrderId({
       orderId: req.params.orderId,
       user: req.user,
     });

@@ -14,6 +14,7 @@ import driverService from "../driver/driver.service.js";
 import vehicleService from "../vehicle/vehicle.service.js";
 import routeService from "../route/route.service.js";
 import orderService from "../order/order.service.js";
+import orderAssignmentService from "../order/orderAssignment.service.js";
 
 import tripRepository from "./trip.repository.js";
 import tripAuditLogRepository from "./tripAuditLog.repository.js";
@@ -300,7 +301,10 @@ const syncTotalOrder = async (tripId, session = null) => {
       await tripRepository.findById(tripId, activeSession),
       false,
     );
-    const totalOrder = await orderService.countByTripId(tripId, activeSession);
+    const totalOrder = await orderAssignmentService.countByTripId(
+      tripId,
+      activeSession,
+    );
     const updatedTrip = await tripRepository.setTotalOrder(
       tripId,
       totalOrder,
@@ -388,10 +392,11 @@ const updateById = async (tripId, updateData, user = null) => {
   }
 
   if (updateData.routeId) {
-    const mismatchedOrders = await orderService.countRouteMismatchesByTripId(
-      tripId,
-      updateData.routeId,
-    );
+    const mismatchedOrders =
+      await orderAssignmentService.countRouteMismatchesByTripId(
+        tripId,
+        updateData.routeId,
+      );
     if (mismatchedOrders > 0) {
       throw new ApiError(400, TRIP_MESSAGES.ROUTE_HAS_ORDERS);
     }

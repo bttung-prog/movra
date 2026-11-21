@@ -82,12 +82,14 @@ vi.mock("../../../src/modules/user/user.service.js", () => ({
 
 vi.mock("../../../src/modules/order/order.service.js", () => ({
   default: {
-    countRouteMismatchesByTripId: mocks.countRouteMismatchesByTripId,
     countAll: mocks.countAllOrders,
+  },
+}));
+
+vi.mock("../../../src/modules/order/orderAssignment.service.js", () => ({
+  default: {
+    countRouteMismatchesByTripId: mocks.countRouteMismatchesByTripId,
     countByTripId: mocks.countOrdersByTripId,
-    countUnfinishedOrdersByTrip: mocks.countUnfinishedOrdersByTrip,
-    handleOrdersOnTripCompletion: mocks.handleOrdersOnTripCompletion,
-    handleOrdersOnTripCancellation: mocks.handleOrdersOnTripCancellation,
   },
 }));
 

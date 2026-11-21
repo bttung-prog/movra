@@ -95,7 +95,7 @@ vi.mock("../../../src/modules/user/user.service.js", () => ({
   },
 }));
 
-vi.mock("../../../src/modules/order/order.service.js", () => ({
+vi.mock("../../../src/modules/order/orderAssignment.service.js", () => ({
   default: {
     countUnfinishedOrdersByTrip: mocks.countUnfinishedOrdersByTrip,
     handleOrdersOnTripCompletion: mocks.handleOrdersOnTripCompletion,
