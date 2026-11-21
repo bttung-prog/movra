@@ -40,8 +40,13 @@ vi.mock("../../../src/modules/order/order.service.js", () => ({
   default: {
     getById: mocks.getOrderById,
     recordFailureAttempt: mocks.recordFailureAttempt,
-    addTrackingLog: mocks.addTrackingLog,
     getIdsByWarehouseId: mocks.getOrderIdsByWarehouseId,
+  },
+}));
+
+vi.mock("../../../src/modules/order/orderTrackingLog.service.js", () => ({
+  default: {
+    create: mocks.addTrackingLog,
   },
 }));
 

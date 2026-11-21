@@ -6,6 +6,7 @@ import { FAILURE_REASON_MESSAGES } from "../../constants/messages.js";
 import { ApiError } from "../../utils/ApiError.js";
 
 import orderService from "../order/order.service.js";
+import orderTrackingLogService from "../order/orderTrackingLog.service.js";
 import tripService from "../trip/trip.service.js";
 import userService from "../user/user.service.js";
 
@@ -157,7 +158,7 @@ const create = async ({
         );
       }
 
-      await orderService.addTrackingLog({
+      await orderTrackingLogService.create({
         orderId,
         tripId,
         status: updatedOrder.status,

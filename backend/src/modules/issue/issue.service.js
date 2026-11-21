@@ -19,6 +19,7 @@ import { escapeRegex } from "../../utils/regexUtils.js";
 
 import tripService from "../trip/trip.service.js";
 import orderService from "../order/order.service.js";
+import orderTrackingLogService from "../order/orderTrackingLog.service.js";
 import goodsCategoryService from "../goodsCategory/goodsCategory.service.js";
 import warehouseService from "../warehouse/warehouse.service.js";
 import userService from "../user/user.service.js";
@@ -158,7 +159,7 @@ const create = async (
     const targetStatus =
       trip.type === TRIP_TYPES.TRANSFER ? "transporting" : "out_for_delivery";
 
-    await orderService.addTrackingLog({
+    await orderTrackingLogService.create({
       orderId,
       tripId,
       status: targetStatus,
@@ -495,7 +496,7 @@ const cancel = async (issueId, { note } = {}, currentUser = null) => {
       throw new ApiError(409, ISSUE_MESSAGES.CANCEL_FAILED_NOT_ISSUED);
     }
 
-    await orderService.addTrackingLog({
+    await orderTrackingLogService.create({
       orderId,
       tripId,
       status: "stored",

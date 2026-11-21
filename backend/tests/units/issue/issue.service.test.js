@@ -61,6 +61,10 @@ vi.mock("../../../src/modules/order/order.service.js", () => ({
   default: { getById: mocks.getOrderById },
 }));
 
+vi.mock("../../../src/modules/order/orderTrackingLog.service.js", () => ({
+  default: { create: vi.fn() },
+}));
+
 vi.mock("../../../src/modules/warehouse/warehouse.service.js", () => ({
   default: { getById: mocks.getWarehouseById },
 }));

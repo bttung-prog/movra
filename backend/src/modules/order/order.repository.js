@@ -3,7 +3,6 @@ import mongoose from "mongoose";
 import { ORDER_STATUSES } from "../../constants/orderStatuses.js";
 import { TRIP_TYPES } from "../../constants/tripTypes.js";
 import Order from "./order.js";
-import OrderTrackingLog from "./order_tracking_log.js";
 
 const ORDER_POPULATE = [
   {
@@ -46,17 +45,6 @@ const ORDER_POPULATE = [
         select: "plateNumber capacityWeight capacityVolume",
       },
     ],
-  },
-];
-
-const TRACKING_LOG_POPULATE = [
-  {
-    path: "tripId",
-    select: "tripCode status",
-  },
-  {
-    path: "changedBy",
-    select: "fullName phone email",
   },
 ];
 
@@ -376,51 +364,6 @@ const getRecentOrderTrends = (startDate, warehouseId = null) => {
   ]);
 };
 
-// ==========================================
-// ORDER TRACKING LOGS
-// ==========================================
-
-const createTrackingLog = (logData, session = null) => {
-  return OrderTrackingLog.create([logData], { session }).then(
-    (docs) => docs[0],
-  );
-};
-
-const findTrackingLogsByOrderId = (
-  orderId,
-  { skip = 0, limit = 20, sort = { createdAt: -1 } } = {},
-) => {
-  return OrderTrackingLog.find({ orderId })
-    .sort(sort)
-    .skip(skip)
-    .limit(limit)
-    .populate(TRACKING_LOG_POPULATE)
-    .lean();
-};
-
-const findPublicTrackingLogsByOrderId = (
-  orderId,
-  { skip = 0, limit = 20, sort = { createdAt: -1 } } = {},
-) => {
-  return OrderTrackingLog.find({ orderId })
-    .select("status createdAt -_id")
-    .sort(sort)
-    .skip(skip)
-    .limit(limit)
-    .lean();
-};
-
-const countTrackingLogsByOrderId = (orderId) => {
-  return OrderTrackingLog.countDocuments({ orderId });
-};
-
-const getLatestTrackingLogByOrderId = (orderId) => {
-  return OrderTrackingLog.findOne({ orderId })
-    .sort({ createdAt: -1 })
-    .populate(TRACKING_LOG_POPULATE)
-    .lean();
-};
-
 export default {
   // Order
   create,
@@ -446,11 +389,4 @@ export default {
   deleteById,
   countByStatus,
   getRecentOrderTrends,
-
-  // Order Tracking Log
-  createTrackingLog,
-  findTrackingLogsByOrderId,
-  findPublicTrackingLogsByOrderId,
-  countTrackingLogsByOrderId,
-  getLatestTrackingLogByOrderId,
 };
