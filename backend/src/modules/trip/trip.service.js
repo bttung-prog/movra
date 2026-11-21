@@ -1,19 +1,10 @@
 import mongoose from "mongoose";
 
 import { TRIP_TYPES } from "../../constants/tripTypes.js";
-import { ROLES } from "../../constants/roles.js";
-import {
-  TRIP_STATUSES,
-  TRACKING_STATUSES,
-  TRIP_TRACKING_TRANSITIONS,
-} from "../../constants/tripStatuses.js";
+import { TRIP_STATUSES } from "../../constants/tripStatuses.js";
 import { VEHICLE_STATUSES } from "../../constants/vehicleStatuses.js";
 import { USER_STATUSES } from "../../constants/userStatuses.js";
-import {
-  COMMON_MESSAGES,
-  TRIP_MESSAGES,
-  WAREHOUSE_MESSAGES,
-} from "../../constants/messages.js";
+import { TRIP_MESSAGES } from "../../constants/messages.js";
 
 import { ApiError } from "../../utils/ApiError.js";
 import { generateCode } from "../../utils/generateCode.js";
@@ -21,12 +12,13 @@ import { checkWarehouseAccess } from "../../utils/checkWarehouseAccess.js";
 
 import driverService from "../driver/driver.service.js";
 import vehicleService from "../vehicle/vehicle.service.js";
-import vehicleUsageLogService from "../vehicle/vehicleUsageLog.service.js";
 import routeService from "../route/route.service.js";
-import userService from "../user/user.service.js";
 import orderService from "../order/order.service.js";
 
 import tripRepository from "./trip.repository.js";
+import tripAuditLogRepository from "./tripAuditLog.repository.js";
+import tripAccess from "./trip.access.js";
+import tripAudit from "./trip.audit.js";
 
 const validateTrip = (trip, requireNotDeleted = true) => {
   if (!trip) {
@@ -38,129 +30,6 @@ const validateTrip = (trip, requireNotDeleted = true) => {
   }
 
   return trip;
-};
-
-const getReferenceId = (value) => {
-  return value?._id || value || null;
-};
-
-const sameReference = (left, right) => {
-  return getReferenceId(left)?.toString() === getReferenceId(right)?.toString();
-};
-
-const normalizeAuditValue = (value) => {
-  if (value === undefined || value === null) return null;
-  if (value instanceof Date) return value.toISOString();
-  if (value?._id) return value._id.toString();
-  if (
-    typeof value === "object" &&
-    typeof value.toString === "function" &&
-    value.toString() !== "[object Object]"
-  ) {
-    return value.toString();
-  }
-  return value;
-};
-
-const getAuditChanges = (before, after, fields) => {
-  return fields.flatMap((field) => {
-    const oldValue = normalizeAuditValue(before?.[field]);
-    const newValue = normalizeAuditValue(after?.[field]);
-    return JSON.stringify(oldValue) === JSON.stringify(newValue)
-      ? []
-      : [{ field, oldValue, newValue }];
-  });
-};
-
-const getTripSnapshot = (trip) => ({
-  tripCode: trip.tripCode,
-  vehicleId: trip.vehicleId,
-  driverId: trip.driverId,
-  warehouseId: trip.warehouseId,
-  routeId: trip.routeId,
-  type: trip.type,
-  status: trip.status,
-  plannedStart: trip.plannedStart,
-  plannedEnd: trip.plannedEnd,
-});
-
-const getActorId = (user) => user?.userId || user?._id || null;
-
-const validateRouteOriginWarehouse = (route, warehouseId) => {
-  const originWarehouseId =
-    route.originWarehouseId?._id || route.originWarehouseId;
-
-  if (
-    !warehouseId ||
-    originWarehouseId?.toString() !== warehouseId.toString()
-  ) {
-    throw new ApiError(400, TRIP_MESSAGES.ROUTE_ORIGIN_WAREHOUSE_MISMATCH);
-  }
-};
-
-const assertTripWarehouseAccess = async (trip, user) => {
-  if (user?.role === ROLES.DRIVER) {
-    const driver = await driverService.getByUserId(user._id);
-    const assignedDriverId = trip.driverId?._id || trip.driverId;
-    if (assignedDriverId?.toString() !== driver._id.toString()) {
-      throw new ApiError(403, TRIP_MESSAGES.NOT_ASSIGNED_DRIVER);
-    }
-    return;
-  }
-
-  if (user?.role !== ROLES.DISPATCHER) return;
-
-  if (trip.warehouseId) {
-    checkWarehouseAccess(trip.warehouseId, user);
-    const vehicleId = trip.vehicleId?._id || trip.vehicleId;
-    if (vehicleId) {
-      await vehicleService.getById(vehicleId, user);
-    }
-    return;
-  }
-
-  const driverId = trip.driverId?._id || trip.driverId;
-  if (!driverId) {
-    throw new ApiError(403, TRIP_MESSAGES.DRIVER_REQUIRED_FOR_WAREHOUSE_SCOPE);
-  }
-
-  const driver = await driverService.getById(driverId);
-  checkWarehouseAccess(driver.warehouseId, user);
-
-  const vehicleId = trip.vehicleId?._id || trip.vehicleId;
-  if (vehicleId) {
-    await vehicleService.getById(vehicleId, user);
-  }
-};
-
-const scopeTripFilter = async (filter, user) => {
-  if (user?.role === ROLES.DRIVER) {
-    const driver = await driverService.getByUserId(user._id);
-    return { $and: [filter, { driverId: driver._id }] };
-  }
-
-  if (user?.role !== ROLES.DISPATCHER) return filter;
-  if (!user.warehouseId) {
-    throw new ApiError(403, WAREHOUSE_MESSAGES.DISPATCHER_NOT_ASSIGNED);
-  }
-
-  const driverIds = await driverService.getIdsByWarehouseId(user.warehouseId);
-  const vehicleIds = await vehicleService.getIdsByWarehouseId(user.warehouseId);
-  return {
-    $and: [
-      filter,
-      {
-        $or: [
-          { warehouseId: user.warehouseId },
-          {
-            warehouseId: null,
-            driverId: { $in: driverIds },
-            vehicleId: { $in: vehicleIds },
-          },
-        ],
-      },
-    ],
-  };
 };
 
 const lockTripScheduleResources = async ({ vehicleId, driverId }, session) => {
@@ -249,7 +118,7 @@ const create = async ({
 
   const warehouseId = driver.warehouseId?._id || driver.warehouseId;
   if (route) {
-    validateRouteOriginWarehouse(route, warehouseId);
+    tripAccess.validateRouteOriginWarehouse(route, warehouseId);
   }
 
   const vehicleWarehouseId = vehicle.warehouseId?._id || vehicle.warehouseId;
@@ -319,13 +188,17 @@ const create = async ({
         },
         session,
       );
-      const snapshot = getTripSnapshot(trip);
-      await tripRepository.createAuditLog(
+      const snapshot = tripAudit.getTripSnapshot(trip);
+      await tripAuditLogRepository.create(
         {
           tripId: trip._id,
           action: "created",
-          performedBy: getActorId(user),
-          changes: getAuditChanges({}, snapshot, Object.keys(snapshot)),
+          performedBy: tripAccess.getActorId(user),
+          changes: tripAudit.getAuditChanges(
+            {},
+            snapshot,
+            Object.keys(snapshot),
+          ),
         },
         session,
       );
@@ -347,7 +220,7 @@ const getAll = async ({
   const limitNumber = Math.max(1, parseInt(limit, 10) || 10);
   const skip = (pageNumber - 1) * limitNumber;
 
-  const queryFilter = await scopeTripFilter(
+  const queryFilter = await tripAccess.scopeTripFilter(
     { deletedAt: null, ...filter },
     user,
   );
@@ -381,19 +254,19 @@ const getById = async (
 ) => {
   const trip = await tripRepository.findById(tripId, session);
   const validatedTrip = validateTrip(trip, requireNotDeleted);
-  await assertTripWarehouseAccess(validatedTrip, user);
+  await tripAccess.assertTripWarehouseAccess(validatedTrip, user);
   return validatedTrip;
 };
 
 const getByCode = async (tripCode, user = null) => {
   const trip = await tripRepository.findByCode(tripCode);
   const validatedTrip = validateTrip(trip, true);
-  await assertTripWarehouseAccess(validatedTrip, user);
+  await tripAccess.assertTripWarehouseAccess(validatedTrip, user);
   return validatedTrip;
 };
 
 const countAll = async ({ filter = {}, user = null } = {}) => {
-  const scopedFilter = await scopeTripFilter(filter, user);
+  const scopedFilter = await tripAccess.scopeTripFilter(filter, user);
   return tripRepository.countAll({ filter: scopedFilter });
 };
 
@@ -433,10 +306,12 @@ const syncTotalOrder = async (tripId, session = null) => {
       totalOrder,
       activeSession,
     );
-    const changes = getAuditChanges(currentTrip, updatedTrip, ["totalOrder"]);
+    const changes = tripAudit.getAuditChanges(currentTrip, updatedTrip, [
+      "totalOrder",
+    ]);
 
     if (changes.length > 0) {
-      await tripRepository.createAuditLog(
+      await tripAuditLogRepository.create(
         {
           tripId,
           action: "updated",
@@ -509,7 +384,7 @@ const updateById = async (tripId, updateData, user = null) => {
       existingTrip.warehouseId ||
       existingTrip.driverId?.warehouseId?._id ||
       existingTrip.driverId?.warehouseId;
-    validateRouteOriginWarehouse(route, operationalWarehouseId);
+    tripAccess.validateRouteOriginWarehouse(route, operationalWarehouseId);
   }
 
   if (updateData.routeId) {
@@ -561,17 +436,17 @@ const updateById = async (tripId, updateData, user = null) => {
       const updatedTrip = validateTrip(
         await tripRepository.updateById(tripId, updateData, session),
       );
-      const changes = getAuditChanges(
+      const changes = tripAudit.getAuditChanges(
         currentTrip,
         updatedTrip,
         Object.keys(updateData),
       );
       if (changes.length > 0) {
-        await tripRepository.createAuditLog(
+        await tripAuditLogRepository.create(
           {
             tripId,
             action: "updated",
-            performedBy: getActorId(user),
+            performedBy: tripAccess.getActorId(user),
             changes,
           },
           session,
@@ -615,12 +490,14 @@ const deleteById = async (tripId, user = null) => {
       const deletedTrip = validateTrip(
         await tripRepository.deleteById(tripId, session),
       );
-      await tripRepository.createAuditLog(
+      await tripAuditLogRepository.create(
         {
           tripId,
           action: "deleted",
-          performedBy: getActorId(user),
-          changes: getAuditChanges(currentTrip, deletedTrip, ["deletedAt"]),
+          performedBy: tripAccess.getActorId(user),
+          changes: tripAudit.getAuditChanges(currentTrip, deletedTrip, [
+            "deletedAt",
+          ]),
         },
         session,
       );
@@ -678,12 +555,14 @@ const restoreById = async (tripId, user = null) => {
         await tripRepository.restoreById(tripId, session),
         false,
       );
-      await tripRepository.createAuditLog(
+      await tripAuditLogRepository.create(
         {
           tripId,
           action: "restored",
-          performedBy: getActorId(user),
-          changes: getAuditChanges(currentTrip, restoredTrip, ["deletedAt"]),
+          performedBy: tripAccess.getActorId(user),
+          changes: tripAudit.getAuditChanges(currentTrip, restoredTrip, [
+            "deletedAt",
+          ]),
         },
         session,
       );
@@ -708,689 +587,6 @@ const getTopDriverPerformance = async ({
   return tripRepository.getTopDriverPerformance({ limit, warehouseId });
 };
 
-// ==========================================
-// TRIP ASSIGNMENT (CHANGE DRIVER / VEHICLE)
-// ==========================================
-
-const reassign = async (
-  tripId,
-  { newDriverId, newVehicleId, reason, changedBy },
-  user = null,
-) => {
-  const trip = await getById(tripId, true, user);
-
-  if (
-    trip.status === TRIP_STATUSES.COMPLETED ||
-    trip.status === TRIP_STATUSES.CANCELLED
-  ) {
-    throw new ApiError(400, TRIP_MESSAGES.CANNOT_REASSIGN_STATUS(trip.status));
-  }
-
-  if (
-    trip.status === TRIP_STATUSES.IN_PROGRESS &&
-    (newVehicleId || newDriverId)
-  ) {
-    throw new ApiError(400, TRIP_MESSAGES.CANNOT_REASSIGN_IN_PROGRESS);
-  }
-
-  if (!newDriverId && !newVehicleId) {
-    throw new ApiError(400, TRIP_MESSAGES.REASSIGN_PARAMS_REQUIRED);
-  }
-
-  if (changedBy) {
-    await userService.getById(changedBy);
-  }
-
-  const assignmentPayload = {
-    tripId,
-    reason,
-    changedBy,
-  };
-
-  const tripUpdatePayload = {};
-
-  if (newDriverId) {
-    const driver = await driverService.getById(newDriverId);
-    checkWarehouseAccess(driver.warehouseId, user);
-    const tripWarehouseId =
-      trip.warehouseId ||
-      trip.driverId?.warehouseId?._id ||
-      trip.driverId?.warehouseId;
-    const driverWarehouseId = driver.warehouseId?._id || driver.warehouseId;
-    if (
-      tripWarehouseId &&
-      tripWarehouseId.toString() !== driverWarehouseId?.toString()
-    ) {
-      throw new ApiError(400, TRIP_MESSAGES.DRIVER_WAREHOUSE_MISMATCH);
-    }
-
-    const routeId = trip.routeId?._id || trip.routeId;
-    if (routeId) {
-      const route = await routeService.getById(routeId);
-      validateRouteOriginWarehouse(route, driverWarehouseId);
-    }
-
-    if (driver.status !== USER_STATUSES.ACTIVE) {
-      throw new ApiError(400, TRIP_MESSAGES.NEW_DRIVER_NOT_ACTIVE);
-    }
-    driverService.ensureLicenseIsValid(driver.licenseExpiryDate);
-
-    assignmentPayload.oldDriverId = trip.driverId?._id;
-    assignmentPayload.newDriverId = newDriverId;
-    tripUpdatePayload.driverId = newDriverId;
-  }
-
-  if (newVehicleId) {
-    const vehicle = await vehicleService.getById(newVehicleId, user);
-    const tripWarehouseId =
-      trip.warehouseId ||
-      trip.driverId?.warehouseId?._id ||
-      trip.driverId?.warehouseId;
-    const vehicleWarehouseId = vehicle.warehouseId?._id || vehicle.warehouseId;
-    if (
-      vehicleWarehouseId &&
-      tripWarehouseId &&
-      vehicleWarehouseId.toString() !== tripWarehouseId.toString()
-    ) {
-      throw new ApiError(400, TRIP_MESSAGES.VEHICLE_WAREHOUSE_MISMATCH);
-    }
-
-    if (
-      vehicle.status === VEHICLE_STATUSES.MAINTENANCE ||
-      vehicle.status === VEHICLE_STATUSES.RETIRED
-    ) {
-      throw new ApiError(
-        400,
-        TRIP_MESSAGES.NEW_VEHICLE_NOT_AVAILABLE(vehicle.status),
-      );
-    }
-
-    assignmentPayload.oldVehicleId = trip.vehicleId?._id;
-    assignmentPayload.newVehicleId = newVehicleId;
-    tripUpdatePayload.vehicleId = newVehicleId;
-  }
-
-  const vehicleId = newVehicleId || trip.vehicleId?._id || trip.vehicleId;
-  const driverId = newDriverId || trip.driverId?._id || trip.driverId;
-  const session = await mongoose.startSession();
-
-  try {
-    return await session.withTransaction(async () => {
-      const currentTrip = validateTrip(
-        await tripRepository.findById(tripId, session),
-      );
-      const changedDuringReassignment =
-        !sameReference(currentTrip.vehicleId, trip.vehicleId) ||
-        !sameReference(currentTrip.driverId, trip.driverId) ||
-        !sameReference(currentTrip.warehouseId, trip.warehouseId) ||
-        currentTrip.plannedStart.getTime() !== trip.plannedStart.getTime() ||
-        currentTrip.plannedEnd.getTime() !== trip.plannedEnd.getTime() ||
-        currentTrip.status !== trip.status;
-      if (changedDuringReassignment) {
-        throw new ApiError(409, TRIP_MESSAGES.TRIP_CHANGED_RETRY);
-      }
-
-      await lockTripScheduleResources({ vehicleId, driverId }, session);
-      await checkTripOverlap({
-        vehicleId,
-        driverId,
-        plannedStart: currentTrip.plannedStart,
-        plannedEnd: currentTrip.plannedEnd,
-        excludeTripId: tripId,
-        session,
-      });
-
-      if (newVehicleId) {
-        const tripWarehouseId =
-          trip.warehouseId ||
-          trip.driverId?.warehouseId?._id ||
-          trip.driverId?.warehouseId;
-        await vehicleService.assignToWarehouse(
-          newVehicleId,
-          tripWarehouseId,
-          session,
-        );
-      }
-
-      const assignmentLog = await tripRepository.createAssignment(
-        assignmentPayload,
-        session,
-      );
-
-      const updatedTrip = await tripRepository.updateById(
-        tripId,
-        tripUpdatePayload,
-        session,
-      );
-      const changes = getAuditChanges(currentTrip, updatedTrip, [
-        "vehicleId",
-        "driverId",
-      ]);
-      if (changes.length > 0) {
-        await tripRepository.createAuditLog(
-          {
-            tripId,
-            action: "reassigned",
-            performedBy: getActorId(user),
-            changes,
-          },
-          session,
-        );
-      }
-
-      return {
-        trip: updatedTrip,
-        assignment: assignmentLog,
-      };
-    });
-  } finally {
-    session.endSession();
-  }
-};
-
-const getAssignmentsByTripId = async (
-  tripId,
-  { page = 1, limit = 20 } = {},
-  user = null,
-) => {
-  await getById(tripId, false, user);
-
-  const pageNumber = Math.max(1, parseInt(page, 10) || 1);
-  const limitNumber = Math.max(1, parseInt(limit, 10) || 20);
-  const skip = (pageNumber - 1) * limitNumber;
-
-  const [assignments, total] = await Promise.all([
-    tripRepository.findAssignmentsByTripId(tripId, {
-      skip,
-      limit: limitNumber,
-    }),
-    tripRepository.countAssignmentsByTripId(tripId),
-  ]);
-
-  return {
-    data: assignments,
-    pagination: {
-      page: pageNumber,
-      limit: limitNumber,
-      total,
-      totalPages: Math.ceil(total / limitNumber),
-    },
-  };
-};
-
-// ==========================================
-// TRIP TRACKING LOG SERVICES
-// ==========================================
-
-const handleTripDeparture = async ({
-  trip,
-  targetVehicleId,
-  targetDriverId,
-  odometerReading,
-  session,
-}) => {
-  const actualStart = trip.actualStart || new Date();
-  const existingUsageLogs = await vehicleUsageLogService.getByTripId({
-    tripId: trip._id,
-  });
-
-  if (existingUsageLogs.length === 0) {
-    const vehicle = await vehicleService.getById(targetVehicleId);
-    const startOdo = odometerReading ?? (vehicle.currentOdometer || 0);
-
-    await vehicleUsageLogService.create({
-      vehicleId: targetVehicleId,
-      driverId: targetDriverId,
-      tripId: trip._id,
-      startOdo,
-      startTime: actualStart,
-      notes: "Tự động tạo khi chuyến xe khởi hành",
-      session,
-    });
-  }
-
-  return { status: TRIP_STATUSES.IN_PROGRESS, actualStart };
-};
-
-const handleTripCompletion = async ({
-  trip,
-  targetVehicleId,
-  odometerReading,
-  session,
-  user = null,
-}) => {
-  const unfinishedOrdersCount = await orderService.countUnfinishedOrdersByTrip(
-    trip,
-    session,
-  );
-
-  if (unfinishedOrdersCount > 0) {
-    throw new ApiError(
-      400,
-      TRIP_MESSAGES.CANNOT_COMPLETE_ACTIVE_ORDERS(unfinishedOrdersCount),
-    );
-  }
-
-  await orderService.handleOrdersOnTripCompletion(trip, session, user);
-
-  const actualEnd = new Date();
-  const existingUsageLogs = await vehicleUsageLogService.getByTripId({
-    tripId: trip._id,
-  });
-
-  const activeLog = existingUsageLogs.find(
-    (log) => log.endOdo === null || log.endOdo === undefined,
-  );
-
-  if (activeLog) {
-    const vehicle = await vehicleService.getById(targetVehicleId);
-    const endOdo =
-      odometerReading ??
-      Math.max(
-        activeLog.startOdo,
-        vehicle.currentOdometer || 0,
-        activeLog.startOdo + (trip.totalDistance || 0),
-      );
-
-    await vehicleUsageLogService.updateById(
-      activeLog._id,
-      {
-        endOdo,
-        endTime: actualEnd,
-        notes: activeLog.notes
-          ? `${activeLog.notes} | Tự động hoàn thành theo chuyến xe`
-          : "Tự động hoàn thành theo chuyến xe",
-      },
-      session,
-    );
-
-    await vehicleService.changeStatus(
-      targetVehicleId,
-      VEHICLE_STATUSES.AVAILABLE,
-      session,
-    );
-  }
-
-  return { status: TRIP_STATUSES.COMPLETED, actualEnd };
-};
-
-const handleTripCancellation = async ({
-  trip,
-  tripId,
-  targetVehicleId,
-  session,
-  user = null,
-}) => {
-  const resolvedTripId = tripId || trip?._id;
-  const resolvedTrip =
-    trip || (await tripRepository.findById(resolvedTripId, session));
-
-  if (resolvedTrip) {
-    await orderService.handleOrdersOnTripCancellation(
-      resolvedTrip,
-      session,
-      user,
-    );
-  }
-
-  const existingUsageLogs = await vehicleUsageLogService.getByTripId({
-    tripId: resolvedTripId,
-  });
-
-  const activeLog = existingUsageLogs.find(
-    (log) => log.endOdo === null || log.endOdo === undefined,
-  );
-
-  if (activeLog) {
-    const vehicle = await vehicleService.getById(targetVehicleId);
-    const endOdo = Math.max(activeLog.startOdo, vehicle.currentOdometer || 0);
-
-    await vehicleUsageLogService.updateById(
-      activeLog._id,
-      {
-        endOdo,
-        endTime: new Date(),
-        notes: activeLog.notes
-          ? `${activeLog.notes} | Tự động hủy theo chuyến xe`
-          : "Tự động hủy theo chuyến xe",
-      },
-      session,
-    );
-
-    await vehicleService.changeStatus(
-      targetVehicleId,
-      VEHICLE_STATUSES.AVAILABLE,
-      session,
-    );
-  }
-
-  return { status: TRIP_STATUSES.CANCELLED };
-};
-
-const addTrackingLog = async (
-  tripId,
-  {
-    status,
-    latitude,
-    longitude,
-    address,
-    speed,
-    notes,
-    reportedBy,
-    odometerReading,
-  },
-  user = null,
-) => {
-  const trip = await getById(tripId, true, user);
-
-  if (
-    trip.status === TRIP_STATUSES.COMPLETED ||
-    trip.status === TRIP_STATUSES.CANCELLED
-  ) {
-    throw new ApiError(400, TRIP_MESSAGES.CANNOT_LOG_STATUS(trip.status));
-  }
-
-  if (status === TRACKING_STATUSES.PLANNED) {
-    throw new ApiError(400, TRIP_MESSAGES.CANNOT_LOG_PLANNED_STATUS);
-  }
-
-  if (user && user.role === ROLES.DRIVER) {
-    const driver = await driverService.getById(trip.driverId?._id);
-    if (driver.userId?.toString() !== user._id?.toString()) {
-      throw new ApiError(403, TRIP_MESSAGES.NOT_ASSIGNED_DRIVER);
-    }
-  }
-
-  const latestTrackingLog =
-    await tripRepository.getLatestTrackingLogByTripId(tripId);
-  const currentTrackingStatus = latestTrackingLog?.status || trip.status;
-
-  if (!TRIP_TRACKING_TRANSITIONS[currentTrackingStatus]?.includes(status)) {
-    throw new ApiError(
-      400,
-      TRIP_MESSAGES.INVALID_TRACKING_STATUS_TRANSITION(
-        currentTrackingStatus,
-        status,
-      ),
-    );
-  }
-
-  if (
-    status === TRACKING_STATUSES.DEPARTED ||
-    status === TRACKING_STATUSES.IN_PROGRESS
-  ) {
-    const driver = await driverService.getById(
-      trip.driverId?._id || trip.driverId,
-    );
-    if (driver.status !== USER_STATUSES.ACTIVE) {
-      throw new ApiError(400, TRIP_MESSAGES.DRIVER_NOT_ACTIVE);
-    }
-    driverService.ensureLicenseIsValid(driver.licenseExpiryDate);
-  }
-
-  if (reportedBy) {
-    await userService.getById(reportedBy);
-  }
-
-  let tripStatusUpdates = {};
-
-  const targetVehicleId = trip.vehicleId?._id || trip.vehicleId;
-  const targetDriverId = trip.driverId?._id || trip.driverId;
-
-  const session = await mongoose.startSession();
-  session.startTransaction();
-
-  try {
-    const trackingLog = await tripRepository.createTrackingLog(
-      {
-        tripId,
-        status,
-        latitude,
-        longitude,
-        address,
-        speed,
-        notes,
-        reportedBy,
-      },
-      session,
-    );
-
-    if (status === TRACKING_STATUSES.DEPARTED) {
-      if (trip.status === TRIP_STATUSES.PLANNED) {
-        tripStatusUpdates = await handleTripDeparture({
-          trip,
-          targetVehicleId,
-          targetDriverId,
-          odometerReading,
-          session,
-        });
-      }
-    } else if (status === TRACKING_STATUSES.COMPLETED) {
-      tripStatusUpdates = await handleTripCompletion({
-        trip,
-        targetVehicleId,
-        odometerReading,
-        session,
-        user,
-      });
-    } else if (status === TRACKING_STATUSES.CANCELLED) {
-      tripStatusUpdates = await handleTripCancellation({
-        trip,
-        tripId,
-        targetVehicleId,
-        session,
-        user,
-      });
-    }
-
-    if (Object.keys(tripStatusUpdates).length > 0) {
-      await tripRepository.updateById(tripId, tripStatusUpdates, session);
-      const changes = getAuditChanges(
-        trip,
-        tripStatusUpdates,
-        Object.keys(tripStatusUpdates),
-      );
-      await tripRepository.createAuditLog(
-        {
-          tripId,
-          action: "status_changed",
-          performedBy: getActorId(user),
-          changes,
-        },
-        session,
-      );
-    }
-
-    await session.commitTransaction();
-    return trackingLog;
-  } catch (error) {
-    await session.abortTransaction();
-    throw error;
-  } finally {
-    session.endSession();
-  }
-};
-
-const getTrackingLogsByTripId = async (
-  tripId,
-  { page = 1, limit = 50, sort = { createdAt: -1 }, user = null } = {},
-) => {
-  await getById(tripId, false, user);
-
-  const pageNumber = Math.max(1, parseInt(page, 10) || 1);
-  const limitNumber = Math.max(1, parseInt(limit, 10) || 50);
-  const skip = (pageNumber - 1) * limitNumber;
-
-  const [logs, total] = await Promise.all([
-    tripRepository.findTrackingLogsByTripId(tripId, {
-      skip,
-      limit: limitNumber,
-      sort,
-    }),
-    tripRepository.countTrackingLogsByTripId(tripId),
-  ]);
-
-  return {
-    data: logs,
-    pagination: {
-      page: pageNumber,
-      limit: limitNumber,
-      total,
-      totalPages: Math.ceil(total / limitNumber),
-    },
-  };
-};
-
-const getLatestTrackingLog = async (tripId, user = null) => {
-  await getById(tripId, false, user);
-
-  const log = await tripRepository.getLatestTrackingLogByTripId(tripId);
-
-  if (!log) {
-    throw new ApiError(404, TRIP_MESSAGES.LOG_NOT_FOUND);
-  }
-
-  return log;
-};
-
-const getAuditLogsByTripId = async (
-  tripId,
-  { page = 1, limit = 20, user = null } = {},
-) => {
-  await getById(tripId, false, user);
-
-  const pageNumber = Math.max(1, parseInt(page, 10) || 1);
-  const limitNumber = Math.max(1, parseInt(limit, 10) || 20);
-  const skip = (pageNumber - 1) * limitNumber;
-
-  const [logs, total] = await Promise.all([
-    tripRepository.findAuditLogsByTripId(tripId, {
-      skip,
-      limit: limitNumber,
-    }),
-    tripRepository.countAuditLogsByTripId(tripId),
-  ]);
-
-  return {
-    data: logs,
-    pagination: {
-      page: pageNumber,
-      limit: limitNumber,
-      total,
-      totalPages: Math.ceil(total / limitNumber),
-    },
-  };
-};
-
-// ==========================================
-// TRIP EXPENSE SERVICES
-// ==========================================
-
-const addExpense = async (
-  tripId,
-  { expenseType, expenseAmount, expenseDate, note, receiptUrl, createdBy },
-  user = null,
-) => {
-  const trip = await getById(tripId, true, user);
-
-  if (user && user.role === ROLES.DRIVER) {
-    const driver = await driverService.getById(trip.driverId?._id);
-
-    if (driver.userId?.toString() !== user._id?.toString()) {
-      throw new ApiError(403, TRIP_MESSAGES.NOT_ASSIGNED_DRIVER);
-    }
-  }
-
-  if (createdBy) {
-    await userService.getById(createdBy);
-  }
-
-  return tripRepository.createExpense({
-    tripId,
-    expenseType,
-    expenseAmount,
-    expenseDate: expenseDate ? new Date(expenseDate) : new Date(),
-    note,
-    receiptUrl,
-    createdBy,
-  });
-};
-
-const getExpensesByTripId = async (
-  tripId,
-  { page = 1, limit = 20, user = null } = {},
-) => {
-  await getById(tripId, false, user);
-
-  const pageNumber = Math.max(1, parseInt(page, 10) || 1);
-  const limitNumber = Math.max(1, parseInt(limit, 10) || 20);
-  const skip = (pageNumber - 1) * limitNumber;
-
-  const [expenses, total, totalAmount] = await Promise.all([
-    tripRepository.findExpensesByTripId(tripId, {
-      skip,
-      limit: limitNumber,
-    }),
-    tripRepository.countExpensesByTripId(tripId),
-    tripRepository.calculateTotalExpensesByTripId(tripId),
-  ]);
-
-  return {
-    data: expenses,
-    totalExpenseAmount: totalAmount,
-    pagination: {
-      page: pageNumber,
-      limit: limitNumber,
-      total,
-      totalPages: Math.ceil(total / limitNumber),
-    },
-  };
-};
-
-const getTotalExpensesByTripId = async (tripId, user = null) => {
-  await getById(tripId, false, user);
-
-  const totalAmount =
-    await tripRepository.calculateTotalExpensesByTripId(tripId);
-
-  return { tripId, totalAmount };
-};
-
-const updateExpenseById = async (expenseId, updateData, user = null) => {
-  if (user?.role === ROLES.DRIVER) {
-    throw new ApiError(403, COMMON_MESSAGES.FORBIDDEN);
-  }
-
-  const existingExpense = await tripRepository.findExpenseById(expenseId);
-
-  if (!existingExpense) {
-    throw new ApiError(404, TRIP_MESSAGES.EXPENSE_NOT_FOUND);
-  }
-
-  await getById(existingExpense.tripId, false, user);
-
-  return tripRepository.updateExpenseById(expenseId, updateData);
-};
-
-const deleteExpenseById = async (expenseId, user = null) => {
-  const existingExpense = await tripRepository.findExpenseById(expenseId);
-
-  if (!existingExpense) {
-    throw new ApiError(404, TRIP_MESSAGES.EXPENSE_NOT_FOUND);
-  }
-
-  await getById(existingExpense.tripId, false, user);
-
-  if (user && user.role === ROLES.DRIVER) {
-    const creatorId = existingExpense.createdBy?._id?.toString();
-    if (creatorId !== user._id?.toString()) {
-      throw new ApiError(403, TRIP_MESSAGES.EXPENSE_DELETE_OWN_ONLY);
-    }
-  }
-
-  return tripRepository.deleteExpenseById(expenseId);
-};
-
 export default {
   create,
   getAll,
@@ -1407,21 +603,4 @@ export default {
   restoreById,
   getStatsByStatus,
   getTopDriverPerformance,
-
-  // Assignment methods
-  reassign,
-  getAssignmentsByTripId,
-
-  // Tracking Log methods
-  addTrackingLog,
-  getTrackingLogsByTripId,
-  getLatestTrackingLog,
-  getAuditLogsByTripId,
-
-  // Expense methods
-  addExpense,
-  getExpensesByTripId,
-  getTotalExpensesByTripId,
-  updateExpenseById,
-  deleteExpenseById,
 };

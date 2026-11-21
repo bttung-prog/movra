@@ -3,6 +3,10 @@ import { TRIP_MESSAGES } from "../../constants/messages.js";
 import { ApiResponse } from "../../utils/ApiResponse.js";
 
 import tripService from "./trip.service.js";
+import tripExpenseService from "./tripExpense.service.js";
+import tripTrackingLogService from "./tripTrackingLog.service.js";
+import tripAssignmentService from "./tripAssignment.service.js";
+import tripAuditLogService from "./tripAuditLog.service.js";
 
 const create = async (req, res, next) => {
   try {
@@ -114,7 +118,7 @@ const restoreById = async (req, res, next) => {
 
 const reassign = async (req, res, next) => {
   try {
-    const result = await tripService.reassign(
+    const result = await tripAssignmentService.reassign(
       req.params.tripId,
       {
         ...req.body,
@@ -134,7 +138,7 @@ const getAssignmentsByTripId = async (req, res, next) => {
     const page = parseInt(req.query.page, 10) || 1;
     const limit = parseInt(req.query.limit, 10) || 20;
 
-    const result = await tripService.getAssignmentsByTripId(
+    const result = await tripAssignmentService.getAssignmentsByTripId(
       req.params.tripId,
       {
         page,
@@ -155,7 +159,7 @@ const getAssignmentsByTripId = async (req, res, next) => {
 
 const addTrackingLog = async (req, res, next) => {
   try {
-    const log = await tripService.addTrackingLog(
+    const log = await tripTrackingLogService.addTrackingLog(
       req.params.tripId,
       {
         ...req.body,
@@ -175,7 +179,7 @@ const getTrackingLogsByTripId = async (req, res, next) => {
     const page = parseInt(req.query.page, 10) || 1;
     const limit = parseInt(req.query.limit, 10) || 50;
 
-    const result = await tripService.getTrackingLogsByTripId(
+    const result = await tripTrackingLogService.getTrackingLogsByTripId(
       req.params.tripId,
       { page, limit, user: req.user },
     );
@@ -188,7 +192,7 @@ const getTrackingLogsByTripId = async (req, res, next) => {
 
 const getLatestTrackingLog = async (req, res, next) => {
   try {
-    const log = await tripService.getLatestTrackingLog(
+    const log = await tripTrackingLogService.getLatestTrackingLog(
       req.params.tripId,
       req.user,
     );
@@ -204,11 +208,14 @@ const getAuditLogsByTripId = async (req, res, next) => {
     const page = parseInt(req.query.page, 10) || 1;
     const limit = parseInt(req.query.limit, 10) || 20;
 
-    const result = await tripService.getAuditLogsByTripId(req.params.tripId, {
-      page,
-      limit,
-      user: req.user,
-    });
+    const result = await tripAuditLogService.getAuditLogsByTripId(
+      req.params.tripId,
+      {
+        page,
+        limit,
+        user: req.user,
+      },
+    );
 
     return ApiResponse.success(
       res,
@@ -222,7 +229,7 @@ const getAuditLogsByTripId = async (req, res, next) => {
 
 const addExpense = async (req, res, next) => {
   try {
-    const expense = await tripService.addExpense(
+    const expense = await tripExpenseService.addExpense(
       req.params.tripId,
       {
         ...req.body,
@@ -242,11 +249,14 @@ const getExpensesByTripId = async (req, res, next) => {
     const page = parseInt(req.query.page, 10) || 1;
     const limit = parseInt(req.query.limit, 10) || 20;
 
-    const result = await tripService.getExpensesByTripId(req.params.tripId, {
-      page,
-      limit,
-      user: req.user,
-    });
+    const result = await tripExpenseService.getExpensesByTripId(
+      req.params.tripId,
+      {
+        page,
+        limit,
+        user: req.user,
+      },
+    );
 
     return ApiResponse.success(res, result, TRIP_MESSAGES.GET_EXPENSES_SUCCESS);
   } catch (error) {
@@ -256,7 +266,7 @@ const getExpensesByTripId = async (req, res, next) => {
 
 const getTotalExpensesByTripId = async (req, res, next) => {
   try {
-    const result = await tripService.getTotalExpensesByTripId(
+    const result = await tripExpenseService.getTotalExpensesByTripId(
       req.params.tripId,
       req.user,
     );
@@ -273,7 +283,7 @@ const getTotalExpensesByTripId = async (req, res, next) => {
 
 const updateExpenseById = async (req, res, next) => {
   try {
-    const expense = await tripService.updateExpenseById(
+    const expense = await tripExpenseService.updateExpenseById(
       req.params.expenseId,
       req.body,
       req.user,
@@ -291,7 +301,7 @@ const updateExpenseById = async (req, res, next) => {
 
 const deleteExpenseById = async (req, res, next) => {
   try {
-    const expense = await tripService.deleteExpenseById(
+    const expense = await tripExpenseService.deleteExpenseById(
       req.params.expenseId,
       req.user,
     );
