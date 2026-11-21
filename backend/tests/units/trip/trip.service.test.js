@@ -31,18 +31,9 @@ const mocks = vi.hoisted(() => ({
   updateById: vi.fn(),
   deleteById: vi.fn(),
   findIdsByWarehouseId: vi.fn(),
-  createTrackingLog: vi.fn(),
   createAuditLog: vi.fn(),
   findAuditLogsByTripId: vi.fn(),
   countAuditLogsByTripId: vi.fn(),
-  getLatestTrackingLogByTripId: vi.fn(),
-  createExpense: vi.fn(),
-  findExpenseById: vi.fn(),
-  updateExpenseById: vi.fn(),
-  deleteExpenseById: vi.fn(),
-  findExpensesByTripId: vi.fn(),
-  countExpensesByTripId: vi.fn(),
-  calculateTotalExpensesByTripId: vi.fn(),
   getTripIdsByWarehouseId: vi.fn(),
   generateCode: vi.fn(),
 }));
@@ -112,19 +103,15 @@ vi.mock("../../../src/modules/trip/trip.repository.js", () => ({
     updateById: mocks.updateById,
     deleteById: mocks.deleteById,
     findIdsByWarehouseId: mocks.findIdsByWarehouseId,
-    createTrackingLog: mocks.createTrackingLog,
-    createAuditLog: mocks.createAuditLog,
-    findAuditLogsByTripId: mocks.findAuditLogsByTripId,
-    countAuditLogsByTripId: mocks.countAuditLogsByTripId,
-    getLatestTrackingLogByTripId: mocks.getLatestTrackingLogByTripId,
-    createExpense: mocks.createExpense,
-    findExpenseById: mocks.findExpenseById,
-    updateExpenseById: mocks.updateExpenseById,
-    deleteExpenseById: mocks.deleteExpenseById,
-    findExpensesByTripId: mocks.findExpensesByTripId,
-    countExpensesByTripId: mocks.countExpensesByTripId,
-    calculateTotalExpensesByTripId: mocks.calculateTotalExpensesByTripId,
     getIdsByWarehouseId: mocks.getTripIdsByWarehouseId,
+  },
+}));
+
+vi.mock("../../../src/modules/trip/tripAuditLog.repository.js", () => ({
+  default: {
+    create: mocks.createAuditLog,
+    findByTripId: mocks.findAuditLogsByTripId,
+    countByTripId: mocks.countAuditLogsByTripId,
   },
 }));
 
@@ -168,7 +155,6 @@ const plannedTrip = {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.startSession.mockResolvedValue(transaction);
-  mocks.getLatestTrackingLogByTripId.mockResolvedValue(null);
   mocks.getDriverById.mockResolvedValue({
     _id: driverId,
     status: "active",
@@ -199,13 +185,11 @@ beforeEach(() => {
   mocks.handleOrdersOnTripCancellation.mockResolvedValue();
   mocks.findById.mockResolvedValue(plannedTrip);
   mocks.updateById.mockResolvedValue(plannedTrip);
-  mocks.createTrackingLog.mockResolvedValue({ _id: "log-1" });
   mocks.createAuditLog.mockResolvedValue({ _id: "audit-1" });
   mocks.findAuditLogsByTripId.mockResolvedValue([]);
   mocks.countAuditLogsByTripId.mockResolvedValue(0);
   mocks.getUsageLogsByTripId.mockResolvedValue([]);
   mocks.createUsageLog.mockResolvedValue({ _id: "usage-1" });
-  mocks.createExpense.mockResolvedValue({ _id: "expense-1" });
 });
 
 describe("tripService.create", () => {
@@ -428,261 +412,5 @@ describe("tripService.updateById and deleteById", () => {
       message: TRIP_MESSAGES.CANNOT_DELETE_IN_PROGRESS,
     });
     expect(mocks.countAllOrders).not.toHaveBeenCalled();
-  });
-});
-
-describe("tripService tracking logs and expenses", () => {
-  it("rejects tracking updates with status 'planned'", async () => {
-    await expect(
-      tripService.addTrackingLog("trip-1", { status: "planned" }),
-    ).rejects.toMatchObject({
-      statusCode: 400,
-      message: TRIP_MESSAGES.CANNOT_LOG_PLANNED_STATUS,
-    });
-    expect(mocks.createTrackingLog).not.toHaveBeenCalled();
-  });
-
-  it("rejects tracking updates for a completed trip", async () => {
-    mocks.findById.mockResolvedValue({ ...plannedTrip, status: "completed" });
-
-    await expect(
-      tripService.addTrackingLog("trip-1", { status: "incident" }),
-    ).rejects.toMatchObject({
-      statusCode: 400,
-      message: TRIP_MESSAGES.CANNOT_LOG_STATUS("completed"),
-    });
-    expect(mocks.createTrackingLog).not.toHaveBeenCalled();
-  });
-
-  it("rejects invalid tracking transition from planned to in_progress directly", async () => {
-    await expect(
-      tripService.addTrackingLog("trip-1", { status: "in_progress" }),
-    ).rejects.toMatchObject({
-      statusCode: 400,
-      message: TRIP_MESSAGES.INVALID_TRACKING_STATUS_TRANSITION(
-        "planned",
-        "in_progress",
-      ),
-    });
-    expect(mocks.createTrackingLog).not.toHaveBeenCalled();
-  });
-
-  it("rejects invalid backward tracking transition from in_progress to departed", async () => {
-    mocks.findById.mockResolvedValue({ ...plannedTrip, status: "in_progress" });
-    mocks.getLatestTrackingLogByTripId.mockResolvedValue({
-      status: "in_progress",
-    });
-
-    await expect(
-      tripService.addTrackingLog("trip-1", { status: "departed" }),
-    ).rejects.toMatchObject({
-      statusCode: 400,
-      message: TRIP_MESSAGES.INVALID_TRACKING_STATUS_TRANSITION(
-        "in_progress",
-        "departed",
-      ),
-    });
-    expect(mocks.createTrackingLog).not.toHaveBeenCalled();
-  });
-
-  it("successfully logs departure and transitions planned trip to in_progress", async () => {
-    mocks.findById.mockResolvedValue(plannedTrip);
-    mocks.getLatestTrackingLogByTripId.mockResolvedValue(null);
-    mocks.createTrackingLog.mockResolvedValue({
-      _id: "log-1",
-      status: "departed",
-    });
-
-    const result = await tripService.addTrackingLog("trip-1", {
-      status: "departed",
-      latitude: 10.762,
-      longitude: 106.66,
-      odometerReading: 120,
-    });
-
-    expect(result).toEqual({ _id: "log-1", status: "departed" });
-    expect(mocks.createUsageLog).toHaveBeenCalled();
-    expect(mocks.updateById).toHaveBeenCalledWith(
-      "trip-1",
-      expect.objectContaining({ status: "in_progress" }),
-      transaction,
-    );
-  });
-
-  it("successfully logs intermediate tracking updates during in_progress trip", async () => {
-    mocks.findById.mockResolvedValue({ ...plannedTrip, status: "in_progress" });
-    mocks.getLatestTrackingLogByTripId.mockResolvedValue({
-      status: "departed",
-    });
-    mocks.createTrackingLog.mockResolvedValue({
-      _id: "log-2",
-      status: "in_progress",
-    });
-
-    const result = await tripService.addTrackingLog("trip-1", {
-      status: "in_progress",
-      latitude: 10.8,
-      longitude: 106.7,
-      speed: 45,
-    });
-
-    expect(result).toEqual({ _id: "log-2", status: "in_progress" });
-    expect(mocks.updateById).not.toHaveBeenCalled();
-  });
-
-  it("rejects completion if trip has unfinished orders", async () => {
-    mocks.findById.mockResolvedValue({ ...plannedTrip, status: "in_progress" });
-    mocks.getLatestTrackingLogByTripId.mockResolvedValue({
-      status: "in_progress",
-    });
-    mocks.countUnfinishedOrdersByTrip.mockResolvedValue(2);
-
-    await expect(
-      tripService.addTrackingLog("trip-1", { status: "completed" }),
-    ).rejects.toMatchObject({
-      statusCode: 400,
-      message: TRIP_MESSAGES.CANNOT_COMPLETE_ACTIVE_ORDERS(2),
-    });
-
-    expect(transaction.abortTransaction).toHaveBeenCalled();
-  });
-
-  it("completes trip successfully and reconciles orders when all orders are finished", async () => {
-    mocks.findById.mockResolvedValue({ ...plannedTrip, status: "in_progress" });
-    mocks.getLatestTrackingLogByTripId.mockResolvedValue({
-      status: "in_progress",
-    });
-    mocks.countUnfinishedOrdersByTrip.mockResolvedValue(0);
-    mocks.getUsageLogsByTripId.mockResolvedValue([
-      { _id: "usage-1", startOdo: 100, endOdo: null, notes: "departed" },
-    ]);
-    mocks.createTrackingLog.mockResolvedValue({
-      _id: "log-complete",
-      status: "completed",
-    });
-
-    const result = await tripService.addTrackingLog("trip-1", {
-      status: "completed",
-      odometerReading: 150,
-    });
-
-    expect(result).toEqual({ _id: "log-complete", status: "completed" });
-    expect(mocks.handleOrdersOnTripCompletion).toHaveBeenCalled();
-    expect(mocks.changeVehicleStatus).toHaveBeenCalledWith(
-      vehicleId,
-      "available",
-      transaction,
-    );
-    expect(mocks.updateById).toHaveBeenCalledWith(
-      "trip-1",
-      expect.objectContaining({ status: "completed" }),
-      transaction,
-    );
-  });
-
-  it("cancels trip successfully and reconciles orders", async () => {
-    mocks.findById.mockResolvedValue({ ...plannedTrip, status: "in_progress" });
-    mocks.getLatestTrackingLogByTripId.mockResolvedValue({
-      status: "in_progress",
-    });
-    mocks.getUsageLogsByTripId.mockResolvedValue([
-      { _id: "usage-1", startOdo: 100, endOdo: null, notes: "departed" },
-    ]);
-    mocks.createTrackingLog.mockResolvedValue({
-      _id: "log-cancel",
-      status: "cancelled",
-    });
-
-    const result = await tripService.addTrackingLog("trip-1", {
-      status: "cancelled",
-    });
-
-    expect(result).toEqual({ _id: "log-cancel", status: "cancelled" });
-    expect(mocks.handleOrdersOnTripCancellation).toHaveBeenCalled();
-    expect(mocks.changeVehicleStatus).toHaveBeenCalledWith(
-      vehicleId,
-      "available",
-      transaction,
-    );
-    expect(mocks.updateById).toHaveBeenCalledWith(
-      "trip-1",
-      expect.objectContaining({ status: "cancelled" }),
-      transaction,
-    );
-  });
-
-  it("returns paginated trip audit history", async () => {
-    mocks.findAuditLogsByTripId.mockResolvedValue([{ action: "updated" }]);
-    mocks.countAuditLogsByTripId.mockResolvedValue(21);
-
-    await expect(
-      tripService.getAuditLogsByTripId("trip-1", {
-        page: 2,
-        limit: 10,
-      }),
-    ).resolves.toEqual({
-      data: [{ action: "updated" }],
-      pagination: { page: 2, limit: 10, total: 21, totalPages: 3 },
-    });
-    expect(mocks.findAuditLogsByTripId).toHaveBeenCalledWith("trip-1", {
-      skip: 10,
-      limit: 10,
-    });
-  });
-
-  it("creates a valid expense with a normalized date", async () => {
-    await tripService.addExpense("trip-1", {
-      expenseType: "fuel",
-      expenseAmount: 50000,
-      expenseDate: "2030-04-01T09:00:00.000Z",
-      note: "Fuel",
-    });
-
-    expect(mocks.createExpense).toHaveBeenCalledWith({
-      tripId: "trip-1",
-      expenseType: "fuel",
-      expenseAmount: 50000,
-      expenseDate: new Date("2030-04-01T09:00:00.000Z"),
-      note: "Fuel",
-      receiptUrl: undefined,
-      createdBy: undefined,
-    });
-  });
-
-  it("does not allow a driver to update an expense, including their own", async () => {
-    mocks.findExpenseById.mockResolvedValue({
-      tripId: "trip-1",
-      createdBy: { _id: "user-1" },
-    });
-
-    await expect(
-      tripService.updateExpenseById(
-        "expense-1",
-        { note: "Updated" },
-        { role: ROLES.DRIVER, _id: "user-1" },
-      ),
-    ).rejects.toMatchObject({
-      statusCode: 403,
-      message: COMMON_MESSAGES.FORBIDDEN,
-    });
-    expect(mocks.findExpenseById).not.toHaveBeenCalled();
-    expect(mocks.updateExpenseById).not.toHaveBeenCalled();
-  });
-
-  it("allows an administrator to update an expense", async () => {
-    const expense = { tripId: "trip-1", createdBy: { _id: "user-1" } };
-    mocks.findExpenseById.mockResolvedValue(expense);
-    mocks.updateExpenseById.mockResolvedValue({ ...expense, note: "Updated" });
-
-    await expect(
-      tripService.updateExpenseById(
-        "expense-1",
-        { note: "Updated" },
-        { role: ROLES.ADMIN },
-      ),
-    ).resolves.toEqual({ ...expense, note: "Updated" });
-    expect(mocks.updateExpenseById).toHaveBeenCalledWith("expense-1", {
-      note: "Updated",
-    });
   });
 });
