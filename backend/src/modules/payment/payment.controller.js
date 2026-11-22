@@ -52,7 +52,7 @@ const verify = async (req, res, next) => {
       warehouseId: req.user.warehouseId,
     };
 
-    const payment = await paymentService.verifyPayment(
+    const payment = await paymentService.verify(
       paymentId,
       req.body,
       verifierUser,
@@ -71,11 +71,7 @@ const refund = async (req, res, next) => {
       role: req.user.role,
     };
 
-    const payment = await paymentService.refundPayment(
-      paymentId,
-      req.body,
-      actor,
-    );
+    const payment = await paymentService.refund(paymentId, req.body, actor);
     return ApiResponse.success(res, payment, PAYMENT_MESSAGES.REFUND_SUCCESS);
   } catch (error) {
     next(error);

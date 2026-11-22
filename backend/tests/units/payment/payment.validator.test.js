@@ -84,7 +84,7 @@ describe("paymentValidator.createPaymentSchema", () => {
 });
 
 describe("paymentValidator.driverRemitSchema", () => {
-  it("accepts remittance against order IDs or detailed orders", () => {
+  it("accepts remittance against order IDs", () => {
     expect(
       paymentValidator.driverRemitSchema.validate({
         orderIds: [orderId],
@@ -95,7 +95,7 @@ describe("paymentValidator.driverRemitSchema", () => {
 
     expect(
       paymentValidator.driverRemitSchema.validate({
-        orders: [{ orderId, collectedAmount: 500 }],
+        orderIds: [orderId],
         paymentAmount: 500,
         paymentMethod: PAYMENT_METHODS.BANK,
       }).error,
@@ -112,7 +112,13 @@ describe("paymentValidator.driverRemitSchema", () => {
     ).toBeDefined();
     expect(
       paymentValidator.driverRemitSchema.validate({
-        orders: [{ orderId: "invalid-id" }],
+        orderIds: ["invalid-id"],
+        paymentAmount: 500,
+        paymentMethod: PAYMENT_METHODS.CASH,
+      }).error,
+    ).toBeDefined();
+    expect(
+      paymentValidator.driverRemitSchema.validate({
         paymentAmount: 500,
         paymentMethod: PAYMENT_METHODS.CASH,
       }).error,

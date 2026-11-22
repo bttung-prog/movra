@@ -37,6 +37,9 @@ const mocks = vi.hoisted(() => ({
   updatePaymentProgress: vi.fn(),
   getInvoiceIdsByWarehouseId: vi.fn(),
   getOrderById: vi.fn(),
+  findOrdersForRemittance: vi.fn(),
+  countAccessibleOrdersByWarehouse: vi.fn(),
+  bulkUpdateOrders: vi.fn(),
   getOrderIdsByWarehouseId: vi.fn(),
   updateOrderById: vi.fn(),
   applyInvoicePayment: vi.fn(),
@@ -88,6 +91,10 @@ vi.mock("../../../src/modules/invoice/invoice.service.js", () => ({
 vi.mock("../../../src/modules/order/order.service.js", () => ({
   default: {
     getById: mocks.getOrderById,
+    getOrdersForRemittance: mocks.findOrdersForRemittance,
+    findOrdersForRemittance: mocks.findOrdersForRemittance,
+    countAccessibleOrdersByWarehouse: mocks.countAccessibleOrdersByWarehouse,
+    bulkUpdateOrders: mocks.bulkUpdateOrders,
     getIdsByWarehouseId: mocks.getOrderIdsByWarehouseId,
     updateById: mocks.updateOrderById,
     applyInvoicePayment: mocks.applyInvoicePayment,
@@ -127,7 +134,9 @@ import {
 import { PAYMENT_STATUSES } from "../../../src/constants/paymentStatuses.js";
 import {
   INVOICE_MESSAGES,
+  ORDER_MESSAGES,
   PAYMENT_MESSAGES,
+  WAREHOUSE_MESSAGES,
 } from "../../../src/constants/messages.js";
 import { ROLES } from "../../../src/constants/roles.js";
 import paymentService from "../../../src/modules/payment/payment.service.js";
@@ -576,7 +585,7 @@ describe("paymentService.create", () => {
   });
 });
 
-describe("paymentService.verifyPayment", () => {
+describe("paymentService.verify", () => {
   it("does not complete legacy order payments without an invoice", async () => {
     mocks.findById.mockResolvedValue({
       _id: paymentId,
@@ -592,7 +601,7 @@ describe("paymentService.verifyPayment", () => {
     });
 
     await expect(
-      paymentService.verifyPayment(
+      paymentService.verify(
         paymentId,
         { status: PAYMENT_STATUSES.COMPLETED },
         { userId: "admin-1", role: ROLES.ADMIN },
@@ -629,7 +638,7 @@ describe("paymentService.verifyPayment", () => {
     });
 
     await expect(
-      paymentService.verifyPayment(
+      paymentService.verify(
         paymentId,
         { status: PAYMENT_STATUSES.COMPLETED },
         { userId: "admin-1", role: ROLES.ADMIN },
@@ -656,7 +665,7 @@ describe("paymentService.verifyPayment", () => {
       notes: "Customer transfer | Từ chối: Invalid reference",
     });
 
-    const result = await paymentService.verifyPayment(
+    const result = await paymentService.verify(
       paymentId,
       { status: PAYMENT_STATUSES.FAILED, notes: "Invalid reference" },
       { userId: "admin-1", role: ROLES.ADMIN },
@@ -689,7 +698,7 @@ describe("paymentService.verifyPayment", () => {
       paymentStatus: PAYMENT_STATUSES.FAILED,
     });
 
-    await paymentService.verifyPayment(
+    await paymentService.verify(
       paymentId,
       { status: PAYMENT_STATUSES.FAILED, notes: "Invalid reference" },
       { userId: "admin-1", role: ROLES.ADMIN },
@@ -740,7 +749,7 @@ describe("paymentService.verifyPayment", () => {
     });
     mocks.updatePaymentProgress.mockResolvedValue({ _id: "invoice-1" });
 
-    await paymentService.verifyPayment(
+    await paymentService.verify(
       paymentId,
       { status: PAYMENT_STATUSES.COMPLETED },
       { userId: "admin-1", role: ROLES.ADMIN },
@@ -775,7 +784,7 @@ describe("paymentService.verifyPayment", () => {
     });
 
     await expect(
-      paymentService.verifyPayment(
+      paymentService.verify(
         paymentId,
         { status: PAYMENT_STATUSES.FAILED },
         { userId: "admin-1", role: ROLES.ADMIN },
@@ -785,6 +794,183 @@ describe("paymentService.verifyPayment", () => {
       message: PAYMENT_MESSAGES.ALREADY_VERIFIED,
     });
     expect(mocks.updateById).not.toHaveBeenCalled();
+  });
+
+  it("updates COD orders via bulkUpdateOrders when verifying driver remittance payment", async () => {
+    mocks.findById.mockResolvedValue({
+      _id: paymentId,
+      payerType: PAYER_TYPES.DRIVER,
+      paymentStatus: PAYMENT_STATUSES.PENDING,
+      codOrders: [
+        {
+          orderId,
+          collectedAmount: 0,
+          remittedAmount: 5000,
+        },
+      ],
+    });
+    mocks.updateById.mockResolvedValue({
+      _id: paymentId,
+      paymentStatus: PAYMENT_STATUSES.COMPLETED,
+    });
+    mocks.findOrdersForRemittance.mockResolvedValue([
+      {
+        _id: orderId,
+        status: "delivered",
+        codAmount: 5000,
+        codCollectedAmount: 5000,
+        codRemittedAmount: 0,
+      },
+    ]);
+    mocks.bulkUpdateOrders.mockResolvedValue({
+      matchedCount: 1,
+      modifiedCount: 1,
+    });
+
+    const result = await paymentService.verify(
+      paymentId,
+      { status: PAYMENT_STATUSES.COMPLETED },
+      { userId: "admin-1", role: ROLES.ADMIN },
+    );
+
+    expect(result.paymentStatus).toBe(PAYMENT_STATUSES.COMPLETED);
+    expect(mocks.findOrdersForRemittance).toHaveBeenCalledWith(
+      [orderId],
+      transaction,
+    );
+    expect(mocks.bulkUpdateOrders).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          updateOne: expect.objectContaining({
+            filter: expect.objectContaining({ _id: orderId }),
+          }),
+        }),
+      ]),
+      transaction,
+    );
+    expect(transaction.commitTransaction).toHaveBeenCalled();
+  });
+
+  it("rejects remittance verification when a COD order is not delivered", async () => {
+    mocks.findById.mockResolvedValue({
+      _id: paymentId,
+      payerType: PAYER_TYPES.DRIVER,
+      paymentStatus: PAYMENT_STATUSES.PENDING,
+      codOrders: [
+        {
+          orderId,
+          collectedAmount: 0,
+          remittedAmount: 5000,
+        },
+      ],
+    });
+    mocks.updateById.mockResolvedValue({
+      _id: paymentId,
+      paymentStatus: PAYMENT_STATUSES.COMPLETED,
+    });
+    mocks.findOrdersForRemittance.mockResolvedValue([
+      {
+        _id: orderId,
+        status: "shipping",
+        codAmount: 5000,
+        codCollectedAmount: 0,
+        codRemittedAmount: 0,
+      },
+    ]);
+
+    await expect(
+      paymentService.verify(
+        paymentId,
+        { status: PAYMENT_STATUSES.COMPLETED },
+        { userId: "admin-1", role: ROLES.ADMIN },
+      ),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      message: PAYMENT_MESSAGES.ORDER_NOT_DELIVERED,
+    });
+
+    expect(mocks.bulkUpdateOrders).not.toHaveBeenCalled();
+    expect(transaction.abortTransaction).toHaveBeenCalled();
+  });
+
+  it("rejects remittance verification when bulkUpdateOrders has conflict", async () => {
+    mocks.findById.mockResolvedValue({
+      _id: paymentId,
+      payerType: PAYER_TYPES.DRIVER,
+      paymentStatus: PAYMENT_STATUSES.PENDING,
+      codOrders: [
+        {
+          orderId,
+          collectedAmount: 0,
+          remittedAmount: 5000,
+        },
+      ],
+    });
+    mocks.updateById.mockResolvedValue({
+      _id: paymentId,
+      paymentStatus: PAYMENT_STATUSES.COMPLETED,
+    });
+    mocks.findOrdersForRemittance.mockResolvedValue([
+      {
+        _id: orderId,
+        status: "delivered",
+        codAmount: 5000,
+        codCollectedAmount: 5000,
+        codRemittedAmount: 0,
+      },
+    ]);
+    mocks.bulkUpdateOrders.mockResolvedValue({
+      matchedCount: 0,
+      modifiedCount: 0,
+    });
+
+    await expect(
+      paymentService.verify(
+        paymentId,
+        { status: PAYMENT_STATUSES.COMPLETED },
+        { userId: "admin-1", role: ROLES.ADMIN },
+      ),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      message: PAYMENT_MESSAGES.COD_AMOUNT_CHANGED,
+    });
+
+    expect(transaction.abortTransaction).toHaveBeenCalled();
+  });
+
+  it("rejects remittance verification when a COD order no longer exists", async () => {
+    mocks.findById.mockResolvedValue({
+      _id: paymentId,
+      payerType: PAYER_TYPES.DRIVER,
+      paymentStatus: PAYMENT_STATUSES.PENDING,
+      codOrders: [
+        {
+          orderId,
+          collectedAmount: 0,
+          remittedAmount: 5000,
+        },
+      ],
+    });
+    mocks.updateById.mockResolvedValue({
+      _id: paymentId,
+      paymentStatus: PAYMENT_STATUSES.COMPLETED,
+    });
+    mocks.findOrdersForRemittance.mockResolvedValue([]);
+
+    await expect(
+      paymentService.verify(
+        paymentId,
+        { status: PAYMENT_STATUSES.COMPLETED },
+        { userId: "admin-1", role: ROLES.ADMIN },
+      ),
+    ).rejects.toMatchObject({
+      statusCode: 404,
+      message: ORDER_MESSAGES.NOT_FOUND,
+    });
+
+    expect(mocks.bulkUpdateOrders).not.toHaveBeenCalled();
+    expect(transaction.commitTransaction).not.toHaveBeenCalled();
+    expect(transaction.abortTransaction).toHaveBeenCalled();
   });
 });
 
@@ -832,8 +1018,47 @@ describe("paymentService.createDriverRemittance", () => {
     },
   };
 
+  it("rejects remittance when duplicate orderIds are provided", async () => {
+    await expect(
+      paymentService.createDriverRemittance(
+        {
+          orderIds: [orderId, orderId],
+          paymentAmount: 5000,
+          paymentMethod: PAYMENT_METHODS.CASH,
+        },
+        driverUser,
+      ),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: PAYMENT_MESSAGES.DUPLICATE_COD_ORDER,
+    });
+
+    expect(mocks.findOrdersForRemittance).not.toHaveBeenCalled();
+  });
+
+  it("rejects remittance when an order is not found", async () => {
+    mocks.findOrdersForRemittance.mockResolvedValue([]);
+
+    await expect(
+      paymentService.createDriverRemittance(
+        {
+          orderIds: [orderId],
+          paymentAmount: 5000,
+          paymentMethod: PAYMENT_METHODS.CASH,
+        },
+        driverUser,
+      ),
+    ).rejects.toMatchObject({
+      statusCode: 404,
+      message: ORDER_MESSAGES.NOT_FOUND,
+    });
+
+    expect(mocks.findOrdersForRemittance).toHaveBeenCalledWith([orderId]);
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+
   it("rejects remittance when an order already has a pending remittance payment", async () => {
-    mocks.getOrderById.mockResolvedValue(deliveredCodOrder);
+    mocks.findOrdersForRemittance.mockResolvedValue([deliveredCodOrder]);
     mocks.findPendingRemittanceByOrderIds.mockResolvedValue({
       _id: "existing-payment-id",
       paymentCode: "PAY-PENDING-01",
@@ -861,7 +1086,7 @@ describe("paymentService.createDriverRemittance", () => {
   });
 
   it("rejects remittance when paymentAmount does not match total expected COD", async () => {
-    mocks.getOrderById.mockResolvedValue(deliveredCodOrder);
+    mocks.findOrdersForRemittance.mockResolvedValue([deliveredCodOrder]);
     mocks.findPendingRemittanceByOrderIds.mockResolvedValue(null);
 
     await expect(
@@ -882,10 +1107,12 @@ describe("paymentService.createDriverRemittance", () => {
   });
 
   it("rejects remittance when an order is already fully remitted", async () => {
-    mocks.getOrderById.mockResolvedValue({
-      ...deliveredCodOrder,
-      codRemittedAmount: 5000,
-    });
+    mocks.findOrdersForRemittance.mockResolvedValue([
+      {
+        ...deliveredCodOrder,
+        codRemittedAmount: 5000,
+      },
+    ]);
 
     await expect(
       paymentService.createDriverRemittance(
@@ -905,7 +1132,7 @@ describe("paymentService.createDriverRemittance", () => {
   });
 
   it("creates a pending remittance when no pending remittance exists", async () => {
-    mocks.getOrderById.mockResolvedValue(deliveredCodOrder);
+    mocks.findOrdersForRemittance.mockResolvedValue([deliveredCodOrder]);
     mocks.findPendingRemittanceByOrderIds.mockResolvedValue(null);
 
     const result = await paymentService.createDriverRemittance(
@@ -917,6 +1144,7 @@ describe("paymentService.createDriverRemittance", () => {
       driverUser,
     );
 
+    expect(mocks.findOrdersForRemittance).toHaveBeenCalledWith([orderId]);
     expect(mocks.findPendingRemittanceByOrderIds).toHaveBeenCalledWith([
       orderId,
     ]);
@@ -934,7 +1162,7 @@ describe("paymentService.createDriverRemittance", () => {
   });
 });
 
-describe("paymentService.refundPayment", () => {
+describe("paymentService.refund", () => {
   const basePayment = {
     _id: paymentId,
     paymentStatus: PAYMENT_STATUSES.COMPLETED,
@@ -964,7 +1192,7 @@ describe("paymentService.refundPayment", () => {
     });
     mocks.updateCustomerById.mockResolvedValue({ _id: customerId });
 
-    await paymentService.refundPayment(
+    await paymentService.refund(
       paymentId,
       { reason: "Damaged goods", refundAmount: 4000 },
       { role: ROLES.ACCOUNTANT, userId: "user-9" },
@@ -994,7 +1222,7 @@ describe("paymentService.refundPayment", () => {
       walletBalance: 0,
     });
 
-    await paymentService.refundPayment(
+    await paymentService.refund(
       paymentId,
       { reason: "Customer request", refundAmount: 4000 },
       { role: ROLES.ACCOUNTANT, userId: "user-9" },
@@ -1057,5 +1285,58 @@ describe("paymentService multi-order invoices", () => {
         session: transaction,
       }),
     );
+  });
+});
+
+describe("paymentService.getById dispatcher access control", () => {
+  const dispatcherActor = {
+    role: ROLES.DISPATCHER,
+    userId: "dispatcher-1",
+    warehouseId: "warehouse-1",
+  };
+
+  it("allows dispatcher to access payment when all COD orders belong to their warehouse", async () => {
+    mocks.findById.mockResolvedValue({
+      _id: "payment-cod-1",
+      payerType: PAYER_TYPES.DRIVER,
+      codOrders: [
+        { orderId: "order-1", collectedAmount: 100 },
+        { orderId: "order-2", collectedAmount: 200 },
+      ],
+    });
+    mocks.countAccessibleOrdersByWarehouse.mockResolvedValue(2);
+
+    const payment = await paymentService.getById(
+      "payment-cod-1",
+      dispatcherActor,
+    );
+
+    expect(payment._id).toBe("payment-cod-1");
+    expect(mocks.countAccessibleOrdersByWarehouse).toHaveBeenCalledWith(
+      ["order-1", "order-2"],
+      "warehouse-1",
+    );
+    expect(mocks.getOrderById).not.toHaveBeenCalled();
+  });
+
+  it("rejects dispatcher when some COD orders do not belong to their warehouse", async () => {
+    mocks.findById.mockResolvedValue({
+      _id: "payment-cod-1",
+      payerType: PAYER_TYPES.DRIVER,
+      codOrders: [
+        { orderId: "order-1", collectedAmount: 100 },
+        { orderId: "order-2", collectedAmount: 200 },
+      ],
+    });
+    mocks.countAccessibleOrdersByWarehouse.mockResolvedValue(1);
+
+    await expect(
+      paymentService.getById("payment-cod-1", dispatcherActor),
+    ).rejects.toMatchObject({
+      statusCode: 403,
+      message: WAREHOUSE_MESSAGES.ACCESS_DENIED,
+    });
+
+    expect(mocks.getOrderById).not.toHaveBeenCalled();
   });
 });

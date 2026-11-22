@@ -51,6 +51,13 @@ const getIdsByWarehouseId = async (warehouseId) => {
   return orderRepository.findIdsByWarehouseId(warehouseId);
 };
 
+const countAccessibleOrdersByWarehouse = async (orderIds, warehouseId) => {
+  return orderRepository.countAccessibleOrdersByWarehouse(
+    orderIds,
+    warehouseId,
+  );
+};
+
 // ==========================================
 // ORDER SERVICES
 // ==========================================
@@ -959,6 +966,22 @@ const getByIds = async (orderIds = [], session = null) => {
   return orderRepository.findByIds(orderIds, session);
 };
 
+const getOrdersForRemittance = async (orderIds = [], session = null) => {
+  if (!Array.isArray(orderIds) || orderIds.length === 0) {
+    return [];
+  }
+
+  return orderRepository.findOrdersForRemittance(orderIds, session);
+};
+
+const bulkUpdateOrders = async (operations = [], session = null) => {
+  if (!Array.isArray(operations) || operations.length === 0) {
+    return { matchedCount: 0, modifiedCount: 0 };
+  }
+
+  return orderRepository.bulkWrite(operations, session);
+};
+
 const getBillableOrdersForInvoice = async ({
   customerId,
   fromDate,
@@ -1031,6 +1054,8 @@ export default {
   getMyOrders,
   getById,
   getByIds,
+  getOrdersForRemittance,
+  bulkUpdateOrders,
   getByCode,
   updateById,
   deleteById,
@@ -1041,6 +1066,7 @@ export default {
   getStatsByStatus,
   getRecentTrends,
   getIdsByWarehouseId,
+  countAccessibleOrdersByWarehouse,
   markOrderAsFeedbacked,
   claimForCodSettlement,
   releaseCodSettlement,
