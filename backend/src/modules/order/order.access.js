@@ -23,7 +23,7 @@ const validateOrder = (order, requireNotDeleted = true) => {
 };
 
 const checkOrderOwnership = (order, user) => {
-  if (user?.role === "customer" || user?.role === ROLES.CUSTOMER) {
+  if (user?.role === ROLES.CUSTOMER) {
     const orderCustomerId = (
       order.customerId?._id || order.customerId
     )?.toString();
@@ -64,30 +64,32 @@ const assertOrderWarehouseAccess = async (order, user) => {
     return;
   }
 
-  if (user?.role !== ROLES.DISPATCHER) return;
+  if (user?.role === ROLES.DISPATCHER) {
+    const userWarehouseId = user.warehouseId?.toString();
+    const orderWarehouseId = (
+      order.warehouseId?._id || order.warehouseId
+    )?.toString();
+    const orderDestWarehouseId = (
+      order.destinationWarehouseId?._id || order.destinationWarehouseId
+    )?.toString();
 
-  const userWarehouseId = user.warehouseId?.toString();
-  const orderWarehouseId = (
-    order.warehouseId?._id || order.warehouseId
-  )?.toString();
-  const orderDestWarehouseId = (
-    order.destinationWarehouseId?._id || order.destinationWarehouseId
-  )?.toString();
+    const isOriginMatch = Boolean(
+      orderWarehouseId && orderWarehouseId === userWarehouseId,
+    );
+    const isDestMatch = Boolean(
+      orderDestWarehouseId && orderDestWarehouseId === userWarehouseId,
+    );
 
-  const isOriginMatch = Boolean(
-    orderWarehouseId && orderWarehouseId === userWarehouseId,
-  );
-  const isDestMatch = Boolean(
-    orderDestWarehouseId && orderDestWarehouseId === userWarehouseId,
-  );
+    if (!isOriginMatch && !isDestMatch) {
+      throw new ApiError(403, WAREHOUSE_MESSAGES.ACCESS_DENIED);
+    }
 
-  if (!isOriginMatch && !isDestMatch) {
-    throw new ApiError(403, WAREHOUSE_MESSAGES.ACCESS_DENIED);
-  }
+    const tripId = order.tripId?._id || order.tripId;
+    if (tripId && isOriginMatch) {
+      await tripService.getById(tripId, false, user);
+    }
 
-  const tripId = order.tripId?._id || order.tripId;
-  if (tripId && isOriginMatch) {
-    await tripService.getById(tripId, false, user);
+    return;
   }
 };
 

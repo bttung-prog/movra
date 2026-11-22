@@ -13,6 +13,7 @@ import {
   PAYMENT_MESSAGES,
   INVOICE_MESSAGES,
   ORDER_MESSAGES,
+  WAREHOUSE_MESSAGES,
 } from "../../constants/messages.js";
 import {
   WALLET_TRANSACTION_TYPES,
@@ -54,9 +55,19 @@ const assertPaymentWarehouseAccess = async (payment, actor) => {
     hasScopedResource = true;
   }
 
-  for (const codOrder of payment.codOrders || []) {
-    const codOrderId = codOrder.orderId?._id || codOrder.orderId;
-    await orderService.getById(codOrderId, true, actor);
+  const codOrderIds = (payment.codOrders || [])
+    .map((item) => (item.orderId?._id || item.orderId)?.toString())
+    .filter(Boolean);
+
+  if (codOrderIds.length > 0) {
+    const uniqueCodOrderIds = Array.from(new Set(codOrderIds));
+    const accessibleCount = await orderService.countAccessibleOrdersByWarehouse(
+      uniqueCodOrderIds,
+      actor.warehouseId,
+    );
+    if (accessibleCount !== uniqueCodOrderIds.length) {
+      throw new ApiError(403, WAREHOUSE_MESSAGES.ACCESS_DENIED);
+    }
     hasScopedResource = true;
   }
 
@@ -588,7 +599,6 @@ const createDriverRemittance = async (payload, driverUser, actor = null) => {
   const {
     tripId,
     orderIds = [],
-    orders = [],
     paymentAmount,
     paymentMethod,
     transactionReference,
@@ -602,20 +612,42 @@ const createDriverRemittance = async (payload, driverUser, actor = null) => {
     await tripService.getById(tripId, true, actor);
   }
 
-  const requestedOrders =
-    orders.length > 0 ? orders : orderIds.map((orderId) => ({ orderId }));
+  const uniqueOrderIds = Array.from(
+    new Set(orderIds.map((id) => id?.toString())),
+  );
+  if (uniqueOrderIds.length !== orderIds.length) {
+    throw new ApiError(400, PAYMENT_MESSAGES.DUPLICATE_COD_ORDER);
+  }
+
+  const orderDocs = await orderService.getOrdersForRemittance(uniqueOrderIds);
+
+  if (orderDocs.length !== uniqueOrderIds.length) {
+    throw new ApiError(404, ORDER_MESSAGES.NOT_FOUND);
+  }
+
+  if (actor?.role === ROLES.DISPATCHER) {
+    const userWarehouseId = actor.warehouseId?.toString();
+    const isAllAccessible = orderDocs.every((order) => {
+      const orderWarehouseId = (
+        order.warehouseId?._id || order.warehouseId
+      )?.toString();
+      const orderDestWarehouseId = (
+        order.destinationWarehouseId?._id || order.destinationWarehouseId
+      )?.toString();
+      return (
+        (orderWarehouseId && orderWarehouseId === userWarehouseId) ||
+        (orderDestWarehouseId && orderDestWarehouseId === userWarehouseId)
+      );
+    });
+    if (!isAllAccessible) {
+      throw new ApiError(403, WAREHOUSE_MESSAGES.ACCESS_DENIED);
+    }
+  }
+
   const codOrders = [];
-  const seenOrderIds = new Set();
   let expectedRemittanceAmount = 0;
 
-  for (const requestedOrder of requestedOrders) {
-    const orderId = requestedOrder.orderId;
-    if (seenOrderIds.has(orderId.toString())) {
-      throw new ApiError(400, PAYMENT_MESSAGES.DUPLICATE_COD_ORDER);
-    }
-    seenOrderIds.add(orderId.toString());
-
-    const orderDoc = await orderService.getById(orderId, true, actor);
+  for (const orderDoc of orderDocs) {
     if (orderDoc.status !== ORDER_STATUSES.DELIVERED) {
       throw new ApiError(400, PAYMENT_MESSAGES.COD_ORDER_NOT_DELIVERED);
     }
@@ -652,7 +684,7 @@ const createDriverRemittance = async (payload, driverUser, actor = null) => {
     const availableToRemit = expectedCod - remittedSoFar;
     expectedRemittanceAmount += availableToRemit;
     codOrders.push({
-      orderId,
+      orderId: orderDoc._id,
       expectedCod,
       collectedAmount: 0,
       remittedAmount: availableToRemit,
@@ -668,9 +700,7 @@ const createDriverRemittance = async (payload, driverUser, actor = null) => {
   }
 
   const pendingRemittance =
-    await paymentRepository.findPendingRemittanceByOrderIds(
-      Array.from(seenOrderIds),
-    );
+    await paymentRepository.findPendingRemittanceByOrderIds(uniqueOrderIds);
   if (pendingRemittance) {
     throw new ApiError(
       409,
@@ -701,7 +731,7 @@ const createDriverRemittance = async (payload, driverUser, actor = null) => {
   return paymentRepository.create(paymentData);
 };
 
-const verifyPayment = async (paymentId, payload, verifierUser) => {
+const verify = async (paymentId, payload, verifierUser) => {
   const { status, notes = "" } = payload;
 
   const payment = await paymentRepository.findById(paymentId);
@@ -843,73 +873,85 @@ const verifyPayment = async (paymentId, payload, verifierUser) => {
       payment.payerType === PAYER_TYPES.DRIVER ||
       (payment.codOrders && payment.codOrders.length > 0)
     ) {
-      const ordersToUpdate = [];
-      if (payment.codOrders && payment.codOrders.length > 0) {
-        payment.codOrders.forEach((item) => {
-          const oid = item.orderId?._id || item.orderId;
-          if (oid) ordersToUpdate.push(oid);
-        });
-      }
+      const orderIdsToUpdate = (payment.codOrders || [])
+        .map((item) => (item.orderId?._id || item.orderId)?.toString())
+        .filter(Boolean);
+
       if (payment.orderId) {
-        const singleOid = payment.orderId?._id || payment.orderId;
-        if (
-          !ordersToUpdate.some((id) => id.toString() === singleOid.toString())
-        ) {
-          ordersToUpdate.push(singleOid);
+        const singleOid = (payment.orderId?._id || payment.orderId)?.toString();
+        if (singleOid && !orderIdsToUpdate.includes(singleOid)) {
+          orderIdsToUpdate.push(singleOid);
         }
       }
 
-      for (const oid of ordersToUpdate) {
-        const codOrder = payment.codOrders.find(
-          (item) =>
-            (item.orderId?._id || item.orderId).toString() === oid.toString(),
-        );
-        if (!codOrder) continue;
-
-        const order = await orderService.getById(
-          oid,
-          true,
-          verifierUser,
+      if (orderIdsToUpdate.length > 0) {
+        const orders = await orderService.getOrdersForRemittance(
+          orderIdsToUpdate,
           session,
         );
-        if (order.status !== ORDER_STATUSES.DELIVERED) {
-          throw new ApiError(409, PAYMENT_MESSAGES.ORDER_NOT_DELIVERED);
-        }
+        const orderMap = new Map(orders.map((o) => [o._id.toString(), o]));
+        const bulkOps = [];
+        const now = new Date();
 
-        const codAmount = Number(order.codAmount || 0);
-        const collectedBefore = Number(order.codCollectedAmount || 0);
-        const remittedBefore = Number(order.codRemittedAmount || 0);
-        const collectedAfter =
-          collectedBefore + Number(codOrder.collectedAmount);
-        const remittedAfter = remittedBefore + Number(codOrder.remittedAmount);
+        for (const codOrder of payment.codOrders || []) {
+          const oid = (codOrder.orderId?._id || codOrder.orderId)?.toString();
+          const order = orderMap.get(oid);
+          if (!order) {
+            throw new ApiError(404, ORDER_MESSAGES.NOT_FOUND);
+          }
 
-        if (collectedAfter > codAmount || remittedAfter > collectedAfter) {
-          throw new ApiError(409, PAYMENT_MESSAGES.COD_AMOUNT_CHANGED);
-        }
+          if (order.status !== ORDER_STATUSES.DELIVERED) {
+            throw new ApiError(409, PAYMENT_MESSAGES.ORDER_NOT_DELIVERED);
+          }
 
-        const updatedOrder = await orderService.updateById({
-          orderId: oid,
-          updateData: {
+          const codAmount = Number(order.codAmount || 0);
+          const collectedBefore = Number(order.codCollectedAmount || 0);
+          const remittedBefore = Number(order.codRemittedAmount || 0);
+          const collectedAfter =
+            collectedBefore + Number(codOrder.collectedAmount || 0);
+          const remittedAfter =
+            remittedBefore + Number(codOrder.remittedAmount || 0);
+
+          if (collectedAfter > codAmount || remittedAfter > collectedAfter) {
+            throw new ApiError(409, PAYMENT_MESSAGES.COD_AMOUNT_CHANGED);
+          }
+
+          const isCodCollected = collectedAfter >= codAmount;
+          const updateSet = {
             codCollectedAmount: collectedAfter,
             codRemittedAmount: remittedAfter,
-            codCollected: collectedAfter >= codAmount,
-          },
-          session,
-          user: verifierUser,
-          conditions: {
-            codCollectedAmount:
-              order.codCollectedAmount == null
-                ? { $in: [null, 0] }
-                : collectedBefore,
-            codRemittedAmount:
-              order.codRemittedAmount == null
-                ? { $in: [null, 0] }
-                : remittedBefore,
-          },
-        });
+            codCollected: isCodCollected,
+          };
 
-        if (!updatedOrder) {
-          throw new ApiError(409, PAYMENT_MESSAGES.COD_AMOUNT_CHANGED);
+          if (isCodCollected) {
+            updateSet.paymentStatus = PAYMENT_STATUSES.COMPLETED;
+            updateSet.paymentTime = now;
+          }
+
+          bulkOps.push({
+            updateOne: {
+              filter: {
+                _id: order._id,
+                codSettled: { $ne: true },
+                codCollectedAmount:
+                  order.codCollectedAmount == null
+                    ? { $in: [null, 0] }
+                    : collectedBefore,
+                codRemittedAmount:
+                  order.codRemittedAmount == null
+                    ? { $in: [null, 0] }
+                    : remittedBefore,
+              },
+              update: { $set: updateSet },
+            },
+          });
+        }
+
+        if (bulkOps.length > 0) {
+          const result = await orderService.bulkUpdateOrders(bulkOps, session);
+          if (result.matchedCount !== bulkOps.length) {
+            throw new ApiError(409, PAYMENT_MESSAGES.COD_AMOUNT_CHANGED);
+          }
         }
       }
     }
@@ -924,7 +966,7 @@ const verifyPayment = async (paymentId, payload, verifierUser) => {
   }
 };
 
-const refundPayment = async (paymentId, payload, actor) => {
+const refund = async (paymentId, payload, actor) => {
   const { reason, refundAmount } = payload;
 
   const existingPayment = await paymentRepository.findById(paymentId);
@@ -1337,8 +1379,8 @@ export default {
   create,
   createWalletTopUp,
   createDriverRemittance,
-  verifyPayment,
-  refundPayment,
+  verify,
+  refund,
   getAll,
   getById,
   getByCode,

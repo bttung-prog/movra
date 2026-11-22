@@ -77,6 +77,15 @@ const findIdsByWarehouseId = (warehouseId) => {
   });
 };
 
+const countAccessibleOrdersByWarehouse = (orderIds = [], warehouseId) => {
+  if (!orderIds.length || !warehouseId) return 0;
+  return Order.countDocuments({
+    _id: { $in: orderIds },
+    deletedAt: null,
+    $or: [{ warehouseId }, { destinationWarehouseId: warehouseId }],
+  });
+};
+
 const countRouteMismatchesByTripId = (tripId, routeId) => {
   return Order.countDocuments({
     tripId,
@@ -100,6 +109,26 @@ const findByCode = (orderCode) => {
 const findByIds = (orderIds, session = null) => {
   const query = Order.find({ _id: { $in: orderIds } }).populate(ORDER_POPULATE);
   if (session) query.session(session);
+  return query.lean();
+};
+
+const findOrdersForRemittance = (orderIds = [], session = null) => {
+  const query = Order.find({
+    _id: { $in: orderIds },
+    deletedAt: null,
+  })
+    .select(
+      "_id orderCode status codSettled codAmount codCollectedAmount codRemittedAmount tripId warehouseId destinationWarehouseId",
+    )
+    .populate({
+      path: "tripId",
+      select: "_id driverId",
+    });
+
+  if (session) {
+    query.session(session);
+  }
+
   return query.lean();
 };
 
@@ -294,6 +323,10 @@ const deleteById = (orderId, session = null) => {
   );
 };
 
+const bulkWrite = (operations = [], session = null) => {
+  return Order.bulkWrite(operations, { session });
+};
+
 const warehouseScopeStages = (warehouseId) =>
   warehouseId
     ? [
@@ -365,15 +398,16 @@ const getRecentOrderTrends = (startDate, warehouseId = null) => {
 };
 
 export default {
-  // Order
   create,
   findAll,
   countAll,
   findIdsByWarehouseId,
+  countAccessibleOrdersByWarehouse,
   countRouteMismatchesByTripId,
   findById,
   findByCode,
   findByIds,
+  findOrdersForRemittance,
   findByTripId,
   countByTripId,
   findLoadsByTripId,
@@ -387,6 +421,7 @@ export default {
   claimForCodSettlement,
   releaseCodSettlement,
   deleteById,
+  bulkWrite,
   countByStatus,
   getRecentOrderTrends,
 };

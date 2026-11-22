@@ -48,16 +48,10 @@ const createPaymentSchema = Joi.object({
 
 const driverRemitSchema = Joi.object({
   tripId: objectId.optional(),
-  orderIds: Joi.array().items(objectId).min(1).optional(),
-  orders: Joi.array()
-    .min(1)
-    .items(
-      Joi.object({
-        orderId: objectId.required(),
-        collectedAmount: moneyAmount().optional(),
-      }),
-    )
-    .optional(),
+  orderIds: Joi.array().items(objectId).min(1).required().messages({
+    "any.required": "Order IDs are required",
+    "array.min": "At least one order ID is required",
+  }),
   paymentAmount: moneyAmount().positive().required().messages({
     "any.required": "Remittance amount is required",
     "number.positive": "Remittance amount must be greater than 0",
@@ -68,7 +62,7 @@ const driverRemitSchema = Joi.object({
   transactionReference: Joi.string().trim().allow("").optional(),
   proofUrl: Joi.string().trim().uri().allow("").optional(),
   notes: Joi.string().trim().allow("").optional(),
-}).or("orderIds", "orders");
+});
 
 const verifyPaymentSchema = Joi.object({
   status: Joi.string().valid("completed", "failed").required().messages({
