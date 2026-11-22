@@ -508,20 +508,6 @@ const updateById = async ({
   payload.totalAmount =
     Number(effectiveShippingFee || 0) + Number(effectiveCodAmount || 0);
 
-  if (payload.codCollected === true && !payload.paymentStatus) {
-    payload.paymentStatus = PAYMENT_STATUSES.COMPLETED;
-    if (!payload.paymentTime) {
-      payload.paymentTime = new Date();
-    }
-  } else if (
-    payload.codCollected === false &&
-    !payload.paymentStatus &&
-    existingOrder.codCollected === true
-  ) {
-    payload.paymentStatus = PAYMENT_STATUSES.PENDING;
-    payload.paymentTime = null;
-  }
-
   const updatedOrder = await orderRepository.updateById(
     orderId,
     payload,

@@ -969,6 +969,24 @@ describe("orderService.updateById", () => {
       message: ORDER_MESSAGES.CANNOT_MODIFY_SETTLED_FINANCIALS,
     });
   });
+
+  it("does not derive payment status from collected COD", async () => {
+    mocks.findById.mockResolvedValue(existingOrder);
+    mocks.updateById.mockResolvedValue({
+      ...existingOrder,
+      codCollected: true,
+    });
+
+    await orderService.updateById({
+      orderId: "order-1",
+      updateData: { codCollected: true },
+    });
+
+    const [, payload] = mocks.updateById.mock.calls[0];
+    expect(payload.codCollected).toBe(true);
+    expect(payload).not.toHaveProperty("paymentStatus");
+    expect(payload).not.toHaveProperty("paymentTime");
+  });
 });
 
 describe("orderService.markAsDelivered", () => {
