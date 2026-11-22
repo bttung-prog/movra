@@ -891,7 +891,6 @@ const verify = async (paymentId, payload, verifierUser) => {
         );
         const orderMap = new Map(orders.map((o) => [o._id.toString(), o]));
         const bulkOps = [];
-        const now = new Date();
 
         for (const codOrder of payment.codOrders || []) {
           const oid = (codOrder.orderId?._id || codOrder.orderId)?.toString();
@@ -922,11 +921,6 @@ const verify = async (paymentId, payload, verifierUser) => {
             codRemittedAmount: remittedAfter,
             codCollected: isCodCollected,
           };
-
-          if (isCodCollected) {
-            updateSet.paymentStatus = PAYMENT_STATUSES.COMPLETED;
-            updateSet.paymentTime = now;
-          }
 
           bulkOps.push({
             updateOne: {
@@ -1102,7 +1096,7 @@ const refund = async (paymentId, payload, actor) => {
           await orderService.updateById({
             orderId: targetOrderId,
             updateData: {
-              paymentStatus: "pending",
+              paymentStatus: PAYMENT_STATUSES.PENDING,
               shippingFeePaidAmount,
               shippingFeePaid: shippingFeePaidAmount >= shippingFee,
             },
@@ -1132,7 +1126,7 @@ const refund = async (paymentId, payload, actor) => {
       await orderService.updateById({
         orderId,
         updateData: {
-          paymentStatus: "pending",
+          paymentStatus: PAYMENT_STATUSES.PENDING,
           shippingFeePaidAmount,
           shippingFeePaid: shippingFeePaidAmount >= shippingFee,
         },

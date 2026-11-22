@@ -848,6 +848,12 @@ describe("paymentService.verify", () => {
       ]),
       transaction,
     );
+
+    const [bulkOps] = mocks.bulkUpdateOrders.mock.calls[0];
+    expect(bulkOps[0].updateOne.update.$set).not.toHaveProperty(
+      "paymentStatus",
+    );
+    expect(bulkOps[0].updateOne.update.$set).not.toHaveProperty("paymentTime");
     expect(transaction.commitTransaction).toHaveBeenCalled();
   });
 
