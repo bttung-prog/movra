@@ -321,7 +321,7 @@ describe("tripService.getAll and getById", () => {
 
   it("scopes a driver's trip list to their driver profile", async () => {
     await tripService.getAll({
-      user: { role: ROLES.DRIVER, _id: "user-1" },
+      user: { role: ROLES.DRIVER, userId: "user-1" },
     });
 
     expect(mocks.getDriverByUserId).toHaveBeenCalledWith("user-1");
@@ -339,7 +339,7 @@ describe("tripService.getAll and getById", () => {
     await expect(
       tripService.getById("trip-1", true, {
         role: ROLES.DRIVER,
-        _id: "user-2",
+        userId: "user-2",
       }),
     ).rejects.toMatchObject({
       statusCode: 403,

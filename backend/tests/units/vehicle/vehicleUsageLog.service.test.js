@@ -324,7 +324,7 @@ describe("vehicleUsageLogService", () => {
         vehicleUsageLogService.checkOut({
           logId,
           endOdo: 1200,
-          user: { role: ROLES.DRIVER, _id: "user-driver-id" },
+          user: { role: ROLES.DRIVER, userId: "user-driver-id" },
         }),
       ).rejects.toMatchObject({
         statusCode: 403,

@@ -11,6 +11,11 @@ import { USER_STATUSES } from "../../constants/userStatuses.js";
 import { TRIP_MESSAGES } from "../../constants/messages.js";
 
 import { ApiError } from "../../utils/ApiError.js";
+import {
+  getActorUserId,
+  getActorUserIdString,
+  getReferenceIdString,
+} from "../../utils/actor.util.js";
 
 import driverService from "../driver/driver.service.js";
 import vehicleService from "../vehicle/vehicle.service.js";
@@ -217,7 +222,7 @@ const addTrackingLog = async (
 
   if (user && user.role === ROLES.DRIVER) {
     const driver = await driverService.getById(trip.driverId?._id);
-    if (driver.userId?.toString() !== user._id?.toString()) {
+    if (getReferenceIdString(driver.userId) !== getActorUserIdString(user)) {
       throw new ApiError(403, TRIP_MESSAGES.NOT_ASSIGNED_DRIVER);
     }
   }
@@ -315,7 +320,7 @@ const addTrackingLog = async (
         {
           tripId,
           action: "status_changed",
-          performedBy: tripAccess.getActorId(user),
+          performedBy: getActorUserId(user),
           changes,
         },
         session,

@@ -100,13 +100,28 @@ describe("tripExpenseService", () => {
         tripExpenseService.addExpense(
           "trip-1",
           { expenseType: "toll", expenseAmount: 10000 },
-          { role: ROLES.DRIVER, _id: "user-1" },
+          { role: ROLES.DRIVER, userId: "user-1" },
         ),
       ).rejects.toMatchObject({
         statusCode: 403,
         message: TRIP_MESSAGES.NOT_ASSIGNED_DRIVER,
       });
     });
+  });
+
+  it("accepts a driver when the populated userId matches the actor", async () => {
+    mocks.getDriverById.mockResolvedValue({
+      _id: "driver-1",
+      userId: { _id: "user-1" },
+    });
+
+    await expect(
+      tripExpenseService.addExpense(
+        "trip-1",
+        { expenseType: "fuel", expenseAmount: 10000 },
+        { role: ROLES.DRIVER, userId: "user-1" },
+      ),
+    ).resolves.toEqual({ _id: "expense-1" });
   });
 
   describe("getExpensesByTripId", () => {
@@ -148,7 +163,7 @@ describe("tripExpenseService", () => {
         tripExpenseService.updateExpenseById(
           "expense-1",
           { note: "Updated" },
-          { role: ROLES.DRIVER, _id: "user-1" },
+          { role: ROLES.DRIVER, userId: "user-1" },
         ),
       ).rejects.toMatchObject({
         statusCode: 403,
@@ -197,7 +212,7 @@ describe("tripExpenseService", () => {
       await expect(
         tripExpenseService.deleteExpenseById("expense-1", {
           role: ROLES.DRIVER,
-          _id: "user-1",
+          userId: "user-1",
         }),
       ).rejects.toMatchObject({
         statusCode: 403,
@@ -213,6 +228,20 @@ describe("tripExpenseService", () => {
       await expect(
         tripExpenseService.deleteExpenseById("expense-1", {
           role: ROLES.ADMIN,
+        }),
+      ).resolves.toEqual(expense);
+      expect(mocks.deleteById).toHaveBeenCalledWith("expense-1");
+    });
+
+    it("allows a driver to delete an expense with a raw createdBy id", async () => {
+      const expense = { tripId: "trip-1", createdBy: "user-1" };
+      mocks.findById.mockResolvedValue(expense);
+      mocks.deleteById.mockResolvedValue(expense);
+
+      await expect(
+        tripExpenseService.deleteExpenseById("expense-1", {
+          role: ROLES.DRIVER,
+          userId: "user-1",
         }),
       ).resolves.toEqual(expense);
       expect(mocks.deleteById).toHaveBeenCalledWith("expense-1");

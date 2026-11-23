@@ -9,6 +9,7 @@ import { TRIP_MESSAGES } from "../../constants/messages.js";
 import { ApiError } from "../../utils/ApiError.js";
 import { generateCode } from "../../utils/generateCode.js";
 import { checkWarehouseAccess } from "../../utils/checkWarehouseAccess.js";
+import { getActorUserId } from "../../utils/actor.util.js";
 
 import driverService from "../driver/driver.service.js";
 import vehicleService from "../vehicle/vehicle.service.js";
@@ -194,7 +195,7 @@ const create = async ({
         {
           tripId: trip._id,
           action: "created",
-          performedBy: tripAccess.getActorId(user),
+          performedBy: getActorUserId(user),
           changes: tripAudit.getAuditChanges(
             {},
             snapshot,
@@ -542,7 +543,7 @@ const updateById = async (tripId, updateData, user = null) => {
           {
             tripId,
             action: "updated",
-            performedBy: tripAccess.getActorId(user),
+            performedBy: getActorUserId(user),
             changes,
           },
           session,
@@ -590,7 +591,7 @@ const deleteById = async (tripId, user = null) => {
         {
           tripId,
           action: "deleted",
-          performedBy: tripAccess.getActorId(user),
+          performedBy: getActorUserId(user),
           changes: tripAudit.getAuditChanges(currentTrip, deletedTrip, [
             "deletedAt",
           ]),
@@ -655,7 +656,7 @@ const restoreById = async (tripId, user = null) => {
         {
           tripId,
           action: "restored",
-          performedBy: tripAccess.getActorId(user),
+          performedBy: getActorUserId(user),
           changes: tripAudit.getAuditChanges(currentTrip, restoredTrip, [
             "deletedAt",
           ]),

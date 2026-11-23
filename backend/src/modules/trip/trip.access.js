@@ -3,11 +3,10 @@ import { TRIP_MESSAGES, WAREHOUSE_MESSAGES } from "../../constants/messages.js";
 
 import { ApiError } from "../../utils/ApiError.js";
 import { checkWarehouseAccess } from "../../utils/checkWarehouseAccess.js";
+import { getActorUserId } from "../../utils/actor.util.js";
 
 import driverService from "../driver/driver.service.js";
 import vehicleService from "../vehicle/vehicle.service.js";
-
-const getActorId = (user) => user?.userId || user?._id || null;
 
 const validateRouteOriginWarehouse = (route, warehouseId) => {
   const originWarehouseId =
@@ -23,7 +22,7 @@ const validateRouteOriginWarehouse = (route, warehouseId) => {
 
 const assertTripWarehouseAccess = async (trip, user) => {
   if (user?.role === ROLES.DRIVER) {
-    const driver = await driverService.getByUserId(user._id);
+    const driver = await driverService.getByUserId(getActorUserId(user));
     const assignedDriverId = trip.driverId?._id || trip.driverId;
     if (assignedDriverId?.toString() !== driver._id.toString()) {
       throw new ApiError(403, TRIP_MESSAGES.NOT_ASSIGNED_DRIVER);
@@ -58,7 +57,7 @@ const assertTripWarehouseAccess = async (trip, user) => {
 
 const scopeTripFilter = async (filter, user) => {
   if (user?.role === ROLES.DRIVER) {
-    const driver = await driverService.getByUserId(user._id);
+    const driver = await driverService.getByUserId(getActorUserId(user));
     return { $and: [filter, { driverId: driver._id }] };
   }
 
@@ -87,7 +86,6 @@ const scopeTripFilter = async (filter, user) => {
 };
 
 export default {
-  getActorId,
   validateRouteOriginWarehouse,
   assertTripWarehouseAccess,
   scopeTripFilter,

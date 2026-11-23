@@ -7,6 +7,7 @@ import { TRIP_MESSAGES } from "../../constants/messages.js";
 
 import { ApiError } from "../../utils/ApiError.js";
 import { checkWarehouseAccess } from "../../utils/checkWarehouseAccess.js";
+import { getActorUserId } from "../../utils/actor.util.js";
 
 import driverService from "../driver/driver.service.js";
 import vehicleService from "../vehicle/vehicle.service.js";
@@ -244,7 +245,7 @@ const reassign = async (
           {
             tripId,
             action: "reassigned",
-            performedBy: tripAccess.getActorId(user),
+            performedBy: getActorUserId(user),
             changes,
           },
           session,

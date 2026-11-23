@@ -22,6 +22,7 @@ import {
 import { WALLET_TRANSACTION_STATUSES } from "../../constants/walletTransactionStatuses.js";
 
 import { ApiError } from "../../utils/ApiError.js";
+import { getActorUserId } from "../../utils/actor.util.js";
 import { generateCode } from "../../utils/generateCode.js";
 
 import invoiceService from "../invoice/invoice.service.js";
@@ -509,9 +510,7 @@ const create = async (payload, actor) => {
       invoiceAmountReserved:
         Boolean(linkedInvoiceId) && initialStatus === PAYMENT_STATUSES.PENDING,
       transactionReference: transactionReference || null,
-      handledBy: shouldCompleteImmediately
-        ? actor?.userId || actor?._id || null
-        : null,
+      handledBy: shouldCompleteImmediately ? getActorUserId(actor) : null,
       proofUrl: proofUrl || null,
       notes,
     };

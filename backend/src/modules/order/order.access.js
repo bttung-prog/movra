@@ -8,8 +8,6 @@ import { ApiError } from "../../utils/ApiError.js";
 
 import tripService from "../trip/trip.service.js";
 
-const getActorId = (user) => user?.userId || user?._id || null;
-
 const validateOrder = (order, requireNotDeleted = true) => {
   if (!order) {
     throw new ApiError(404, ORDER_MESSAGES.NOT_FOUND);
@@ -156,7 +154,6 @@ const scopeOrderFilter = async (filter, user) => {
 };
 
 export default {
-  getActorId,
   validateOrder,
   checkOrderOwnership,
   assertDriverAssignedToTrip,

@@ -322,6 +322,10 @@ const deleteById = async (driverId) => {
 };
 
 const getByUserId = async (userId, session = null) => {
+  if (!userId) {
+    throw new ApiError(404, DRIVER_MESSAGES.NOT_FOUND);
+  }
+
   const driver = await driverRepository.findByUserId(userId, session);
 
   if (!driver) {

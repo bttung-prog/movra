@@ -23,22 +23,6 @@ describe("orderAccess", () => {
     vi.clearAllMocks();
   });
 
-  describe("getActorId", () => {
-    it("returns userId if present", () => {
-      expect(
-        orderAccess.getActorId({ userId: "user-123", _id: "obj-123" }),
-      ).toBe("user-123");
-    });
-
-    it("returns _id if userId not present", () => {
-      expect(orderAccess.getActorId({ _id: "obj-123" })).toBe("obj-123");
-    });
-
-    it("returns null if user is undefined", () => {
-      expect(orderAccess.getActorId(null)).toBeNull();
-    });
-  });
-
   describe("validateOrder", () => {
     it("throws 404 if order does not exist", () => {
       expect(() => orderAccess.validateOrder(null)).toThrow(
