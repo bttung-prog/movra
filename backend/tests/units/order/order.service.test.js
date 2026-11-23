@@ -28,6 +28,7 @@ const mocks = vi.hoisted(() => ({
   countAll: vi.fn(),
   updateById: vi.fn(),
   updateMany: vi.fn(),
+  bulkWrite: vi.fn(),
   findLoadsByTripId: vi.fn(),
   findTrackingLogsByOrderId: vi.fn(),
   findPublicTrackingLogsByOrderId: vi.fn(),
@@ -119,6 +120,7 @@ vi.mock("../../../src/modules/order/order.repository.js", () => ({
     countAll: mocks.countAll,
     updateById: mocks.updateById,
     updateMany: mocks.updateMany,
+    bulkWrite: mocks.bulkWrite,
     findLoadsByTripId: mocks.findLoadsByTripId,
     findRawByFilter: mocks.findRawByFilter,
     findBillableByCustomer: mocks.findBillableByCustomer,
@@ -216,6 +218,10 @@ beforeEach(() => {
   mocks.generateCode.mockReturnValue("ORD-0001");
   mocks.findLoadsByTripId.mockResolvedValue([]);
   mocks.updateMany.mockResolvedValue({ modifiedCount: 1 });
+  mocks.bulkWrite.mockImplementation(async (operations = []) => ({
+    matchedCount: operations.length,
+    modifiedCount: operations.length,
+  }));
   mocks.findRawByFilter.mockResolvedValue([]);
   mocks.countUnfinishedOrdersByTrip.mockResolvedValue(0);
 });
@@ -1259,24 +1265,26 @@ describe("orderService invoice billing helpers", () => {
     });
 
     expect(updatedCount).toBe(2);
-    expect(mocks.updateById).toHaveBeenCalledWith(
-      "order-1",
+    expect(mocks.updateById).not.toHaveBeenCalled();
+
+    const [bulkOps] = mocks.bulkWrite.mock.calls[0];
+    expect(bulkOps).toHaveLength(2);
+    expect(bulkOps[0].updateOne.filter).toEqual({ _id: "order-1" });
+    expect(bulkOps[0].updateOne.update.$set).toEqual(
       expect.objectContaining({
         shippingFeePaidAmount: 2500,
         shippingFeePaid: true,
         paymentStatus: "completed",
         paymentMethod: "bank",
       }),
-      transaction,
     );
-    expect(mocks.updateById).toHaveBeenCalledWith(
-      "order-2",
+    expect(bulkOps[1].updateOne.filter).toEqual({ _id: "order-2" });
+    expect(bulkOps[1].updateOne.update.$set).toEqual(
       expect.objectContaining({
         shippingFeePaidAmount: 500,
         shippingFeePaid: false,
         paymentStatus: "pending",
       }),
-      transaction,
     );
   });
 
@@ -1300,15 +1308,17 @@ describe("orderService invoice billing helpers", () => {
       session: transaction,
     });
 
-    expect(mocks.updateById).toHaveBeenCalledWith(
-      "order-2",
+    const [bulkOps] = mocks.bulkWrite.mock.calls[0];
+    expect(bulkOps).toHaveLength(2);
+    expect(bulkOps[1].updateOne.filter).toEqual({ _id: "order-2" });
+    expect(bulkOps[1].updateOne.update.$set).toEqual(
       expect.objectContaining({
         shippingFeePaidAmount: 1500,
         shippingFeePaid: true,
         paymentStatus: "completed",
       }),
-      transaction,
     );
+    expect(mocks.updateById).not.toHaveBeenCalled();
   });
 
   it("returns billable orders for a billing period", async () => {

@@ -1,16 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import {
-  ORDER_STATUSES,
-  PICKUP_ASSIGNABLE_ORDER_STATUSES,
-} from "../../../src/constants/orderStatuses.js";
-import {
-  ORDER_MESSAGES,
-  WAREHOUSE_MESSAGES,
-} from "../../../src/constants/messages.js";
+import { ORDER_STATUSES } from "../../../src/constants/orderStatuses.js";
+import { ORDER_MESSAGES } from "../../../src/constants/messages.js";
 import { TRIP_TYPES } from "../../../src/constants/tripTypes.js";
 import { TRIP_STATUSES } from "../../../src/constants/tripStatuses.js";
-import { ROLES } from "../../../src/constants/roles.js";
 
 const session = {
   startTransaction: vi.fn(),
@@ -30,9 +23,14 @@ const mocks = vi.hoisted(() => ({
   findRawByFilter: vi.fn(),
   updateById: vi.fn(),
   updateMany: vi.fn(),
+  bulkWrite: vi.fn(),
   createTrackingLog: vi.fn(),
+  insertManyTrackingLogs: vi.fn(),
   getTripById: vi.fn(),
+  getTripByIds: vi.fn(),
+  assertTripAccess: vi.fn(),
   syncTotalOrder: vi.fn(),
+  syncTotalOrders: vi.fn(),
   assertDriverAssignedToTrip: vi.fn(),
   assertOrderWarehouseAccess: vi.fn(),
 }));
@@ -56,12 +54,14 @@ vi.mock("../../../src/modules/order/order.repository.js", () => ({
     findRawByFilter: mocks.findRawByFilter,
     updateById: mocks.updateById,
     updateMany: mocks.updateMany,
+    bulkWrite: mocks.bulkWrite,
   },
 }));
 
 vi.mock("../../../src/modules/order/orderTrackingLog.repository.js", () => ({
   default: {
     create: mocks.createTrackingLog,
+    insertMany: mocks.insertManyTrackingLogs,
   },
 }));
 
@@ -75,7 +75,10 @@ vi.mock("../../../src/modules/order/order.access.js", () => ({
 vi.mock("../../../src/modules/trip/trip.service.js", () => ({
   default: {
     getById: mocks.getTripById,
+    getByIds: mocks.getTripByIds,
+    assertTripAccess: mocks.assertTripAccess,
     syncTotalOrder: mocks.syncTotalOrder,
+    syncTotalOrders: mocks.syncTotalOrders,
   },
 }));
 
@@ -113,8 +116,16 @@ describe("orderAssignment.service", () => {
     mocks.findByIds.mockResolvedValue([{ ...baseOrder }]);
     mocks.updateMany.mockResolvedValue({ modifiedCount: 1 });
     mocks.updateById.mockResolvedValue({ ...baseOrder });
+    mocks.bulkWrite.mockImplementation(async (operations = []) => ({
+      matchedCount: operations.length,
+      modifiedCount: operations.length,
+    }));
     mocks.createTrackingLog.mockResolvedValue({ _id: "log-1" });
+    mocks.insertManyTrackingLogs.mockResolvedValue([]);
+    mocks.getTripByIds.mockResolvedValue([{ ...baseTrip }]);
+    mocks.assertTripAccess.mockResolvedValue(undefined);
     mocks.syncTotalOrder.mockResolvedValue(undefined);
+    mocks.syncTotalOrders.mockResolvedValue(undefined);
   });
 
   describe("getTripLoadMetrics", () => {
@@ -261,16 +272,38 @@ describe("orderAssignment.service", () => {
 
       expect(result).toEqual({ assignedCount: 1, tripId: "trip-1" });
       expect(mocks.updateMany).toHaveBeenCalled();
-      expect(mocks.createTrackingLog).toHaveBeenCalledWith(
-        expect.objectContaining({
-          orderId: "order-1",
-          tripId: "trip-1",
-          status: ORDER_STATUSES.DRIVER_ASSIGNED,
-        }),
+      expect(mocks.insertManyTrackingLogs).toHaveBeenCalledWith(
+        [
+          expect.objectContaining({
+            orderId: "order-1",
+            tripId: "trip-1",
+            status: ORDER_STATUSES.DRIVER_ASSIGNED,
+          }),
+        ],
         session,
       );
       expect(mocks.syncTotalOrder).toHaveBeenCalledWith("trip-1", session);
       expect(session.commitTransaction).toHaveBeenCalled();
+    });
+
+    it("batches tracking logs for multiple assigned orders", async () => {
+      mocks.findLoadsByTripId.mockResolvedValue([]);
+      mocks.findByIds.mockResolvedValue([
+        { ...baseOrder, _id: "order-1" },
+        { ...baseOrder, _id: "order-2" },
+        { ...baseOrder, _id: "order-3" },
+      ]);
+      mocks.updateMany.mockResolvedValue({ modifiedCount: 3 });
+
+      const result = await orderAssignmentService.assignOrdersToTrip({
+        tripId: "trip-1",
+        orderIds: ["order-1", "order-2", "order-3"],
+      });
+
+      expect(result).toEqual({ assignedCount: 3, tripId: "trip-1" });
+      expect(mocks.insertManyTrackingLogs).toHaveBeenCalledTimes(1);
+      const [logs] = mocks.insertManyTrackingLogs.mock.calls[0];
+      expect(logs).toHaveLength(3);
     });
   });
 
@@ -299,10 +332,9 @@ describe("orderAssignment.service", () => {
       mocks.findByIds.mockResolvedValue([
         { ...baseOrder, tripId: "trip-1", status: ORDER_STATUSES.PICKED_UP },
       ]);
-      mocks.getTripById.mockResolvedValue({
-        ...baseTrip,
-        status: TRIP_STATUSES.IN_PROGRESS,
-      });
+      mocks.getTripByIds.mockResolvedValue([
+        { ...baseTrip, status: TRIP_STATUSES.IN_PROGRESS },
+      ]);
 
       await expect(
         orderAssignmentService.unassignOrdersFromTrip({
@@ -325,17 +357,64 @@ describe("orderAssignment.service", () => {
       });
 
       expect(result).toEqual({ unassignedCount: 1 });
-      expect(mocks.updateById).toHaveBeenCalledWith(
-        "order-1",
+      expect(mocks.getTripByIds).toHaveBeenCalledTimes(2);
+      expect(mocks.assertTripAccess).toHaveBeenCalledTimes(2);
+      expect(mocks.updateById).not.toHaveBeenCalled();
+
+      const [bulkOps] = mocks.bulkWrite.mock.calls[0];
+      expect(bulkOps).toHaveLength(1);
+      expect(bulkOps[0].updateOne.filter).toEqual(
+        expect.objectContaining({
+          _id: "order-1",
+          tripId: "trip-1",
+          status: ORDER_STATUSES.DRIVER_ASSIGNED,
+        }),
+      );
+      expect(bulkOps[0].updateOne.update.$set).toEqual(
         expect.objectContaining({
           tripId: null,
           status: ORDER_STATUSES.CREATED,
         }),
-        session,
-        expect.any(Object),
       );
-      expect(mocks.syncTotalOrder).toHaveBeenCalledWith("trip-1", session);
+
+      expect(mocks.syncTotalOrders).toHaveBeenCalledWith(["trip-1"], session);
       expect(session.commitTransaction).toHaveBeenCalled();
+    });
+
+    it("releases multiple orders in one batch write", async () => {
+      mocks.findByIds.mockResolvedValue([
+        {
+          ...baseOrder,
+          _id: "order-1",
+          tripId: "trip-1",
+          status: ORDER_STATUSES.DRIVER_ASSIGNED,
+        },
+        {
+          ...baseOrder,
+          _id: "order-2",
+          tripId: "trip-1",
+          status: ORDER_STATUSES.DRIVER_ASSIGNED,
+        },
+        {
+          ...baseOrder,
+          _id: "order-3",
+          tripId: "trip-1",
+          status: ORDER_STATUSES.PICKUP_SCHEDULED,
+        },
+      ]);
+
+      const result = await orderAssignmentService.unassignOrdersFromTrip({
+        orderIds: ["order-1", "order-2", "order-3"],
+      });
+
+      expect(result).toEqual({ unassignedCount: 3 });
+      expect(mocks.getTripByIds).toHaveBeenCalledTimes(2);
+      expect(mocks.assertTripAccess).toHaveBeenCalledTimes(2);
+
+      const [bulkOps] = mocks.bulkWrite.mock.calls[0];
+      expect(bulkOps).toHaveLength(3);
+      expect(mocks.syncTotalOrders).toHaveBeenCalledTimes(1);
+      expect(mocks.syncTotalOrders).toHaveBeenCalledWith(["trip-1"], session);
     });
   });
 
@@ -350,16 +429,18 @@ describe("orderAssignment.service", () => {
         session,
       );
 
-      expect(mocks.updateById).toHaveBeenCalledWith(
-        "order-1",
+      expect(mocks.updateMany).toHaveBeenCalledWith(
+        { _id: { $in: ["order-1"] }, tripId: "trip-1" },
         { tripId: null, status: ORDER_STATUSES.CREATED },
         session,
       );
-      expect(mocks.createTrackingLog).toHaveBeenCalledWith(
-        expect.objectContaining({
-          orderId: "order-1",
-          status: ORDER_STATUSES.CREATED,
-        }),
+      expect(mocks.insertManyTrackingLogs).toHaveBeenCalledWith(
+        [
+          expect.objectContaining({
+            orderId: "order-1",
+            status: ORDER_STATUSES.CREATED,
+          }),
+        ],
         session,
       );
     });
@@ -374,11 +455,48 @@ describe("orderAssignment.service", () => {
         session,
       );
 
-      expect(mocks.updateById).toHaveBeenCalledWith(
-        "order-1",
+      expect(mocks.updateMany).toHaveBeenCalledWith(
+        { _id: { $in: ["order-1"] }, tripId: "trip-1" },
         { tripId: null, status: ORDER_STATUSES.STORED },
         session,
       );
+      expect(mocks.insertManyTrackingLogs).toHaveBeenCalledWith(
+        [
+          expect.objectContaining({
+            orderId: "order-1",
+            status: ORDER_STATUSES.STORED,
+          }),
+        ],
+        session,
+      );
+    });
+
+    it("groups delivery failures and writes tracking logs in one batch", async () => {
+      mocks.findRawByFilter.mockResolvedValue([
+        { _id: "order-1", status: ORDER_STATUSES.FAILED },
+        { _id: "order-2", status: ORDER_STATUSES.RETURNED },
+        { _id: "order-3", status: ORDER_STATUSES.FAILED },
+      ]);
+
+      await orderAssignmentService.handleOrdersOnTripCompletion(
+        { _id: "trip-1", type: TRIP_TYPES.DELIVERY },
+        session,
+      );
+
+      expect(mocks.updateMany).toHaveBeenCalledTimes(2);
+      expect(mocks.updateMany).toHaveBeenCalledWith(
+        { _id: { $in: ["order-1", "order-3"] }, tripId: "trip-1" },
+        { tripId: null, status: ORDER_STATUSES.STORED },
+        session,
+      );
+      expect(mocks.updateMany).toHaveBeenCalledWith(
+        { _id: { $in: ["order-2"] }, tripId: "trip-1" },
+        { tripId: null, status: ORDER_STATUSES.RETURNED },
+        session,
+      );
+
+      const [logs] = mocks.insertManyTrackingLogs.mock.calls[0];
+      expect(logs).toHaveLength(3);
     });
   });
 
@@ -391,9 +509,18 @@ describe("orderAssignment.service", () => {
         session,
       );
 
-      expect(mocks.updateById).toHaveBeenCalledWith(
-        "order-1",
+      expect(mocks.updateMany).toHaveBeenCalledWith(
+        { _id: { $in: ["order-1"] }, tripId: "trip-1" },
         { tripId: null, status: ORDER_STATUSES.CREATED },
+        session,
+      );
+      expect(mocks.insertManyTrackingLogs).toHaveBeenCalledWith(
+        [
+          expect.objectContaining({
+            orderId: "order-1",
+            status: ORDER_STATUSES.CREATED,
+          }),
+        ],
         session,
       );
     });

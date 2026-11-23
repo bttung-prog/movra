@@ -150,6 +150,27 @@ const countByTripId = (tripId, session = null) => {
   return query;
 };
 
+const countByTripIds = (tripIds = [], session = null) => {
+  if (!Array.isArray(tripIds) || tripIds.length === 0) {
+    return Promise.resolve([]);
+  }
+
+  const normalizedTripIds = tripIds.map((tripId) =>
+    mongoose.Types.ObjectId.isValid(tripId)
+      ? mongoose.Types.ObjectId.createFromHexString(String(tripId))
+      : tripId,
+  );
+
+  const aggregate = Order.aggregate([
+    { $match: { tripId: { $in: normalizedTripIds }, deletedAt: null } },
+    { $group: { _id: "$tripId", count: { $sum: 1 } } },
+  ]);
+
+  if (session) aggregate.session(session);
+
+  return aggregate;
+};
+
 const findLoadsByTripId = (tripId, session = null) => {
   if (!tripId) return Promise.resolve([]);
   const query = Order.find(
@@ -410,6 +431,7 @@ export default {
   findOrdersForRemittance,
   findByTripId,
   countByTripId,
+  countByTripIds,
   findLoadsByTripId,
   findRawByFilter,
   findBillableByCustomer,

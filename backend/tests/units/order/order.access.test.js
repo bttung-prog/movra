@@ -180,6 +180,22 @@ describe("orderAccess", () => {
       ).resolves.toBeUndefined();
     });
 
+    it("skips the trip lookup when a preloaded trip map is provided", async () => {
+      const tripsById = new Map([
+        ["trip-1", { _id: "trip-1", driverId: "driver-1" }],
+      ]);
+
+      await expect(
+        orderAccess.assertOrderWarehouseAccess(
+          { tripId: "trip-1", warehouseId: "wh-1" },
+          { role: ROLES.DISPATCHER, warehouseId: "wh-1" },
+          { tripsById },
+        ),
+      ).resolves.toBeUndefined();
+
+      expect(mocks.getTripById).not.toHaveBeenCalled();
+    });
+
     it("allows dispatcher when warehouse matches destination", async () => {
       await expect(
         orderAccess.assertOrderWarehouseAccess(

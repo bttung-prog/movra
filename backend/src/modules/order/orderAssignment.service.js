@@ -127,6 +127,24 @@ const countByTripId = (tripId, session = null) => {
   return orderRepository.countByTripId(tripId, session);
 };
 
+const countByTripIds = (tripIds = [], session = null) => {
+  return orderRepository.countByTripIds(tripIds, session);
+};
+
+const loadTripsByIds = async (tripIds = [], session = null) => {
+  const uniqueTripIds = Array.from(
+    new Set(
+      (tripIds || []).map((tripId) => tripId?.toString()).filter(Boolean),
+    ),
+  );
+  if (uniqueTripIds.length === 0) {
+    return new Map();
+  }
+
+  const trips = await tripService.getByIds(uniqueTripIds, session);
+  return new Map(trips.map((trip) => [trip._id.toString(), trip]));
+};
+
 const countRouteMismatchesByTripId = (tripId, routeId) => {
   return orderRepository.countRouteMismatchesByTripId(tripId, routeId);
 };
@@ -190,8 +208,13 @@ const assignOrdersToTrip = async ({ tripId, orderIds = [] }, user = null) => {
     throw new ApiError(400, ORDER_MESSAGES.ORDER_TRIP_TYPE_MISMATCH);
   }
 
+  const orderTripIds = orders
+    .map((order) => order.tripId?._id || order.tripId)
+    .filter(Boolean);
+  const tripsById = await loadTripsByIds(orderTripIds);
+
   for (const order of orders) {
-    await orderAccess.assertOrderWarehouseAccess(order, user);
+    await orderAccess.assertOrderWarehouseAccess(order, user, { tripsById });
 
     const assignedTripId = order.tripId?._id || order.tripId;
     if (assignedTripId && assignedTripId.toString() !== tripId.toString()) {
@@ -261,8 +284,15 @@ const assignOrdersToTrip = async ({ tripId, orderIds = [] }, user = null) => {
     if (currentOrders.length !== orderIds.length) {
       throw new ApiError(404, ORDER_MESSAGES.ORDERS_NOT_FOUND);
     }
+    const currentOrderTripIds = currentOrders
+      .map((order) => order.tripId?._id || order.tripId)
+      .filter(Boolean);
+    const currentTripsById = await loadTripsByIds(currentOrderTripIds, session);
+
     for (const order of currentOrders) {
-      await orderAccess.assertOrderWarehouseAccess(order, user);
+      await orderAccess.assertOrderWarehouseAccess(order, user, {
+        tripsById: currentTripsById,
+      });
       if (!isOrderAssignable(order, currentTrip)) {
         throw new ApiError(400, ORDER_MESSAGES.ORDER_TRIP_TYPE_MISMATCH);
       }
@@ -346,21 +376,17 @@ const assignOrdersToTrip = async ({ tripId, orderIds = [] }, user = null) => {
       }
     }
 
-    for (const order of currentOrders) {
-      await orderTrackingLogRepository.create(
-        {
-          orderId: order._id,
-          tripId,
-          status:
-            order.status === ORDER_STATUSES.STORED
-              ? ORDER_STATUSES.STORED
-              : ORDER_STATUSES.DRIVER_ASSIGNED,
-          notes: `Đơn hàng được gán vào chuyến ${currentTrip.tripCode || tripId}`,
-          changedBy: user?.userId || user?._id,
-        },
-        session,
-      );
-    }
+    const trackingLogs = currentOrders.map((order) => ({
+      orderId: order._id,
+      tripId,
+      status:
+        order.status === ORDER_STATUSES.STORED
+          ? ORDER_STATUSES.STORED
+          : ORDER_STATUSES.DRIVER_ASSIGNED,
+      notes: `Đơn hàng được gán vào chuyến ${currentTrip.tripCode || tripId}`,
+      changedBy: user?.userId || user?._id,
+    }));
+    await orderTrackingLogRepository.insertMany(trackingLogs, session);
 
     await tripService.syncTotalOrder(tripId, session);
 
@@ -381,13 +407,25 @@ const unassignOrdersFromTrip = async ({ orderIds = [] }, user = null) => {
     throw new ApiError(404, ORDER_MESSAGES.ORDERS_NOT_FOUND);
   }
 
+  const assignedTripIds = orders
+    .map((order) => order.tripId?._id || order.tripId)
+    .filter(Boolean);
+  const tripsById = await loadTripsByIds(assignedTripIds);
+  const validatedTripIds = new Set();
+
   for (const order of orders) {
-    await orderAccess.assertOrderWarehouseAccess(order, user);
+    await orderAccess.assertOrderWarehouseAccess(order, user, { tripsById });
     if (!order.tripId) {
       throw new ApiError(400, ORDER_MESSAGES.ORDER_NOT_ASSIGNED);
     }
 
-    const trip = await tripService.getById(order.tripId, false, user);
+    const sourceTripId = order.tripId?._id || order.tripId;
+    const trip = tripsById.get(String(sourceTripId));
+    if (!validatedTripIds.has(String(sourceTripId))) {
+      await tripService.assertTripAccess(trip, user);
+      validatedTripIds.add(String(sourceTripId));
+    }
+
     const canReleaseResolvedOrder =
       [TRIP_STATUSES.COMPLETED, TRIP_STATUSES.CANCELLED].includes(
         trip.status,
@@ -430,14 +468,24 @@ const unassignOrdersFromTrip = async ({ orderIds = [] }, user = null) => {
   session.startTransaction();
   try {
     const affectedTripIds = new Map();
+    const currentAssignedTripIds = orders
+      .map((order) => order.tripId?._id || order.tripId)
+      .filter(Boolean);
+    const currentTripsById = await loadTripsByIds(
+      currentAssignedTripIds,
+      session,
+    );
+    const currentValidatedTripIds = new Set();
+    const bulkOps = [];
+
     for (const order of orders) {
       const sourceTripId = order.tripId?._id || order.tripId;
-      const sourceTrip = await tripService.getById(
-        sourceTripId,
-        false,
-        user,
-        session,
-      );
+      const sourceTrip = currentTripsById.get(String(sourceTripId));
+
+      if (!currentValidatedTripIds.has(String(sourceTripId))) {
+        await tripService.assertTripAccess(sourceTrip, user);
+        currentValidatedTripIds.add(String(sourceTripId));
+      }
 
       const canReleaseResolvedOrder =
         [TRIP_STATUSES.COMPLETED, TRIP_STATUSES.CANCELLED].includes(
@@ -477,22 +525,29 @@ const unassignOrdersFromTrip = async ({ orderIds = [] }, user = null) => {
         updateData.warehouseId = tripWarehouseId;
       }
 
-      const updatedOrder = await orderRepository.updateById(
-        order._id,
-        updateData,
-        session,
-        { tripId: sourceTripId, status: order.status, deletedAt: null },
-      );
-      if (!updatedOrder) {
-        throw new ApiError(409, ORDER_MESSAGES.ORDER_ASSIGNMENT_CHANGED);
-      }
+      bulkOps.push({
+        updateOne: {
+          filter: {
+            _id: order._id,
+            tripId: sourceTripId,
+            status: order.status,
+            deletedAt: null,
+          },
+          update: { $set: updateData },
+        },
+      });
 
       affectedTripIds.set(sourceTripId.toString(), sourceTripId);
     }
 
-    for (const tripId of affectedTripIds.values()) {
-      await tripService.syncTotalOrder(tripId, session);
+    if (bulkOps.length > 0) {
+      const result = await orderRepository.bulkWrite(bulkOps, session);
+      if (result.matchedCount !== bulkOps.length) {
+        throw new ApiError(409, ORDER_MESSAGES.ORDER_ASSIGNMENT_CHANGED);
+      }
     }
+
+    await tripService.syncTotalOrders([...affectedTripIds.values()], session);
 
     await session.commitTransaction();
   } catch (error) {
@@ -529,62 +584,82 @@ const handleOrdersOnTripCompletion = async (
       },
       session,
     );
-
-    for (const order of failedOrders) {
-      await orderRepository.updateById(
-        order._id,
-        { tripId: null, status: ORDER_STATUSES.CREATED },
-        session,
-      );
-      await orderTrackingLogRepository.create(
-        {
-          orderId: order._id,
-          tripId,
-          status: ORDER_STATUSES.CREATED,
-          notes:
-            "Chuyến xe kết thúc, đơn lấy hàng thất bại được hoàn về trạng thái chờ điều phối",
-          changedBy: actorId,
-        },
-        session,
-      );
+    if (failedOrders.length === 0) {
+      return;
     }
-  } else {
-    const failedOrders = await orderRepository.findRawByFilter(
-      {
-        tripId,
-        status: { $in: [ORDER_STATUSES.FAILED, ORDER_STATUSES.RETURNED] },
-        deletedAt: null,
-      },
+
+    await orderRepository.updateMany(
+      { _id: { $in: failedOrders.map((order) => order._id) }, tripId },
+      { tripId: null, status: ORDER_STATUSES.CREATED },
       session,
     );
+    await orderTrackingLogRepository.insertMany(
+      failedOrders.map((order) => ({
+        orderId: order._id,
+        tripId,
+        status: ORDER_STATUSES.CREATED,
+        notes:
+          "Chuyến xe kết thúc, đơn lấy hàng thất bại được hoàn về trạng thái chờ điều phối",
+        changedBy: actorId,
+      })),
+      session,
+    );
+    return;
+  }
 
-    for (const order of failedOrders) {
+  const failedOrders = await orderRepository.findRawByFilter(
+    {
+      tripId,
+      status: { $in: [ORDER_STATUSES.FAILED, ORDER_STATUSES.RETURNED] },
+      deletedAt: null,
+    },
+    session,
+  );
+  if (failedOrders.length === 0) {
+    return;
+  }
+
+  const ordersByNextStatus = new Map();
+  for (const order of failedOrders) {
+    const nextStatus =
+      order.status === ORDER_STATUSES.RETURNED
+        ? ORDER_STATUSES.RETURNED
+        : ORDER_STATUSES.STORED;
+
+    if (!ordersByNextStatus.has(nextStatus)) {
+      ordersByNextStatus.set(nextStatus, []);
+    }
+    ordersByNextStatus.get(nextStatus).push(order);
+  }
+
+  for (const [nextStatus, orders] of ordersByNextStatus.entries()) {
+    await orderRepository.updateMany(
+      { _id: { $in: orders.map((order) => order._id) }, tripId },
+      { tripId: null, status: nextStatus },
+      session,
+    );
+  }
+
+  await orderTrackingLogRepository.insertMany(
+    failedOrders.map((order) => {
       const nextStatus =
         order.status === ORDER_STATUSES.RETURNED
           ? ORDER_STATUSES.RETURNED
           : ORDER_STATUSES.STORED;
 
-      await orderRepository.updateById(
-        order._id,
-        { tripId: null, status: nextStatus },
-        session,
-      );
-
-      await orderTrackingLogRepository.create(
-        {
-          orderId: order._id,
-          tripId,
-          status: nextStatus,
-          notes:
-            nextStatus === ORDER_STATUSES.RETURNED
-              ? "Chuyến xe kết thúc, đơn hàng chuyển trạng thái chuyển hoàn"
-              : "Chuyến xe kết thúc, đơn hàng chưa giao thành công được trả về kho",
-          changedBy: actorId,
-        },
-        session,
-      );
-    }
-  }
+      return {
+        orderId: order._id,
+        tripId,
+        status: nextStatus,
+        notes:
+          nextStatus === ORDER_STATUSES.RETURNED
+            ? "Chuyến xe kết thúc, đơn hàng chuyển trạng thái chuyển hoàn"
+            : "Chuyến xe kết thúc, đơn hàng chưa giao thành công được trả về kho",
+        changedBy: actorId,
+      };
+    }),
+    session,
+  );
 };
 
 const handleOrdersOnTripCancellation = async (
@@ -600,36 +675,38 @@ const handleOrdersOnTripCancellation = async (
     { tripId, deletedAt: null },
     session,
   );
-
-  for (const order of orders) {
-    const nextStatus =
-      tripType === TRIP_TYPES.PICKUP
-        ? ORDER_STATUSES.CREATED
-        : ORDER_STATUSES.STORED;
-
-    await orderRepository.updateById(
-      order._id,
-      { tripId: null, status: nextStatus },
-      session,
-    );
-
-    await orderTrackingLogRepository.create(
-      {
-        orderId: order._id,
-        tripId,
-        status: nextStatus,
-        notes: "Chuyến xe bị hủy, đơn hàng được gỡ khỏi chuyến xe",
-        changedBy: actorId,
-      },
-      session,
-    );
+  if (orders.length === 0) {
+    return;
   }
+
+  const nextStatus =
+    tripType === TRIP_TYPES.PICKUP
+      ? ORDER_STATUSES.CREATED
+      : ORDER_STATUSES.STORED;
+
+  await orderRepository.updateMany(
+    { _id: { $in: orders.map((order) => order._id) }, tripId },
+    { tripId: null, status: nextStatus },
+    session,
+  );
+
+  await orderTrackingLogRepository.insertMany(
+    orders.map((order) => ({
+      orderId: order._id,
+      tripId,
+      status: nextStatus,
+      notes: "Chuyến xe bị hủy, đơn hàng được gỡ khỏi chuyến xe",
+      changedBy: actorId,
+    })),
+    session,
+  );
 };
 
 export default {
   getTripLoadMetrics,
   assertTripCapacity,
   countByTripId,
+  countByTripIds,
   countRouteMismatchesByTripId,
   getByTripId,
   assignOrdersToTrip,

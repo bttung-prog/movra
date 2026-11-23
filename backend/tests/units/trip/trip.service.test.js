@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   getUserById: vi.fn(),
   countRouteMismatchesByTripId: vi.fn(),
   countOrdersByTripId: vi.fn(),
+  countOrdersByTripIds: vi.fn(),
   countAllOrders: vi.fn(),
   countUnfinishedOrdersByTrip: vi.fn(),
   handleOrdersOnTripCompletion: vi.fn(),
@@ -28,10 +29,13 @@ const mocks = vi.hoisted(() => ({
   findAll: vi.fn(),
   countAll: vi.fn(),
   findById: vi.fn(),
+  findTripsByIds: vi.fn(),
   updateById: vi.fn(),
+  setTotalOrders: vi.fn(),
   deleteById: vi.fn(),
   findIdsByWarehouseId: vi.fn(),
   createAuditLog: vi.fn(),
+  insertManyAuditLogs: vi.fn(),
   findAuditLogsByTripId: vi.fn(),
   countAuditLogsByTripId: vi.fn(),
   getTripIdsByWarehouseId: vi.fn(),
@@ -90,6 +94,7 @@ vi.mock("../../../src/modules/order/orderAssignment.service.js", () => ({
   default: {
     countRouteMismatchesByTripId: mocks.countRouteMismatchesByTripId,
     countByTripId: mocks.countOrdersByTripId,
+    countByTripIds: mocks.countOrdersByTripIds,
   },
 }));
 
@@ -102,7 +107,9 @@ vi.mock("../../../src/modules/trip/trip.repository.js", () => ({
     findAll: mocks.findAll,
     countAll: mocks.countAll,
     findById: mocks.findById,
+    findByIds: mocks.findTripsByIds,
     updateById: mocks.updateById,
+    setTotalOrders: mocks.setTotalOrders,
     deleteById: mocks.deleteById,
     findIdsByWarehouseId: mocks.findIdsByWarehouseId,
     getIdsByWarehouseId: mocks.getTripIdsByWarehouseId,
@@ -112,6 +119,7 @@ vi.mock("../../../src/modules/trip/trip.repository.js", () => ({
 vi.mock("../../../src/modules/trip/tripAuditLog.repository.js", () => ({
   default: {
     create: mocks.createAuditLog,
+    insertMany: mocks.insertManyAuditLogs,
     findByTripId: mocks.findAuditLogsByTripId,
     countByTripId: mocks.countAuditLogsByTripId,
   },
@@ -188,10 +196,17 @@ beforeEach(() => {
   mocks.findById.mockResolvedValue(plannedTrip);
   mocks.updateById.mockResolvedValue(plannedTrip);
   mocks.createAuditLog.mockResolvedValue({ _id: "audit-1" });
+  mocks.insertManyAuditLogs.mockResolvedValue([]);
   mocks.findAuditLogsByTripId.mockResolvedValue([]);
   mocks.countAuditLogsByTripId.mockResolvedValue(0);
   mocks.getUsageLogsByTripId.mockResolvedValue([]);
   mocks.createUsageLog.mockResolvedValue({ _id: "usage-1" });
+  mocks.findTripsByIds.mockResolvedValue([{ ...plannedTrip, totalOrder: 0 }]);
+  mocks.countOrdersByTripIds.mockResolvedValue([]);
+  mocks.setTotalOrders.mockResolvedValue({
+    matchedCount: 1,
+    modifiedCount: 1,
+  });
 });
 
 describe("tripService.create", () => {
@@ -414,5 +429,98 @@ describe("tripService.updateById and deleteById", () => {
       message: TRIP_MESSAGES.CANNOT_DELETE_IN_PROGRESS,
     });
     expect(mocks.countAllOrders).not.toHaveBeenCalled();
+  });
+});
+
+describe("tripService.getByIds", () => {
+  it("loads multiple trips in a single batch", async () => {
+    mocks.findTripsByIds.mockResolvedValue([
+      { _id: "trip-1", tripCode: "TRIP-1" },
+      { _id: "trip-2", tripCode: "TRIP-2" },
+    ]);
+
+    const result = await tripService.getByIds(
+      ["trip-1", "trip-2", "trip-1"],
+      transaction,
+    );
+
+    expect(mocks.findTripsByIds).toHaveBeenCalledWith(
+      ["trip-1", "trip-2"],
+      transaction,
+    );
+    expect(result).toHaveLength(2);
+  });
+
+  it("throws 404 when any requested trip is missing", async () => {
+    mocks.findTripsByIds.mockResolvedValue([{ _id: "trip-1" }]);
+
+    await expect(
+      tripService.getByIds(["trip-1", "trip-2"], transaction),
+    ).rejects.toMatchObject({
+      statusCode: 404,
+      message: TRIP_MESSAGES.NOT_FOUND,
+    });
+  });
+});
+
+describe("tripService.syncTotalOrders", () => {
+  it("updates all trip totals at once and audits only changed trips", async () => {
+    mocks.findTripsByIds.mockResolvedValue([
+      { _id: "trip-1", tripCode: "TRIP-1", totalOrder: 1 },
+      { _id: "trip-2", tripCode: "TRIP-2", totalOrder: 2 },
+    ]);
+    mocks.countOrdersByTripIds.mockResolvedValue([
+      { _id: "trip-1", count: 3 },
+      { _id: "trip-2", count: 2 },
+    ]);
+
+    const result = await tripService.syncTotalOrders(
+      ["trip-1", "trip-2"],
+      transaction,
+    );
+
+    expect(result).toBe(2);
+    expect(mocks.countOrdersByTripIds).toHaveBeenCalledWith(
+      ["trip-1", "trip-2"],
+      transaction,
+    );
+    expect(mocks.setTotalOrders).toHaveBeenCalledWith(
+      [
+        {
+          updateOne: {
+            filter: { _id: "trip-1" },
+            update: { $set: { totalOrder: 3 } },
+          },
+        },
+        {
+          updateOne: {
+            filter: { _id: "trip-2" },
+            update: { $set: { totalOrder: 2 } },
+          },
+        },
+      ],
+      transaction,
+    );
+    expect(mocks.insertManyAuditLogs).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          tripId: "trip-1",
+          action: "updated",
+          changes: [{ field: "totalOrder", oldValue: 1, newValue: 3 }],
+        }),
+      ],
+      transaction,
+    );
+  });
+
+  it("throws 404 when a trip no longer exists", async () => {
+    mocks.findTripsByIds.mockResolvedValue([{ _id: "trip-1", totalOrder: 0 }]);
+
+    await expect(
+      tripService.syncTotalOrders(["trip-1", "trip-2"], transaction),
+    ).rejects.toMatchObject({
+      statusCode: 404,
+      message: TRIP_MESSAGES.NOT_FOUND,
+    });
   });
 });
