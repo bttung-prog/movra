@@ -63,7 +63,6 @@ vi.mock("../../../src/modules/trip/tripAuditLog.repository.js", () => ({
 vi.mock("../../../src/modules/trip/trip.access.js", () => ({
   default: {
     assertTripWarehouseAccess: mocks.assertTripWarehouseAccess,
-    getActorId: (user) => user?.userId || user?._id || null,
   },
 }));
 
@@ -350,6 +349,31 @@ describe("tripTrackingLogService", () => {
         expect.anything(),
       );
     });
+  });
+
+  it("accepts the assigned driver when driver.userId is populated", async () => {
+    mocks.findTripById.mockResolvedValue({
+      ...plannedTrip,
+      status: "in_progress",
+    });
+    mocks.getLatestByTripId.mockResolvedValue({ status: "departed" });
+    mocks.getDriverById.mockResolvedValue({
+      _id: "driver-1",
+      userId: { _id: "user-driver-1" },
+      status: "active",
+    });
+    mocks.createTrackingLog.mockResolvedValue({
+      _id: "log-driver",
+      status: "in_progress",
+    });
+
+    await expect(
+      tripTrackingLogService.addTrackingLog(
+        "trip-1",
+        { status: "in_progress" },
+        { role: ROLES.DRIVER, userId: "user-driver-1" },
+      ),
+    ).resolves.toEqual({ _id: "log-driver", status: "in_progress" });
   });
 
   describe("getTrackingLogsByTripId", () => {

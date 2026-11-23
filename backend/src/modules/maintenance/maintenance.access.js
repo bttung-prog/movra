@@ -2,12 +2,13 @@ import { ROLES } from "../../constants/roles.js";
 import { MAINTENANCE_MESSAGES } from "../../constants/messages.js";
 
 import { ApiError } from "../../utils/ApiError.js";
+import { getActorUserId } from "../../utils/actor.util.js";
 
 import vehicleService from "../vehicle/vehicle.service.js";
 import driverService from "../driver/driver.service.js";
 
 const getDriverVehicleIds = async (user) => {
-  const driver = await driverService.getByUserId(user?.userId || user?._id);
+  const driver = await driverService.getByUserId(getActorUserId(user));
   const vehicleId = driver.currentVehicleId?._id || driver.currentVehicleId;
   return vehicleId ? [vehicleId] : [];
 };

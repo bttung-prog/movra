@@ -9,6 +9,7 @@ import { VEHICLE_STATUSES } from "../../constants/vehicleStatuses.js";
 
 import { ApiError } from "../../utils/ApiError.js";
 import { checkWarehouseAccess } from "../../utils/checkWarehouseAccess.js";
+import { getActorUserId } from "../../utils/actor.util.js";
 
 import driverService from "../driver/driver.service.js";
 import tripService from "../trip/trip.service.js";
@@ -341,7 +342,7 @@ const updateOdometer = async (
   user = null,
 ) => {
   if (user && user.role === ROLES.DRIVER) {
-    const driver = await driverService.getByUserId(user._id);
+    const driver = await driverService.getByUserId(getActorUserId(user));
 
     const currentVehicleId = driver.currentVehicleId?._id?.toString();
     if (currentVehicleId !== vehicleId.toString()) {

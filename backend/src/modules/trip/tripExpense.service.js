@@ -2,6 +2,10 @@ import { ROLES } from "../../constants/roles.js";
 import { COMMON_MESSAGES, TRIP_MESSAGES } from "../../constants/messages.js";
 
 import { ApiError } from "../../utils/ApiError.js";
+import {
+  getActorUserIdString,
+  getReferenceIdString,
+} from "../../utils/actor.util.js";
 
 import driverService from "../driver/driver.service.js";
 import userService from "../user/user.service.js";
@@ -36,7 +40,7 @@ const addExpense = async (
   if (user && user.role === ROLES.DRIVER) {
     const driver = await driverService.getById(trip.driverId?._id);
 
-    if (driver.userId?.toString() !== user._id?.toString()) {
+    if (getReferenceIdString(driver.userId) !== getActorUserIdString(user)) {
       throw new ApiError(403, TRIP_MESSAGES.NOT_ASSIGNED_DRIVER);
     }
   }
@@ -122,8 +126,10 @@ const deleteExpenseById = async (expenseId, user = null) => {
   await ensureTripAccess(existingExpense.tripId, false, user);
 
   if (user && user.role === ROLES.DRIVER) {
-    const creatorId = existingExpense.createdBy?._id?.toString();
-    if (creatorId !== user._id?.toString()) {
+    if (
+      getReferenceIdString(existingExpense.createdBy) !==
+      getActorUserIdString(user)
+    ) {
       throw new ApiError(403, TRIP_MESSAGES.EXPENSE_DELETE_OWN_ONLY);
     }
   }

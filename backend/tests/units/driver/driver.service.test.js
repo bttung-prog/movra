@@ -230,6 +230,25 @@ describe("driverService.getAll", () => {
   });
 });
 
+describe("driverService.getByUserId", () => {
+  it("rejects a missing user id without querying the repository", async () => {
+    await expect(driverService.getByUserId(undefined)).rejects.toMatchObject({
+      statusCode: 404,
+      message: DRIVER_MESSAGES.NOT_FOUND,
+    });
+    expect(mocks.findByUserId).not.toHaveBeenCalled();
+  });
+
+  it("returns the driver profile for a valid user id", async () => {
+    mocks.findByUserId.mockResolvedValue(existingDriver);
+
+    await expect(driverService.getByUserId("user-1")).resolves.toEqual(
+      existingDriver,
+    );
+    expect(mocks.findByUserId).toHaveBeenCalledWith("user-1", null);
+  });
+});
+
 describe("driverService.getById and updateById", () => {
   it("returns not found when the driver does not exist", async () => {
     mocks.findById.mockResolvedValue(null);

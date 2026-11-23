@@ -13,6 +13,10 @@ import {
 } from "../../constants/messages.js";
 
 import { ApiError } from "../../utils/ApiError.js";
+import {
+  getActorUserId,
+  getActorUserIdString,
+} from "../../utils/actor.util.js";
 import { generateCode } from "../../utils/generateCode.js";
 import { checkWarehouseAccess } from "../../utils/checkWarehouseAccess.js";
 import { escapeRegex } from "../../utils/regexUtils.js";
@@ -402,7 +406,7 @@ const cancel = async (issueId, { note } = {}, currentUser = null) => {
   const warehouse = await warehouseService.getById(issueWarehouseId, false);
 
   if (currentUser && currentUser.role === ROLES.WAREHOUSE_STAFF) {
-    const currentUserId = (currentUser.userId || currentUser._id)?.toString();
+    const currentUserId = getActorUserIdString(currentUser);
 
     const issuedBy = existingIssue.issuedBy?._id
       ? existingIssue.issuedBy._id.toString()
@@ -502,8 +506,7 @@ const cancel = async (issueId, { note } = {}, currentUser = null) => {
       status: "stored",
       notes: `Hủy phiếu xuất kho ${existingIssue.issueCode}`,
       changedBy:
-        currentUser?.userId ||
-        currentUser?._id ||
+        getActorUserId(currentUser) ||
         existingIssue.issuedBy?._id ||
         existingIssue.issuedBy,
       session,

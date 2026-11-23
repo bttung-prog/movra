@@ -42,12 +42,7 @@ const create = async (
   });
 };
 
-const getAll = async ({
-  filter = {},
-  page = 1,
-  limit = 10,
-  user = null,
-}) => {
+const getAll = async ({ filter = {}, page = 1, limit = 10, user = null }) => {
   const skip = (page - 1) * limit;
   const finalFilter = await maintenanceAccess.scopeVehicleFilter(
     { deletedAt: null, ...filter },
@@ -74,11 +69,7 @@ const getAll = async ({
   };
 };
 
-const getById = async (
-  scheduleId,
-  requireNotDeleted = true,
-  user = null,
-) => {
+const getById = async (scheduleId, requireNotDeleted = true, user = null) => {
   const schedule = await maintenanceScheduleRepository.findById(scheduleId);
 
   if (!schedule) {

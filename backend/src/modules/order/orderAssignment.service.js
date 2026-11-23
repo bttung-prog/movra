@@ -14,6 +14,7 @@ import {
 import { CM3_PER_M3 } from "../../constants/pricingUnits.js";
 
 import { ApiError } from "../../utils/ApiError.js";
+import { getActorUserId } from "../../utils/actor.util.js";
 
 import tripService from "../trip/trip.service.js";
 
@@ -384,7 +385,7 @@ const assignOrdersToTrip = async ({ tripId, orderIds = [] }, user = null) => {
           ? ORDER_STATUSES.STORED
           : ORDER_STATUSES.DRIVER_ASSIGNED,
       notes: `Đơn hàng được gán vào chuyến ${currentTrip.tripCode || tripId}`,
-      changedBy: user?.userId || user?._id,
+      changedBy: getActorUserId(user),
     }));
     await orderTrackingLogRepository.insertMany(trackingLogs, session);
 
@@ -573,7 +574,7 @@ const handleOrdersOnTripCompletion = async (
 ) => {
   const tripId = trip._id || trip;
   const tripType = trip.type;
-  const actorId = user?.userId || user?._id;
+  const actorId = getActorUserId(user);
 
   if (tripType === TRIP_TYPES.PICKUP) {
     const failedOrders = await orderRepository.findRawByFilter(
@@ -669,7 +670,7 @@ const handleOrdersOnTripCancellation = async (
 ) => {
   const tripId = trip._id || trip;
   const tripType = trip.type;
-  const actorId = user?.userId || user?._id;
+  const actorId = getActorUserId(user);
 
   const orders = await orderRepository.findRawByFilter(
     { tripId, deletedAt: null },

@@ -6,6 +6,7 @@ import { VEHICLE_STATUSES } from "../../constants/vehicleStatuses.js";
 
 import { ApiError } from "../../utils/ApiError.js";
 import { checkWarehouseAccess } from "../../utils/checkWarehouseAccess.js";
+import { getActorUserId } from "../../utils/actor.util.js";
 
 import driverService from "../driver/driver.service.js";
 import tripService from "../trip/trip.service.js";
@@ -16,7 +17,7 @@ import vehicleUsageLogRepository from "./vehicleUsageLog.repository.js";
 
 const scopeUsageLogFilter = async (filter, user) => {
   if (user?.role === ROLES.DRIVER) {
-    const driver = await driverService.getByUserId(user._id);
+    const driver = await driverService.getByUserId(getActorUserId(user));
     return { $and: [filter, { driverId: driver._id }] };
   }
 
@@ -199,7 +200,7 @@ const getById = async (logId, user = null) => {
   }
 
   if (user?.role === ROLES.DRIVER) {
-    const driver = await driverService.getByUserId(user._id);
+    const driver = await driverService.getByUserId(getActorUserId(user));
     const logDriverId = log.driverId?._id || log.driverId;
     if (logDriverId?.toString() !== driver._id.toString()) {
       throw new ApiError(403, VEHICLE_MESSAGES.LOG_ACCESS_DENIED);
@@ -259,7 +260,7 @@ const getByDriverId = async ({
 } = {}) => {
   let currentDriver = null;
   if (user?.role === ROLES.DRIVER) {
-    currentDriver = await driverService.getByUserId(user._id);
+    currentDriver = await driverService.getByUserId(getActorUserId(user));
     if (currentDriver._id.toString() !== driverId.toString()) {
       throw new ApiError(403, VEHICLE_MESSAGES.LOG_ACCESS_DENIED);
     }

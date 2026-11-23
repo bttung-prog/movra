@@ -65,7 +65,6 @@ vi.mock("../../../src/modules/trip/trip.access.js", () => ({
   default: {
     assertTripWarehouseAccess: mocks.assertTripWarehouseAccess,
     validateRouteOriginWarehouse: mocks.validateRouteOriginWarehouse,
-    getActorId: (user) => user?.userId || user?._id || null,
   },
 }));
 
