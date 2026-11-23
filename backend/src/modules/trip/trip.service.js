@@ -259,6 +259,29 @@ const getById = async (
   return validatedTrip;
 };
 
+const getByIds = async (tripIds = [], session = null) => {
+  const uniqueTripIds = [
+    ...new Set(
+      (tripIds || []).map((tripId) => tripId?.toString()).filter(Boolean),
+    ),
+  ];
+
+  if (uniqueTripIds.length === 0) {
+    return [];
+  }
+
+  const trips = await tripRepository.findByIds(uniqueTripIds, session);
+  if (trips.length !== uniqueTripIds.length) {
+    throw new ApiError(404, TRIP_MESSAGES.NOT_FOUND);
+  }
+
+  return trips;
+};
+
+const assertTripAccess = async (trip, user = null) => {
+  await tripAccess.assertTripWarehouseAccess(trip, user);
+};
+
 const getByCode = async (tripCode, user = null) => {
   const trip = await tripRepository.findByCode(tripCode);
   const validatedTrip = validateTrip(trip, true);
@@ -327,6 +350,74 @@ const syncTotalOrder = async (tripId, session = null) => {
     }
 
     return updatedTrip;
+  };
+
+  if (session) return synchronize(session);
+
+  const localSession = await mongoose.startSession();
+  try {
+    return await localSession.withTransaction(() => synchronize(localSession));
+  } finally {
+    localSession.endSession();
+  }
+};
+
+const syncTotalOrders = async (tripIds = [], session = null) => {
+  const uniqueTripIds = [
+    ...new Set(
+      (tripIds || []).map((tripId) => tripId?.toString()).filter(Boolean),
+    ),
+  ];
+
+  if (uniqueTripIds.length === 0) {
+    return [];
+  }
+
+  const synchronize = async (activeSession) => {
+    const trips = await tripRepository.findByIds(uniqueTripIds, activeSession);
+    if (trips.length !== uniqueTripIds.length) {
+      throw new ApiError(404, TRIP_MESSAGES.NOT_FOUND);
+    }
+
+    const counts = await orderAssignmentService.countByTripIds(
+      uniqueTripIds,
+      activeSession,
+    );
+    const totalOrderByTripId = new Map(
+      counts.map((item) => [item._id.toString(), item.count]),
+    );
+
+    const operations = [];
+    const auditLogs = [];
+
+    for (const trip of trips) {
+      const totalOrder = totalOrderByTripId.get(trip._id.toString()) || 0;
+      operations.push({
+        updateOne: {
+          filter: { _id: trip._id },
+          update: { $set: { totalOrder } },
+        },
+      });
+
+      const changes = tripAudit.getAuditChanges(trip, { ...trip, totalOrder }, [
+        "totalOrder",
+      ]);
+      if (changes.length > 0) {
+        auditLogs.push({
+          tripId: trip._id,
+          action: "updated",
+          performedBy: null,
+          changes,
+        });
+      }
+    }
+
+    await tripRepository.setTotalOrders(operations, activeSession);
+    if (auditLogs.length > 0) {
+      await tripAuditLogRepository.insertMany(auditLogs, activeSession);
+    }
+
+    return operations.length;
   };
 
   if (session) return synchronize(session);
@@ -596,6 +687,8 @@ export default {
   create,
   getAll,
   getById,
+  getByIds,
+  assertTripAccess,
   getByCode,
   countAll,
   countActiveByDriverId,
@@ -603,6 +696,7 @@ export default {
   findActiveByVehicleId,
   getIdsByWarehouseId,
   syncTotalOrder,
+  syncTotalOrders,
   updateById,
   deleteById,
   restoreById,

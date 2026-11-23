@@ -50,16 +50,21 @@ const assertDriverAssignedToTrip = (trip, user) => {
   }
 };
 
-const assertOrderWarehouseAccess = async (order, user) => {
+const assertOrderWarehouseAccess = async (order, user, options = {}) => {
+  const tripsById = options?.tripsById || null;
+  const getPreloadedTrip = (tripId) => tripsById?.get?.(String(tripId)) || null;
+
   if (user?.role === ROLES.DRIVER) {
     const tripId = order.tripId?._id || order.tripId;
     if (!tripId) {
       throw new ApiError(403, ORDER_MESSAGES.NOT_DRIVER_OF_TRIP);
     }
 
-    const trip = order.tripId?.driverId
-      ? order.tripId
-      : await tripService.getById(tripId, false, user);
+    const trip =
+      getPreloadedTrip(tripId) ||
+      (order.tripId?.driverId
+        ? order.tripId
+        : await tripService.getById(tripId, false, user));
     assertDriverAssignedToTrip(trip, user);
     return;
   }
@@ -85,7 +90,7 @@ const assertOrderWarehouseAccess = async (order, user) => {
     }
 
     const tripId = order.tripId?._id || order.tripId;
-    if (tripId && isOriginMatch) {
+    if (tripId && isOriginMatch && !getPreloadedTrip(tripId)) {
       await tripService.getById(tripId, false, user);
     }
 

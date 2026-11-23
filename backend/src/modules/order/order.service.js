@@ -1006,32 +1006,39 @@ const applyInvoicePayment = async ({
   });
 
   let remainingPaidAmount = Math.max(0, Number(paidAmount) || 0);
-  let updatedCount = 0;
 
-  for (const order of sortedOrders) {
+  const bulkOps = sortedOrders.map((order) => {
     const shippingFee = Number(order.shippingFee || 0);
     const allocation = Math.min(shippingFee, remainingPaidAmount);
     remainingPaidAmount -= allocation;
     const isFullyPaid = allocation >= shippingFee;
 
-    await orderRepository.updateById(
-      order._id,
-      {
-        shippingFeePaidAmount: allocation,
-        shippingFeePaid: isFullyPaid,
-        paymentStatus: isFullyPaid
-          ? PAYMENT_STATUSES.COMPLETED
-          : PAYMENT_STATUSES.PENDING,
-        ...(paymentMethod ? { paymentMethod } : {}),
-        ...(paymentTime ? { paymentTime } : {}),
+    return {
+      updateOne: {
+        filter: { _id: order._id },
+        update: {
+          $set: {
+            shippingFeePaidAmount: allocation,
+            shippingFeePaid: isFullyPaid,
+            paymentStatus: isFullyPaid
+              ? PAYMENT_STATUSES.COMPLETED
+              : PAYMENT_STATUSES.PENDING,
+            ...(paymentMethod ? { paymentMethod } : {}),
+            ...(paymentTime ? { paymentTime } : {}),
+          },
+        },
       },
-      session,
-    );
+    };
+  });
 
-    updatedCount += 1;
+  if (bulkOps.length > 0) {
+    const result = await orderRepository.bulkWrite(bulkOps, session);
+    if (result.matchedCount !== bulkOps.length) {
+      throw new ApiError(409, ORDER_MESSAGES.ORDER_ASSIGNMENT_CHANGED);
+    }
   }
 
-  return updatedCount;
+  return sortedOrders.length;
 };
 
 export default {

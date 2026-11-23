@@ -17,6 +17,14 @@ const create = (logData, session = null) => {
   );
 };
 
+const insertMany = (logs = [], session = null) => {
+  if (!Array.isArray(logs) || logs.length === 0) {
+    return Promise.resolve([]);
+  }
+
+  return OrderTrackingLog.insertMany(logs, { session });
+};
+
 const findByOrderId = (
   orderId,
   { skip = 0, limit = 20, sort = { createdAt: -1 } } = {},
@@ -54,6 +62,7 @@ const getLatestByOrderId = (orderId) => {
 
 export default {
   create,
+  insertMany,
   findByOrderId,
   findPublicByOrderId,
   countByOrderId,

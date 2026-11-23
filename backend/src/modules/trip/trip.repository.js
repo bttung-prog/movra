@@ -105,6 +105,18 @@ const findByCode = (tripCode) => {
   return Trip.findOne({ tripCode }).populate(TRIP_POPULATE).lean();
 };
 
+const findByIds = (tripIds = [], session = null) => {
+  if (!Array.isArray(tripIds) || tripIds.length === 0) {
+    return Promise.resolve([]);
+  }
+
+  const query = Trip.find({ _id: { $in: tripIds } })
+    .select("tripCode totalOrder status type warehouseId driverId vehicleId")
+    .populate({ path: "driverId", select: "warehouseId userId" });
+  if (session) query.session(session);
+  return query.lean();
+};
+
 const findOverlappingTrip = ({
   vehicleId,
   driverId,
@@ -172,6 +184,14 @@ const setTotalOrder = (tripId, totalOrder, session = null) => {
     { totalOrder },
     { new: true, runValidators: true, session },
   ).lean();
+};
+
+const setTotalOrders = (operations = [], session = null) => {
+  if (!Array.isArray(operations) || operations.length === 0) {
+    return Promise.resolve({ matchedCount: 0, modifiedCount: 0 });
+  }
+
+  return Trip.bulkWrite(operations, { session });
 };
 
 const deleteById = (tripId, session = null) => {
@@ -278,10 +298,12 @@ export default {
   findIdsByWarehouseId,
   findById,
   findByCode,
+  findByIds,
   findOverlappingTrip,
   lockScheduleResources,
   updateById,
   setTotalOrder,
+  setTotalOrders,
   deleteById,
   restoreById,
   countByStatus,
