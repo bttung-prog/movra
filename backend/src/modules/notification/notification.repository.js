@@ -4,6 +4,14 @@ const create = (data, session = null) => {
   return Notification.create([data], { session }).then((docs) => docs[0]);
 };
 
+const insertMany = (docs = [], session = null) => {
+  if (!Array.isArray(docs) || docs.length === 0) {
+    return Promise.resolve([]);
+  }
+
+  return Notification.insertMany(docs, { session });
+};
+
 const findById = (id) => {
   return Notification.findById(id).lean();
 };
@@ -38,6 +46,7 @@ const markAllAsRead = (userId) => {
 
 export default {
   create,
+  insertMany,
   findById,
   findAll,
   countAll,

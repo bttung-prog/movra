@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   create: vi.fn(),
+  insertMany: vi.fn(),
   findAll: vi.fn(),
   countAll: vi.fn(),
   findById: vi.fn(),
@@ -12,6 +13,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("../../../src/modules/notification/notification.repository.js", () => ({
   default: {
     create: mocks.create,
+    insertMany: mocks.insertMany,
     findAll: mocks.findAll,
     countAll: mocks.countAll,
     findById: mocks.findById,
@@ -37,6 +39,7 @@ const notification = {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.create.mockResolvedValue(notification);
+  mocks.insertMany.mockResolvedValue([]);
   mocks.findAll.mockResolvedValue([notification]);
   mocks.countAll.mockResolvedValue(12);
   mocks.findById.mockResolvedValue(notification);
@@ -220,5 +223,56 @@ describe("notificationService.markAllAsRead", () => {
 
     expect(mocks.markAllAsRead).toHaveBeenCalledWith(userId);
     expect(result).toEqual({ modifiedCount: 3 });
+  });
+});
+
+describe("notificationService.createMany", () => {
+  it("filters invalid items and inserts the rest in one batch", async () => {
+    const docs = [
+      {
+        userId,
+        title: "Overdue",
+        message: "Invoice overdue",
+        type: "PAYMENT",
+        data: { invoiceId: "invoice-1" },
+      },
+      {
+        userId: "user-2",
+        title: "Default type",
+        message: "Hello",
+      },
+    ];
+    mocks.insertMany.mockResolvedValue(docs);
+
+    const result = await notificationService.createMany([
+      docs[0],
+      docs[1],
+      { userId: null, title: "skip", message: "skip" },
+      { userId: "user-3", title: "skip" },
+    ]);
+
+    expect(mocks.insertMany).toHaveBeenCalledWith(
+      [
+        docs[0],
+        {
+          userId: "user-2",
+          title: "Default type",
+          message: "Hello",
+          type: "ORDER_UPDATE",
+          data: {},
+        },
+      ],
+      null,
+    );
+    expect(result).toEqual(docs);
+  });
+
+  it("does not hit the repository when there is nothing valid to insert", async () => {
+    const result = await notificationService.createMany([
+      { title: "missing user", message: "x" },
+    ]);
+
+    expect(result).toEqual([]);
+    expect(mocks.insertMany).not.toHaveBeenCalled();
   });
 });
