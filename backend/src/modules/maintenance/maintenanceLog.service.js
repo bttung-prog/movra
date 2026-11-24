@@ -10,6 +10,7 @@ import { TRIP_STATUSES } from "../../constants/tripStatuses.js";
 import { MAINTENANCE_MESSAGES } from "../../constants/messages.js";
 
 import { ApiError } from "../../utils/ApiError.js";
+import { getReferenceIdString } from "../../utils/actor.util.js";
 
 import vehicleService from "../vehicle/vehicle.service.js";
 import tripService from "../trip/trip.service.js";
@@ -51,11 +52,12 @@ const notifyDispatchersVehicleMaintenance = async ({
     message = `Phương tiện ${vehicle.plateNumber} đã hoàn tất bảo dưỡng và sẵn sàng hoạt động.`;
   }
 
-  await Promise.all(
-    dispatchers.map((disp) => {
-      const userId = disp.userId?._id || disp.userId;
-      if (!userId) return Promise.resolve();
-      return notificationService.create({
+  const notifications = dispatchers
+    .map((disp) => {
+      const userId = getReferenceIdString(disp.userId);
+      if (!userId) return null;
+
+      return {
         userId,
         title,
         message,
@@ -64,10 +66,13 @@ const notifyDispatchersVehicleMaintenance = async ({
           vehicleId: vehicle._id,
           tripId: plannedTrips[0]?._id || null,
         },
-        session,
-      });
-    }),
-  );
+      };
+    })
+    .filter(Boolean);
+
+  if (notifications.length === 0) return;
+
+  await notificationService.createMany(notifications, session);
 };
 
 const handleMaintenanceInProgress = async (targetVehicleId, session) => {
