@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ROLES } from "../../../src/constants/roles.js";
-import { TRIP_MESSAGES } from "../../../src/constants/messages.js";
+import {
+  TRIP_MESSAGES,
+  WAREHOUSE_MESSAGES,
+} from "../../../src/constants/messages.js";
 
 const mocks = vi.hoisted(() => ({
   getDriverByUserId: vi.fn(),
@@ -69,5 +72,100 @@ describe("tripAccess driver identity", () => {
     expect(filter).toEqual({
       $and: [{ status: "planned" }, { driverId: "driver-1" }],
     });
+  });
+
+  it("uses a populated driver userId without querying the driver service", async () => {
+    await expect(
+      tripAccess.assertTripWarehouseAccess(
+        {
+          _id: "trip-1",
+          driverId: { _id: "driver-1", userId: { _id: "user-1" } },
+        },
+        driverUser,
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(mocks.getDriverByUserId).not.toHaveBeenCalled();
+  });
+
+  it("rejects a populated driver userId that does not match the token", async () => {
+    await expect(
+      tripAccess.assertTripWarehouseAccess(
+        {
+          _id: "trip-1",
+          driverId: { _id: "driver-1", userId: { _id: "user-2" } },
+        },
+        driverUser,
+      ),
+    ).rejects.toMatchObject({
+      statusCode: 403,
+      message: TRIP_MESSAGES.NOT_ASSIGNED_DRIVER,
+    });
+    expect(mocks.getDriverByUserId).not.toHaveBeenCalled();
+  });
+});
+
+describe("tripAccess dispatcher vehicle scope", () => {
+  const dispatcherUser = {
+    role: ROLES.DISPATCHER,
+    warehouseId: "warehouse-1",
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getVehicleById.mockResolvedValue({
+      _id: "vehicle-1",
+      warehouseId: "warehouse-1",
+    });
+  });
+
+  it("uses the populated vehicle warehouse without querying the vehicle service", async () => {
+    await expect(
+      tripAccess.assertTripWarehouseAccess(
+        {
+          _id: "trip-1",
+          warehouseId: "warehouse-1",
+          vehicleId: { _id: "vehicle-1", warehouseId: "warehouse-1" },
+        },
+        dispatcherUser,
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(mocks.getVehicleById).not.toHaveBeenCalled();
+  });
+
+  it("rejects a populated vehicle belonging to another warehouse", async () => {
+    await expect(
+      tripAccess.assertTripWarehouseAccess(
+        {
+          _id: "trip-1",
+          warehouseId: "warehouse-1",
+          vehicleId: { _id: "vehicle-1", warehouseId: "warehouse-2" },
+        },
+        dispatcherUser,
+      ),
+    ).rejects.toMatchObject({
+      statusCode: 403,
+      message: WAREHOUSE_MESSAGES.ACCESS_DENIED,
+    });
+    expect(mocks.getVehicleById).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the vehicle service when the vehicle is not populated", async () => {
+    await expect(
+      tripAccess.assertTripWarehouseAccess(
+        {
+          _id: "trip-1",
+          warehouseId: "warehouse-1",
+          vehicleId: "vehicle-1",
+        },
+        dispatcherUser,
+      ),
+    ).resolves.toBeUndefined();
+
+    expect(mocks.getVehicleById).toHaveBeenCalledWith(
+      "vehicle-1",
+      dispatcherUser,
+    );
   });
 });
