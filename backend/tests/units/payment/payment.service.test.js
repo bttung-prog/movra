@@ -35,16 +35,12 @@ const mocks = vi.hoisted(() => ({
   reservePendingPayment: vi.fn(),
   releasePendingPayment: vi.fn(),
   updatePaymentProgress: vi.fn(),
-  getInvoiceIdsByWarehouseId: vi.fn(),
   getOrderById: vi.fn(),
   findOrdersForRemittance: vi.fn(),
-  countAccessibleOrdersByWarehouse: vi.fn(),
   bulkUpdateOrders: vi.fn(),
-  getOrderIdsByWarehouseId: vi.fn(),
   updateOrderById: vi.fn(),
   applyInvoicePayment: vi.fn(),
   getTripById: vi.fn(),
-  getTripIdsByWarehouseId: vi.fn(),
   getCustomerById: vi.fn(),
   updateCustomerById: vi.fn(),
   debitWallet: vi.fn(),
@@ -84,7 +80,6 @@ vi.mock("../../../src/modules/invoice/invoice.service.js", () => ({
     reservePendingPayment: mocks.reservePendingPayment,
     releasePendingPayment: mocks.releasePendingPayment,
     updatePaymentProgress: mocks.updatePaymentProgress,
-    getIdsByWarehouseId: mocks.getInvoiceIdsByWarehouseId,
   },
 }));
 
@@ -93,9 +88,7 @@ vi.mock("../../../src/modules/order/order.service.js", () => ({
     getById: mocks.getOrderById,
     getOrdersForRemittance: mocks.findOrdersForRemittance,
     findOrdersForRemittance: mocks.findOrdersForRemittance,
-    countAccessibleOrdersByWarehouse: mocks.countAccessibleOrdersByWarehouse,
     bulkUpdateOrders: mocks.bulkUpdateOrders,
-    getIdsByWarehouseId: mocks.getOrderIdsByWarehouseId,
     updateById: mocks.updateOrderById,
     applyInvoicePayment: mocks.applyInvoicePayment,
   },
@@ -104,7 +97,6 @@ vi.mock("../../../src/modules/order/order.service.js", () => ({
 vi.mock("../../../src/modules/trip/trip.service.js", () => ({
   default: {
     getById: mocks.getTripById,
-    getIdsByWarehouseId: mocks.getTripIdsByWarehouseId,
   },
 }));
 
@@ -136,7 +128,6 @@ import {
   INVOICE_MESSAGES,
   ORDER_MESSAGES,
   PAYMENT_MESSAGES,
-  WAREHOUSE_MESSAGES,
 } from "../../../src/constants/messages.js";
 import { ROLES } from "../../../src/constants/roles.js";
 import paymentService from "../../../src/modules/payment/payment.service.js";
@@ -1291,58 +1282,5 @@ describe("paymentService multi-order invoices", () => {
         session: transaction,
       }),
     );
-  });
-});
-
-describe("paymentService.getById dispatcher access control", () => {
-  const dispatcherActor = {
-    role: ROLES.DISPATCHER,
-    userId: "dispatcher-1",
-    warehouseId: "warehouse-1",
-  };
-
-  it("allows dispatcher to access payment when all COD orders belong to their warehouse", async () => {
-    mocks.findById.mockResolvedValue({
-      _id: "payment-cod-1",
-      payerType: PAYER_TYPES.DRIVER,
-      codOrders: [
-        { orderId: "order-1", collectedAmount: 100 },
-        { orderId: "order-2", collectedAmount: 200 },
-      ],
-    });
-    mocks.countAccessibleOrdersByWarehouse.mockResolvedValue(2);
-
-    const payment = await paymentService.getById(
-      "payment-cod-1",
-      dispatcherActor,
-    );
-
-    expect(payment._id).toBe("payment-cod-1");
-    expect(mocks.countAccessibleOrdersByWarehouse).toHaveBeenCalledWith(
-      ["order-1", "order-2"],
-      "warehouse-1",
-    );
-    expect(mocks.getOrderById).not.toHaveBeenCalled();
-  });
-
-  it("rejects dispatcher when some COD orders do not belong to their warehouse", async () => {
-    mocks.findById.mockResolvedValue({
-      _id: "payment-cod-1",
-      payerType: PAYER_TYPES.DRIVER,
-      codOrders: [
-        { orderId: "order-1", collectedAmount: 100 },
-        { orderId: "order-2", collectedAmount: 200 },
-      ],
-    });
-    mocks.countAccessibleOrdersByWarehouse.mockResolvedValue(1);
-
-    await expect(
-      paymentService.getById("payment-cod-1", dispatcherActor),
-    ).rejects.toMatchObject({
-      statusCode: 403,
-      message: WAREHOUSE_MESSAGES.ACCESS_DENIED,
-    });
-
-    expect(mocks.getOrderById).not.toHaveBeenCalled();
   });
 });

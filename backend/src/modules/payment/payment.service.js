@@ -13,7 +13,6 @@ import {
   PAYMENT_MESSAGES,
   INVOICE_MESSAGES,
   ORDER_MESSAGES,
-  WAREHOUSE_MESSAGES,
 } from "../../constants/messages.js";
 import {
   WALLET_TRANSACTION_TYPES,
@@ -32,78 +31,6 @@ import customerService from "../customer/customer.service.js";
 import walletTransactionService from "../walletTransaction/walletTransaction.service.js";
 
 import paymentRepository from "./payment.repository.js";
-
-const assertPaymentWarehouseAccess = async (payment, actor) => {
-  if (actor?.role !== ROLES.DISPATCHER) return;
-
-  let hasScopedResource = false;
-  const invoiceId = payment.invoiceId?._id || payment.invoiceId;
-  const orderId = payment.orderId?._id || payment.orderId;
-  const tripId = payment.tripId?._id || payment.tripId;
-
-  if (invoiceId) {
-    await invoiceService.getById(invoiceId, actor);
-    hasScopedResource = true;
-  }
-
-  if (orderId) {
-    await orderService.getById(orderId, true, actor);
-    hasScopedResource = true;
-  }
-
-  if (tripId) {
-    await tripService.getById(tripId, false, actor);
-    hasScopedResource = true;
-  }
-
-  const codOrderIds = (payment.codOrders || [])
-    .map((item) => (item.orderId?._id || item.orderId)?.toString())
-    .filter(Boolean);
-
-  if (codOrderIds.length > 0) {
-    const uniqueCodOrderIds = Array.from(new Set(codOrderIds));
-    const accessibleCount = await orderService.countAccessibleOrdersByWarehouse(
-      uniqueCodOrderIds,
-      actor.warehouseId,
-    );
-    if (accessibleCount !== uniqueCodOrderIds.length) {
-      throw new ApiError(403, WAREHOUSE_MESSAGES.ACCESS_DENIED);
-    }
-    hasScopedResource = true;
-  }
-
-  if (!hasScopedResource) {
-    throw new ApiError(403, PAYMENT_MESSAGES.ACCESS_DENIED);
-  }
-};
-
-const scopePaymentFilter = async (filter, actor) => {
-  if (actor?.role !== ROLES.DISPATCHER) return filter;
-
-  const [orderIds, tripIds, invoiceIds] = await Promise.all([
-    orderService.getIdsByWarehouseId(actor.warehouseId),
-    tripService.getIdsByWarehouseId(actor.warehouseId),
-    invoiceService.getIdsByWarehouseId(actor.warehouseId),
-  ]);
-
-  return {
-    $and: [
-      filter,
-      { $or: [{ orderId: null }, { orderId: { $in: orderIds } }] },
-      { $or: [{ invoiceId: null }, { invoiceId: { $in: invoiceIds } }] },
-      { $or: [{ tripId: null }, { tripId: { $in: tripIds } }] },
-      { codOrders: { $not: { $elemMatch: { orderId: { $nin: orderIds } } } } },
-      {
-        $or: [
-          { orderId: { $in: orderIds } },
-          { invoiceId: { $in: invoiceIds } },
-          { tripId: { $in: tripIds } },
-          { "codOrders.orderId": { $in: orderIds } },
-        ],
-      },
-    ],
-  };
-};
 
 const assertCustomerOwnsResource = (resourceCustomerId, actor) => {
   if (actor?.role !== ROLES.CUSTOMER) {
@@ -458,15 +385,6 @@ const create = async (payload, actor) => {
 
   customerId = customerId || actor?.customerId || null;
 
-  if (actor?.role === ROLES.DISPATCHER) {
-    if (!finalOrderId && !linkedInvoiceId) {
-      throw new ApiError(403, PAYMENT_MESSAGES.ACCESS_DENIED);
-    }
-    if (finalOrderId) {
-      await orderService.getById(finalOrderId, true, actor);
-    }
-  }
-
   if (paymentMethod === PAYMENT_METHODS.WALLET_BALANCE) {
     if (!customerId) {
       throw new ApiError(400, PAYMENT_MESSAGES.CUSTOMER_REQUIRED_FOR_WALLET);
@@ -622,25 +540,6 @@ const createDriverRemittance = async (payload, driverUser, actor = null) => {
 
   if (orderDocs.length !== uniqueOrderIds.length) {
     throw new ApiError(404, ORDER_MESSAGES.NOT_FOUND);
-  }
-
-  if (actor?.role === ROLES.DISPATCHER) {
-    const userWarehouseId = actor.warehouseId?.toString();
-    const isAllAccessible = orderDocs.every((order) => {
-      const orderWarehouseId = (
-        order.warehouseId?._id || order.warehouseId
-      )?.toString();
-      const orderDestWarehouseId = (
-        order.destinationWarehouseId?._id || order.destinationWarehouseId
-      )?.toString();
-      return (
-        (orderWarehouseId && orderWarehouseId === userWarehouseId) ||
-        (orderDestWarehouseId && orderDestWarehouseId === userWarehouseId)
-      );
-    });
-    if (!isAllAccessible) {
-      throw new ApiError(403, WAREHOUSE_MESSAGES.ACCESS_DENIED);
-    }
   }
 
   const codOrders = [];
@@ -1274,7 +1173,7 @@ const getAll = async ({
   const limitNumber = Math.max(1, parseInt(limit, 10) || 10);
   const skip = (pageNumber - 1) * limitNumber;
 
-  const queryFilter = await scopePaymentFilter(filter, actor);
+  const queryFilter = filter;
 
   const [payments, total] = await Promise.all([
     paymentRepository.findAll({
@@ -1302,8 +1201,6 @@ const getById = async (id, actor = null) => {
   if (!payment) {
     throw new ApiError(404, PAYMENT_MESSAGES.NOT_FOUND);
   }
-
-  await assertPaymentWarehouseAccess(payment, actor);
 
   if (actor?.role === ROLES.CUSTOMER) {
     const paymentCustomerId = (
@@ -1336,8 +1233,6 @@ const getByCode = async (paymentCode, actor = null) => {
     throw new ApiError(404, PAYMENT_MESSAGES.NOT_FOUND);
   }
 
-  await assertPaymentWarehouseAccess(payment, actor);
-
   if (actor?.role === ROLES.CUSTOMER) {
     const paymentCustomerId = (
       payment.customerId?._id || payment.customerId
@@ -1363,9 +1258,8 @@ const getByCode = async (paymentCode, actor = null) => {
   return payment;
 };
 
-const getStats = async (filter = {}, actor = null) => {
-  const queryFilter = await scopePaymentFilter(filter, actor);
-  return paymentRepository.getStats(queryFilter);
+const getStats = async (filter = {}) => {
+  return paymentRepository.getStats(filter);
 };
 
 export default {

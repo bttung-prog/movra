@@ -21,7 +21,7 @@ invoiceRouter.post(
 
 invoiceRouter.get(
   "/stats",
-  authorize(ROLES.ADMIN, ROLES.DISPATCHER, ROLES.ACCOUNTANT),
+  authorize(ROLES.ADMIN, ROLES.ACCOUNTANT),
   validate(invoiceValidator.statsQuerySchema, "query"),
   invoiceController.getStats,
 );
@@ -41,21 +41,21 @@ invoiceRouter.get(
 
 invoiceRouter.get(
   "/code/:invoiceCode",
-  authorize(ROLES.ADMIN, ROLES.DISPATCHER, ROLES.ACCOUNTANT, ROLES.CUSTOMER),
+  authorize(ROLES.ADMIN, ROLES.ACCOUNTANT, ROLES.CUSTOMER),
   validate(invoiceValidator.paramInvoiceCodeSchema, "params"),
   invoiceController.getByCode,
 );
 
 invoiceRouter.get(
   "/:invoiceId",
-  authorize(ROLES.ADMIN, ROLES.DISPATCHER, ROLES.ACCOUNTANT, ROLES.CUSTOMER),
+  authorize(ROLES.ADMIN, ROLES.ACCOUNTANT, ROLES.CUSTOMER),
   validate(invoiceValidator.paramInvoiceIdSchema, "params"),
   invoiceController.getById,
 );
 
 invoiceRouter.get(
   "/",
-  authorize(ROLES.ADMIN, ROLES.DISPATCHER, ROLES.ACCOUNTANT),
+  authorize(ROLES.ADMIN, ROLES.ACCOUNTANT),
   validate(invoiceValidator.queryInvoiceSchema, "query"),
   invoiceController.getAll,
 );
