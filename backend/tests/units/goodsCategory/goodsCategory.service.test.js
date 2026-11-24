@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   findAll: vi.fn(),
   countAll: vi.fn(),
   findById: vi.fn(),
+  findByIds: vi.fn(),
   findByName: vi.fn(),
   updateById: vi.fn(),
   deleteById: vi.fn(),
@@ -21,6 +22,7 @@ vi.mock(
       findAll: mocks.findAll,
       countAll: mocks.countAll,
       findById: mocks.findById,
+      findByIds: mocks.findByIds,
       findByName: mocks.findByName,
       updateById: mocks.updateById,
       deleteById: mocks.deleteById,
@@ -53,6 +55,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.findByName.mockResolvedValue(null);
   mocks.findById.mockResolvedValue(category);
+  mocks.findByIds.mockResolvedValue([category]);
   mocks.create.mockResolvedValue(category);
   mocks.findAll.mockResolvedValue([category]);
   mocks.countAll.mockResolvedValue(21);
@@ -143,6 +146,30 @@ describe("goodsCategoryService.getAll", () => {
 
     await goodsCategoryService.getAll({ status: "all" });
     expect(mocks.findAll.mock.calls[2][0].filter).toEqual({});
+  });
+});
+
+describe("goodsCategoryService.getByIds", () => {
+  it("returns categories for the provided ids with one repository call", async () => {
+    const secondCategoryId = "category-2";
+
+    mocks.findByIds.mockResolvedValue([
+      category,
+      { ...category, _id: secondCategoryId },
+    ]);
+
+    await expect(
+      goodsCategoryService.getByIds([categoryId, secondCategoryId]),
+    ).resolves.toEqual([category, { ...category, _id: secondCategoryId }]);
+    expect(mocks.findByIds).toHaveBeenCalledWith(
+      [categoryId, secondCategoryId],
+      null,
+    );
+  });
+
+  it("skips the repository for an empty id list", async () => {
+    await expect(goodsCategoryService.getByIds([])).resolves.toEqual([]);
+    expect(mocks.findByIds).not.toHaveBeenCalled();
   });
 });
 

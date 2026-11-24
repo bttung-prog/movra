@@ -115,6 +115,14 @@ const getById = async (
   return goodsCategory;
 };
 
+const getByIds = async (goodsCategoryIds = [], session = null) => {
+  if (!Array.isArray(goodsCategoryIds) || goodsCategoryIds.length === 0) {
+    return [];
+  }
+
+  return goodsCategoryRepository.findByIds(goodsCategoryIds, session);
+};
+
 const getByName = async (goodsCategoryName, session = null) => {
   const goodsCategory = await goodsCategoryRepository.findByName(
     goodsCategoryName.trim(),
@@ -235,6 +243,7 @@ export default {
   create,
   getAll,
   getById,
+  getByIds,
   getByName,
   updateById,
   deleteById,

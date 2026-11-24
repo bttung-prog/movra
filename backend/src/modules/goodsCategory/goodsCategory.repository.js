@@ -29,6 +29,16 @@ const findById = (goodsCategoryId, session = null) => {
   return GoodsCategory.findById(goodsCategoryId).session(session).lean();
 };
 
+const findByIds = (goodsCategoryIds = [], session = null) => {
+  if (!Array.isArray(goodsCategoryIds) || goodsCategoryIds.length === 0) {
+    return Promise.resolve([]);
+  }
+
+  return GoodsCategory.find({ _id: { $in: goodsCategoryIds } })
+    .session(session)
+    .lean();
+};
+
 const findByName = (goodsCategoryName, filter = {}, session = null) => {
   return GoodsCategory.findOne({
     goodsCategoryName,
@@ -68,6 +78,7 @@ export default {
   findAll,
   countAll,
   findById,
+  findByIds,
   findByName,
   updateById,
   deleteById,

@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   deleteById: vi.fn(),
   getRouteById: vi.fn(),
   getGoodsCategoryById: vi.fn(),
+  getGoodsCategoryByIds: vi.fn(),
   getCustomerById: vi.fn(),
 }));
 
@@ -40,7 +41,10 @@ vi.mock("../../../src/modules/warehouse/warehouse.service.js", () => ({
 }));
 
 vi.mock("../../../src/modules/goodsCategory/goodsCategory.service.js", () => ({
-  default: { getById: mocks.getGoodsCategoryById },
+  default: {
+    getById: mocks.getGoodsCategoryById,
+    getByIds: mocks.getGoodsCategoryByIds,
+  },
 }));
 
 vi.mock("../../../src/modules/customer/customer.service.js", () => ({
@@ -48,6 +52,7 @@ vi.mock("../../../src/modules/customer/customer.service.js", () => ({
 }));
 
 import { DEFAULT_RATES_BY_SERVICE_TYPE } from "../../../src/constants/defaultShippingRate.js";
+import { GOODS_CATEGORY_MESSAGES } from "../../../src/constants/messages.js";
 import { SERVICE_TYPES } from "../../../src/constants/serviceTypes.js";
 
 import pricingService from "../../../src/modules/pricing/pricing.service.js";
@@ -63,7 +68,15 @@ beforeEach(() => {
   mocks.getGoodsCategoryById.mockResolvedValue({
     _id: categoryId,
     goodsCategoryName: "Fragile",
+    deletedAt: null,
   });
+  mocks.getGoodsCategoryByIds.mockResolvedValue([
+    {
+      _id: categoryId,
+      goodsCategoryName: "Fragile",
+      deletedAt: null,
+    },
+  ]);
 });
 
 describe("pricingService.calculateFee", () => {
@@ -424,9 +437,72 @@ describe("pricingService.rate management", () => {
 
     const result = await pricingService.createRate(payload);
 
-    expect(mocks.getGoodsCategoryById).toHaveBeenCalledWith(categoryId);
+    expect(mocks.getGoodsCategoryByIds).toHaveBeenCalledWith([categoryId]);
+    expect(mocks.getGoodsCategoryById).not.toHaveBeenCalled();
     expect(mocks.create).toHaveBeenCalledWith(rateData);
     expect(result).toEqual(rateData);
+  });
+
+  it("validates all category surcharges with one batched lookup", async () => {
+    const secondCategoryId = "507f1f77bcf86cd799439014";
+    const payload = {
+      name: "Priority",
+      serviceType: "express",
+      basePrice: 20000,
+      categorySurcharges: [
+        { goodsCategoryId: categoryId, surchargePercentage: 5 },
+        { goodsCategoryId: secondCategoryId, surchargeFixed: 1000 },
+        { goodsCategoryId: categoryId, surchargeFixed: 500 },
+      ],
+    };
+    mocks.getGoodsCategoryByIds.mockResolvedValue([
+      { _id: categoryId, deletedAt: null },
+      { _id: secondCategoryId, deletedAt: null },
+    ]);
+    mocks.create.mockResolvedValue({ _id: "rate-1", ...payload });
+
+    await pricingService.createRate(payload);
+
+    expect(mocks.getGoodsCategoryByIds).toHaveBeenCalledTimes(1);
+    expect(mocks.getGoodsCategoryByIds).toHaveBeenCalledWith([
+      categoryId,
+      secondCategoryId,
+    ]);
+    expect(mocks.getGoodsCategoryById).not.toHaveBeenCalled();
+  });
+
+  it("throws 404 when a surcharge category does not exist", async () => {
+    const payload = {
+      name: "Priority",
+      serviceType: "express",
+      basePrice: 20000,
+      categorySurcharges: [{ goodsCategoryId: categoryId }],
+    };
+    mocks.getGoodsCategoryByIds.mockResolvedValue([]);
+
+    await expect(pricingService.createRate(payload)).rejects.toMatchObject({
+      statusCode: 404,
+      message: GOODS_CATEGORY_MESSAGES.NOT_FOUND,
+    });
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  it("throws 400 when a surcharge category was deleted", async () => {
+    const payload = {
+      name: "Priority",
+      serviceType: "express",
+      basePrice: 20000,
+      categorySurcharges: [{ goodsCategoryId: categoryId }],
+    };
+    mocks.getGoodsCategoryByIds.mockResolvedValue([
+      { _id: categoryId, deletedAt: new Date() },
+    ]);
+
+    await expect(pricingService.createRate(payload)).rejects.toMatchObject({
+      statusCode: 400,
+      message: GOODS_CATEGORY_MESSAGES.ALREADY_DELETED,
+    });
+    expect(mocks.create).not.toHaveBeenCalled();
   });
 
   it("keeps admin-provided pricing values over service defaults", async () => {
