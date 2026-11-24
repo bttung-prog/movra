@@ -7,7 +7,7 @@ import Driver from "../driver/driver.js";
 const TRIP_POPULATE = [
   {
     path: "vehicleId",
-    select: "plateNumber capacityWeight capacityVolume",
+    select: "plateNumber capacityWeight capacityVolume warehouseId",
   },
   {
     path: "driverId",
@@ -112,6 +112,10 @@ const findByIds = (tripIds = [], session = null) => {
 
   const query = Trip.find({ _id: { $in: tripIds } })
     .select("tripCode totalOrder status type warehouseId driverId vehicleId")
+    .populate({
+      path: "vehicleId",
+      select: "plateNumber capacityWeight capacityVolume warehouseId",
+    })
     .populate({ path: "driverId", select: "warehouseId userId" });
   if (session) query.session(session);
   return query.lean();

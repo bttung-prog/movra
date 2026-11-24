@@ -1,4 +1,6 @@
 import { ApiError } from "./ApiError.js";
+
+import { ROLES } from "../constants/roles.js";
 import { WAREHOUSE_MESSAGES } from "../constants/messages.js";
 
 const WAREHOUSE_SCOPED_ROLES = ["warehouse_staff", "dispatcher"];
@@ -19,7 +21,7 @@ export const checkWarehouseAccess = (
   if (currentUser && WAREHOUSE_SCOPED_ROLES.includes(currentUser.role)) {
     if (!currentUser.warehouseId) {
       const message =
-        currentUser.role === "dispatcher"
+        currentUser.role === ROLES.DISPATCHER
           ? WAREHOUSE_MESSAGES.DISPATCHER_NOT_ASSIGNED
           : WAREHOUSE_MESSAGES.STAFF_NOT_ASSIGNED;
       throw new ApiError(403, message);

@@ -20,10 +20,38 @@ const validateRouteOriginWarehouse = (route, warehouseId) => {
   }
 };
 
+const assertVehicleWarehouseAccess = async (vehicle, user) => {
+  const vehicleId = vehicle?._id || vehicle;
+  if (!vehicleId) return;
+
+  if (
+    vehicle &&
+    typeof vehicle === "object" &&
+    vehicle.warehouseId !== undefined &&
+    vehicle.warehouseId !== null
+  ) {
+    checkWarehouseAccess(vehicle.warehouseId, user);
+    return;
+  }
+
+  await vehicleService.getById(vehicleId, user);
+};
+
 const assertTripWarehouseAccess = async (trip, user) => {
   if (user?.role === ROLES.DRIVER) {
-    const driver = await driverService.getByUserId(getActorUserId(user));
-    const assignedDriverId = trip.driverId?._id || trip.driverId;
+    const driverRef = trip.driverId;
+    const assignedDriverId = driverRef?._id || driverRef;
+    const assignedUserId = driverRef?.userId?._id || driverRef?.userId;
+    const actorUserId = getActorUserId(user);
+
+    if (assignedUserId && actorUserId) {
+      if (assignedUserId.toString() !== actorUserId.toString()) {
+        throw new ApiError(403, TRIP_MESSAGES.NOT_ASSIGNED_DRIVER);
+      }
+      return;
+    }
+
+    const driver = await driverService.getByUserId(actorUserId);
     if (assignedDriverId?.toString() !== driver._id.toString()) {
       throw new ApiError(403, TRIP_MESSAGES.NOT_ASSIGNED_DRIVER);
     }
@@ -34,25 +62,28 @@ const assertTripWarehouseAccess = async (trip, user) => {
 
   if (trip.warehouseId) {
     checkWarehouseAccess(trip.warehouseId, user);
-    const vehicleId = trip.vehicleId?._id || trip.vehicleId;
-    if (vehicleId) {
-      await vehicleService.getById(vehicleId, user);
-    }
+    await assertVehicleWarehouseAccess(trip.vehicleId, user);
     return;
   }
 
-  const driverId = trip.driverId?._id || trip.driverId;
+  const driverRef = trip.driverId;
+  const driverId = driverRef?._id || driverRef;
   if (!driverId) {
     throw new ApiError(403, TRIP_MESSAGES.DRIVER_REQUIRED_FOR_WAREHOUSE_SCOPE);
   }
 
-  const driver = await driverService.getById(driverId);
-  checkWarehouseAccess(driver.warehouseId, user);
-
-  const vehicleId = trip.vehicleId?._id || trip.vehicleId;
-  if (vehicleId) {
-    await vehicleService.getById(vehicleId, user);
+  if (
+    driverRef &&
+    typeof driverRef === "object" &&
+    driverRef.warehouseId !== undefined
+  ) {
+    checkWarehouseAccess(driverRef.warehouseId, user);
+  } else {
+    const driver = await driverService.getById(driverId);
+    checkWarehouseAccess(driver.warehouseId, user);
   }
+
+  await assertVehicleWarehouseAccess(trip.vehicleId, user);
 };
 
 const scopeTripFilter = async (filter, user) => {
