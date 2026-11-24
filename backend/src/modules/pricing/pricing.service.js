@@ -1,4 +1,7 @@
-import { PRICING_MESSAGES } from "../../constants/messages.js";
+import {
+  GOODS_CATEGORY_MESSAGES,
+  PRICING_MESSAGES,
+} from "../../constants/messages.js";
 import {
   DEFAULT_RATE,
   DEFAULT_RATES_BY_SERVICE_TYPE,
@@ -151,9 +154,31 @@ const calculateFee = async ({
 };
 
 const validateSurcharges = async (categorySurcharges = []) => {
-  for (const surcharge of categorySurcharges) {
-    if (surcharge.goodsCategoryId) {
-      await goodsCategoryService.getById(surcharge.goodsCategoryId);
+  const categoryIds = [
+    ...new Set(
+      (categorySurcharges || [])
+        .map((surcharge) => surcharge?.goodsCategoryId)
+        .filter(Boolean)
+        .map((goodsCategoryId) => goodsCategoryId.toString()),
+    ),
+  ];
+
+  if (categoryIds.length === 0) {
+    return;
+  }
+
+  const categories = await goodsCategoryService.getByIds(categoryIds);
+  const categoriesById = new Map(
+    (categories || []).map((category) => [category._id.toString(), category]),
+  );
+
+  for (const categoryId of categoryIds) {
+    const category = categoriesById.get(categoryId);
+    if (!category) {
+      throw new ApiError(404, GOODS_CATEGORY_MESSAGES.NOT_FOUND);
+    }
+    if (category.deletedAt !== null) {
+      throw new ApiError(400, GOODS_CATEGORY_MESSAGES.ALREADY_DELETED);
     }
   }
 };
