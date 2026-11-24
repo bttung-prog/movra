@@ -28,6 +28,24 @@ const create = async ({
   );
 };
 
+const createMany = async (items = [], session = null) => {
+  const docs = (items || [])
+    .filter((item) => item?.userId && item?.title && item?.message)
+    .map((item) => ({
+      userId: item.userId,
+      title: item.title,
+      message: item.message,
+      type: item.type || "ORDER_UPDATE",
+      data: item.data || {},
+    }));
+
+  if (docs.length === 0) {
+    return [];
+  }
+
+  return notificationRepository.insertMany(docs, session);
+};
+
 const getMyNotifications = async ({
   userId,
   isRead,
@@ -85,6 +103,7 @@ const markAllAsRead = async ({ userId }) => {
 
 export default {
   create,
+  createMany,
   getMyNotifications,
   markAsRead,
   markAllAsRead,

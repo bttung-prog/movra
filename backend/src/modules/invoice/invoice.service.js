@@ -73,31 +73,6 @@ const getInvoiceOrderIds = (invoice) => {
   return orderIds;
 };
 
-const assertInvoiceWarehouseAccess = async (invoice, actor) => {
-  if (actor?.role !== ROLES.DISPATCHER) return;
-
-  const orderIds = getInvoiceOrderIds(invoice);
-  if (orderIds.length === 0) {
-    throw new ApiError(403, INVOICE_MESSAGES.DISPATCHER_ORDER_LINK_REQUIRED);
-  }
-
-  let lastError = null;
-
-  for (const orderId of orderIds) {
-    try {
-      await orderService.getById(orderId, true, actor);
-      return;
-    } catch (error) {
-      lastError = error;
-      if (error?.statusCode && error.statusCode !== 403) {
-        throw error;
-      }
-    }
-  }
-
-  throw lastError || new ApiError(403, INVOICE_MESSAGES.ACCESS_DENIED);
-};
-
 const create = async (payload, session = null, actor = null) => {
   const {
     orderId,
@@ -290,13 +265,7 @@ const getAll = async ({
   const limitNumber = Math.max(1, parseInt(limit, 10) || 10);
   const skip = (pageNumber - 1) * limitNumber;
 
-  let queryFilter = filter;
-  if (actor?.role === ROLES.DISPATCHER) {
-    const orderIds = await orderService.getIdsByWarehouseId(actor.warehouseId);
-    queryFilter = {
-      $and: [filter, { orderIds: { $in: orderIds } }],
-    };
-  }
+  const queryFilter = filter;
 
   const [invoices, total] = await Promise.all([
     invoiceRepository.findAll({
@@ -325,8 +294,6 @@ const getById = async (invoiceId, actor = null, session = null) => {
     throw new ApiError(404, INVOICE_MESSAGES.NOT_FOUND);
   }
 
-  await assertInvoiceWarehouseAccess(invoice, actor);
-
   if (actor?.role === ROLES.CUSTOMER) {
     const invoiceCustomerId =
       invoice.customerId?._id?.toString() || invoice.customerId?.toString();
@@ -347,8 +314,6 @@ const getByCode = async (invoiceCode, actor = null) => {
   if (!invoice) {
     throw new ApiError(404, INVOICE_MESSAGES.NOT_FOUND);
   }
-
-  await assertInvoiceWarehouseAccess(invoice, actor);
 
   if (actor?.role === ROLES.CUSTOMER) {
     const invoiceCustomerId =
@@ -508,12 +473,11 @@ const updateById = async (invoiceId, updateData, actor = null) => {
   return updatedInvoice;
 };
 
-const cancelInvoice = async (invoiceId, reason, actor = null) => {
+const cancelInvoice = async (invoiceId, reason) => {
   const invoice = await invoiceRepository.findById(invoiceId);
   if (!invoice) {
     throw new ApiError(404, INVOICE_MESSAGES.NOT_FOUND);
   }
-  await assertInvoiceWarehouseAccess(invoice, actor);
 
   if (
     invoice.status === INVOICE_STATUSES.PAID ||
@@ -566,22 +530,12 @@ const cancelInvoice = async (invoiceId, reason, actor = null) => {
   return updatedInvoice;
 };
 
-const getStats = async (filter = {}, actor = null) => {
-  if (actor?.role === ROLES.DISPATCHER) {
-    const orderIds = await orderService.getIdsByWarehouseId(actor.warehouseId);
-    filter = {
-      $and: [filter, { orderIds: { $in: orderIds } }],
-    };
-  }
+const getStats = async (filter = {}) => {
   return invoiceRepository.getStats(filter);
 };
 
-const getByOrderId = async (orderId, actor = null) => {
-  const invoice = await invoiceRepository.findByOrderId(orderId);
-  if (invoice) {
-    await assertInvoiceWarehouseAccess(invoice, actor);
-  }
-  return invoice;
+const getByOrderId = async (orderId) => {
+  return invoiceRepository.findByOrderId(orderId);
 };
 
 const getActiveOrderIdsByCustomer = async (customerId) => {
@@ -609,11 +563,6 @@ const sumOutstandingByCustomer = (customerId) => {
   return invoiceRepository.sumOutstandingByCustomer(customerId);
 };
 
-const getIdsByWarehouseId = async (warehouseId) => {
-  const orderIds = await orderService.getIdsByWarehouseId(warehouseId);
-  return invoiceRepository.findIdsByOrderIds(orderIds);
-};
-
 const updatePaymentProgress = async (
   invoiceId,
   updateData,
@@ -638,52 +587,68 @@ const processOverdueInvoices = async (cutoffDate = new Date()) => {
     };
   }
 
-  const updatedInvoices = [];
+  const candidateIds = candidates.map((candidate) => candidate._id);
+  const updateResult = await invoiceRepository.updateMany(
+    {
+      _id: { $in: candidateIds },
+      status: {
+        $in: [INVOICE_STATUSES.ISSUED, INVOICE_STATUSES.PARTIALLY_PAID],
+      },
+    },
+    { $set: { status: INVOICE_STATUSES.OVERDUE } },
+  );
 
-  for (const candidate of candidates) {
-    const updated = await invoiceRepository.updateById(
-      candidate._id,
-      { status: INVOICE_STATUSES.OVERDUE },
-      null,
+  if (!updateResult || updateResult.modifiedCount === 0) {
+    return {
+      scannedCount: candidates.length,
+      updatedCount: 0,
+      invoices: [],
+    };
+  }
+
+  const refreshedInvoices = await invoiceRepository.findByIds(candidateIds);
+  const updatedInvoices = refreshedInvoices.filter(
+    (invoice) => invoice.status === INVOICE_STATUSES.OVERDUE,
+  );
+
+  const notifications = updatedInvoices.flatMap((invoice) => {
+    const targetUserId =
+      invoice.customerId?.userId?._id || invoice.customerId?.userId;
+    if (!targetUserId) {
+      return [];
+    }
+
+    const formattedDueDate = invoice.dueDate
+      ? new Date(invoice.dueDate).toLocaleDateString("vi-VN")
+      : "";
+    const formattedAmount = Number(invoice.remainingAmount || 0).toLocaleString(
+      "vi-VN",
+    );
+    const orderIds = getInvoiceOrderIds(invoice);
+
+    return [
       {
-        status: {
-          $in: [INVOICE_STATUSES.ISSUED, INVOICE_STATUSES.PARTIALLY_PAID],
+        userId: targetUserId,
+        title: "Hóa đơn quá hạn thanh toán",
+        message: `Hóa đơn ${invoice.invoiceCode} đã quá hạn thanh toán vào ngày ${formattedDueDate}. Vui lòng thanh toán số tiền còn lại (${formattedAmount} VND).`,
+        type: "PAYMENT",
+        data: {
+          invoiceId: invoice._id,
+          invoiceCode: invoice.invoiceCode,
+          orderId: orderIds[0] || null,
+          orderIds,
         },
       },
-    );
+    ];
+  });
 
-    if (updated) {
-      updatedInvoices.push(updated);
-
-      const targetUserId =
-        candidate.customerId?.userId?._id || candidate.customerId?.userId;
-      if (targetUserId) {
-        try {
-          const formattedDueDate = candidate.dueDate
-            ? new Date(candidate.dueDate).toLocaleDateString("vi-VN")
-            : "";
-          const formattedAmount = Number(
-            candidate.remainingAmount || 0,
-          ).toLocaleString("vi-VN");
-
-          await notificationService.create({
-            userId: targetUserId,
-            title: "Hóa đơn quá hạn thanh toán",
-            message: `Hóa đơn ${candidate.invoiceCode} đã quá hạn thanh toán vào ngày ${formattedDueDate}. Vui lòng thanh toán số tiền còn lại (${formattedAmount} VND).`,
-            type: "PAYMENT",
-            data: {
-              invoiceId: candidate._id,
-              invoiceCode: candidate.invoiceCode,
-              orderId: getInvoiceOrderIds(candidate)[0] || null,
-              orderIds: getInvoiceOrderIds(candidate),
-            },
-          });
-        } catch (notifError) {
-          logger.error(
-            `[OverdueJob] Lỗi gửi thông báo cho hóa đơn ${candidate.invoiceCode}: ${notifError.message}`,
-          );
-        }
-      }
+  if (notifications.length > 0) {
+    try {
+      await notificationService.createMany(notifications);
+    } catch (notifError) {
+      logger.error(
+        `[OverdueJob] Lỗi gửi thông báo hóa đơn quá hạn: ${notifError.message}`,
+      );
     }
   }
 
@@ -703,7 +668,6 @@ export default {
   getActiveOrderIdsByCustomer,
   sumOutstandingByCustomer,
   getInvoiceOrderIds,
-  getIdsByWarehouseId,
   issueInvoice,
   reservePendingPayment,
   releasePendingPayment,

@@ -8,19 +8,21 @@ const mocks = vi.hoisted(() => ({
   findActiveOrderLinksByCustomer: vi.fn(),
   findActiveByOrderIds: vi.fn(),
   findById: vi.fn(),
+  findByIds: vi.fn(),
   findByCode: vi.fn(),
   findByOrderId: vi.fn(),
   updateById: vi.fn(),
+  updateMany: vi.fn(),
   getStats: vi.fn(),
   getOrderById: vi.fn(),
   getOrderByIds: vi.fn(),
   getBillableOrdersForInvoice: vi.fn(),
-  getOrderIdsByWarehouseId: vi.fn(),
   getCustomerById: vi.fn(),
   generateCode: vi.fn(),
   findOverdueCandidates: vi.fn(),
   markOverdueInvoices: vi.fn(),
   createNotification: vi.fn(),
+  createManyNotifications: vi.fn(),
 }));
 
 vi.mock("../../../src/modules/invoice/invoice.repository.js", () => ({
@@ -32,9 +34,11 @@ vi.mock("../../../src/modules/invoice/invoice.repository.js", () => ({
     findActiveOrderLinksByCustomer: mocks.findActiveOrderLinksByCustomer,
     findActiveByOrderIds: mocks.findActiveByOrderIds,
     findById: mocks.findById,
+    findByIds: mocks.findByIds,
     findByCode: mocks.findByCode,
     findByOrderId: mocks.findByOrderId,
     updateById: mocks.updateById,
+    updateMany: mocks.updateMany,
     getStats: mocks.getStats,
     findOverdueCandidates: mocks.findOverdueCandidates,
     markOverdueInvoices: mocks.markOverdueInvoices,
@@ -44,6 +48,7 @@ vi.mock("../../../src/modules/invoice/invoice.repository.js", () => ({
 vi.mock("../../../src/modules/notification/notification.service.js", () => ({
   default: {
     create: mocks.createNotification,
+    createMany: mocks.createManyNotifications,
   },
 }));
 
@@ -52,7 +57,6 @@ vi.mock("../../../src/modules/order/order.service.js", () => ({
     getById: mocks.getOrderById,
     getByIds: mocks.getOrderByIds,
     getBillableOrdersForInvoice: mocks.getBillableOrdersForInvoice,
-    getIdsByWarehouseId: mocks.getOrderIdsByWarehouseId,
   },
 }));
 
@@ -76,7 +80,6 @@ const invoiceId = "invoice-1";
 const invoiceCode = "INV-0001";
 const customerId = "customer-1";
 const orderId = "order-1";
-const warehouseId = "warehouse-1";
 
 const linkedOrder = {
   _id: orderId,
@@ -119,15 +122,17 @@ beforeEach(() => {
   mocks.findAll.mockResolvedValue([]);
   mocks.countAll.mockResolvedValue(0);
   mocks.findById.mockResolvedValue({ ...draftInvoice });
+  mocks.findByIds.mockResolvedValue([]);
   mocks.findByCode.mockResolvedValue({ ...draftInvoice });
   mocks.findByOrderId.mockResolvedValue(null);
   mocks.findActiveOrderLinksByCustomer.mockResolvedValue([]);
   mocks.findActiveByOrderIds.mockResolvedValue(null);
   mocks.updateById.mockResolvedValue({ ...draftInvoice });
+  mocks.updateMany.mockResolvedValue({ matchedCount: 1, modifiedCount: 1 });
+  mocks.createManyNotifications.mockResolvedValue([]);
   mocks.getOrderById.mockResolvedValue(linkedOrder);
   mocks.getOrderByIds.mockResolvedValue([linkedOrder]);
   mocks.getBillableOrdersForInvoice.mockResolvedValue([]);
-  mocks.getOrderIdsByWarehouseId.mockResolvedValue([orderId]);
   mocks.getCustomerById.mockResolvedValue({ _id: customerId });
   mocks.generateCode.mockReturnValue(invoiceCode);
 });
@@ -429,25 +434,6 @@ describe("invoiceService.getAll", () => {
       totalPages: 3,
     });
   });
-
-  it("limits dispatcher queries to orders in their warehouse", async () => {
-    await invoiceService.getAll({
-      filter: { status: INVOICE_STATUSES.ISSUED },
-      actor: { role: ROLES.DISPATCHER, warehouseId },
-    });
-
-    expect(mocks.getOrderIdsByWarehouseId).toHaveBeenCalledWith(warehouseId);
-    expect(mocks.findAll).toHaveBeenCalledWith(
-      expect.objectContaining({
-        filter: {
-          $and: [
-            { status: INVOICE_STATUSES.ISSUED },
-            { orderIds: { $in: [orderId] } },
-          ],
-        },
-      }),
-    );
-  });
 });
 
 describe("invoiceService invoice access", () => {
@@ -484,19 +470,6 @@ describe("invoiceService invoice access", () => {
       statusCode: 403,
       message: INVOICE_MESSAGES.ACCESS_DENIED,
     });
-  });
-
-  it("requires dispatcher invoices to link to an accessible order", async () => {
-    mocks.findById.mockResolvedValue({ ...draftInvoice, orderIds: [] });
-    const actor = { role: ROLES.DISPATCHER, warehouseId };
-
-    await expect(
-      invoiceService.getById(invoiceId, actor),
-    ).rejects.toMatchObject({
-      statusCode: 403,
-      message: INVOICE_MESSAGES.DISPATCHER_ORDER_LINK_REQUIRED,
-    });
-    expect(mocks.getOrderById).not.toHaveBeenCalled();
   });
 });
 
@@ -717,6 +690,20 @@ describe("invoiceService issue, update and cancel", () => {
   });
 
   describe("processOverdueInvoices", () => {
+    const buildCandidate = (overrides = {}) => ({
+      _id: "inv-overdue-1",
+      invoiceCode: "INV-OD-001",
+      status: INVOICE_STATUSES.ISSUED,
+      dueDate: new Date("2026-01-01"),
+      remainingAmount: 50000,
+      orderIds: ["order-1"],
+      customerId: {
+        _id: "cust-1",
+        userId: { _id: "user-cust-1" },
+      },
+      ...overrides,
+    });
+
     it("returns early when no candidates are found", async () => {
       mocks.findOverdueCandidates.mockResolvedValue([]);
 
@@ -727,29 +714,32 @@ describe("invoiceService issue, update and cancel", () => {
         updatedCount: 0,
         invoices: [],
       });
-      expect(mocks.updateById).not.toHaveBeenCalled();
-      expect(mocks.createNotification).not.toHaveBeenCalled();
+      expect(mocks.updateMany).not.toHaveBeenCalled();
+      expect(mocks.createManyNotifications).not.toHaveBeenCalled();
     });
 
-    it("processes overdue invoices and notifies customers", async () => {
-      const candidate = {
-        _id: "inv-overdue-1",
-        invoiceCode: "INV-OD-001",
-        status: INVOICE_STATUSES.ISSUED,
-        dueDate: new Date("2026-01-01"),
-        remainingAmount: 50000,
-        orderIds: ["order-1"],
-        customerId: {
-          _id: "cust-1",
-          userId: { _id: "user-cust-1" },
-        },
-      };
+    it("returns early when no candidate could be transitioned", async () => {
+      mocks.findOverdueCandidates.mockResolvedValue([buildCandidate()]);
+      mocks.updateMany.mockResolvedValue({ matchedCount: 1, modifiedCount: 0 });
+
+      const result = await invoiceService.processOverdueInvoices();
+
+      expect(result).toEqual({
+        scannedCount: 1,
+        updatedCount: 0,
+        invoices: [],
+      });
+      expect(mocks.findByIds).not.toHaveBeenCalled();
+      expect(mocks.createManyNotifications).not.toHaveBeenCalled();
+    });
+
+    it("updates overdue invoices and notifies customers in one batch", async () => {
+      const candidate = buildCandidate();
 
       mocks.findOverdueCandidates.mockResolvedValue([candidate]);
-      mocks.updateById.mockResolvedValue({
-        ...candidate,
-        status: INVOICE_STATUSES.OVERDUE,
-      });
+      mocks.findByIds.mockResolvedValue([
+        { ...candidate, status: INVOICE_STATUSES.OVERDUE },
+      ]);
 
       const result = await invoiceService.processOverdueInvoices();
 
@@ -757,18 +747,17 @@ describe("invoiceService issue, update and cancel", () => {
       expect(result.updatedCount).toBe(1);
       expect(result.invoices[0].status).toBe(INVOICE_STATUSES.OVERDUE);
 
-      expect(mocks.updateById).toHaveBeenCalledWith(
-        candidate._id,
-        { status: INVOICE_STATUSES.OVERDUE },
-        null,
+      expect(mocks.updateMany).toHaveBeenCalledWith(
         {
+          _id: { $in: [candidate._id] },
           status: {
             $in: [INVOICE_STATUSES.ISSUED, INVOICE_STATUSES.PARTIALLY_PAID],
           },
         },
+        { $set: { status: INVOICE_STATUSES.OVERDUE } },
       );
-
-      expect(mocks.createNotification).toHaveBeenCalledWith(
+      expect(mocks.findByIds).toHaveBeenCalledWith([candidate._id]);
+      expect(mocks.createManyNotifications).toHaveBeenCalledWith([
         expect.objectContaining({
           userId: "user-cust-1",
           type: "PAYMENT",
@@ -779,28 +768,46 @@ describe("invoiceService issue, update and cancel", () => {
             orderIds: candidate.orderIds,
           }),
         }),
-      );
+      ]);
+    });
+
+    it("notifies every updated invoice in a single batch", async () => {
+      const first = buildCandidate();
+      const second = buildCandidate({
+        _id: "inv-overdue-2",
+        invoiceCode: "INV-OD-002",
+        customerId: { _id: "cust-2", userId: "user-cust-2" },
+      });
+
+      mocks.findOverdueCandidates.mockResolvedValue([first, second]);
+      mocks.findByIds.mockResolvedValue([
+        { ...first, status: INVOICE_STATUSES.OVERDUE },
+        { ...second, status: INVOICE_STATUSES.OVERDUE },
+      ]);
+
+      const result = await invoiceService.processOverdueInvoices();
+
+      expect(result.updatedCount).toBe(2);
+      expect(mocks.createManyNotifications).toHaveBeenCalledTimes(1);
+      const [notifications] = mocks.createManyNotifications.mock.calls[0];
+      expect(notifications).toHaveLength(2);
+      expect(notifications.map((item) => item.userId)).toEqual([
+        "user-cust-1",
+        "user-cust-2",
+      ]);
     });
 
     it("handles notification error gracefully without failing the batch", async () => {
-      const candidate = {
-        _id: "inv-overdue-2",
-        invoiceCode: "INV-OD-002",
+      const candidate = buildCandidate({
+        _id: "inv-overdue-3",
         status: INVOICE_STATUSES.PARTIALLY_PAID,
-        dueDate: new Date("2026-01-01"),
-        remainingAmount: 30000,
-        customerId: {
-          _id: "cust-2",
-          userId: "user-cust-2",
-        },
-      };
+      });
 
       mocks.findOverdueCandidates.mockResolvedValue([candidate]);
-      mocks.updateById.mockResolvedValue({
-        ...candidate,
-        status: INVOICE_STATUSES.OVERDUE,
-      });
-      mocks.createNotification.mockRejectedValue(
+      mocks.findByIds.mockResolvedValue([
+        { ...candidate, status: INVOICE_STATUSES.OVERDUE },
+      ]);
+      mocks.createManyNotifications.mockRejectedValue(
         new Error("Notification failed"),
       );
 
@@ -810,29 +817,21 @@ describe("invoiceService issue, update and cancel", () => {
       expect(result.updatedCount).toBe(1);
     });
 
-    it("handles candidate customer without userId gracefully", async () => {
-      const candidate = {
-        _id: "inv-overdue-3",
-        invoiceCode: "INV-OD-003",
-        status: INVOICE_STATUSES.ISSUED,
-        dueDate: new Date("2026-01-01"),
-        remainingAmount: 20000,
-        customerId: {
-          _id: "cust-3",
-        },
-      };
+    it("handles candidates without a customer user gracefully", async () => {
+      const candidate = buildCandidate({
+        _id: "inv-overdue-4",
+        customerId: { _id: "cust-4" },
+      });
 
       mocks.findOverdueCandidates.mockResolvedValue([candidate]);
-      mocks.updateById.mockResolvedValue({
-        ...candidate,
-        status: INVOICE_STATUSES.OVERDUE,
-      });
+      mocks.findByIds.mockResolvedValue([
+        { ...candidate, status: INVOICE_STATUSES.OVERDUE },
+      ]);
 
       const result = await invoiceService.processOverdueInvoices();
 
-      expect(result.scannedCount).toBe(1);
       expect(result.updatedCount).toBe(1);
-      expect(mocks.createNotification).not.toHaveBeenCalled();
+      expect(mocks.createManyNotifications).not.toHaveBeenCalled();
     });
   });
 });

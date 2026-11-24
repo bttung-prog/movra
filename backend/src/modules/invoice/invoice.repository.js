@@ -44,12 +44,6 @@ const countAll = ({ filter = {} } = {}) => {
   return Invoice.countDocuments(filter);
 };
 
-const findIdsByOrderIds = (orderIds = []) => {
-  return Invoice.distinct("_id", {
-    orderIds: { $in: orderIds },
-  });
-};
-
 const findActiveOrderLinksByCustomer = (customerId) => {
   return Invoice.find({
     customerId,
@@ -108,6 +102,16 @@ const findById = (id, session = null) => {
   return query;
 };
 
+const findByIds = (ids = [], session = null) => {
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return Promise.resolve([]);
+  }
+
+  const query = Invoice.find({ _id: { $in: ids } }).populate(INVOICE_POPULATE);
+  if (session) query.session(session);
+  return query.lean();
+};
+
 const findByCode = (invoiceCode) => {
   return Invoice.findOne({ invoiceCode }).populate(INVOICE_POPULATE);
 };
@@ -125,6 +129,10 @@ const updateById = (id, updateData, session = null, conditions = {}) => {
     runValidators: true,
     session,
   }).populate(INVOICE_POPULATE);
+};
+
+const updateMany = (filter = {}, updateData = {}, session = null) => {
+  return Invoice.updateMany(filter, updateData, { session });
 };
 
 const deleteById = (id, session = null) => {
@@ -173,14 +181,15 @@ export default {
   create,
   findAll,
   countAll,
-  findIdsByOrderIds,
   findActiveOrderLinksByCustomer,
   findActiveByOrderIds,
   sumOutstandingByCustomer,
   findById,
+  findByIds,
   findByCode,
   findByOrderId,
   updateById,
+  updateMany,
   deleteById,
   getStats,
   findOverdueCandidates,
