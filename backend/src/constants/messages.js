@@ -782,8 +782,6 @@ export const INVOICE_MESSAGES = {
   PROCESS_OVERDUE_SUCCESS: "Quét và cập nhật hóa đơn quá hạn thành công",
   NOT_FOUND: "Không tìm thấy hóa đơn",
   CUSTOMER_REQUIRED: "Mã khách hàng là bắt buộc để lập hóa đơn",
-  DISPATCHER_ORDER_LINK_REQUIRED:
-    "Hóa đơn phải được liên kết với đơn hàng thuộc kho",
   ACCESS_DENIED: "Bạn không có quyền truy cập hóa đơn này",
   ALREADY_EXISTS: "Hóa đơn cho đơn hàng này đã tồn tại",
   STATE_CHANGED: "Trạng thái hóa đơn vừa thay đổi. Vui lòng tải lại dữ liệu",
