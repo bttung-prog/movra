@@ -1,5 +1,7 @@
 import Joi from "joi";
 
+import { FAILURE_REASON_TYPES } from "../../constants/failureReasonTypes.js";
+
 const objectId = Joi.string()
   .regex(/^[0-9a-fA-F]{24}$/)
   .messages({
@@ -7,13 +9,7 @@ const objectId = Joi.string()
     "any.required": "ID is required",
   });
 
-const failureReasonTypeEnum = [
-  "customer_rejected",
-  "damaged",
-  "wrong_address",
-  "payment_failed",
-  "other",
-];
+const failureReasonTypeEnum = Object.values(FAILURE_REASON_TYPES);
 
 const createFailureReasonSchema = Joi.object({
   orderId: objectId.required().messages({

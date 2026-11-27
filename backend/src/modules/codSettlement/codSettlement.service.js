@@ -19,6 +19,7 @@ import { SETTLEMENT_STATUSES } from "../../constants/settlementStatuses.js";
 import { PAYOUT_METHODS } from "../../constants/payoutMethods.js";
 
 import codSettlementRepository from "./codSettlement.repository.js";
+import codSettlementNotificationService from "./codSettlementNotification.service.js";
 
 const generateSettlement = async (
   {
@@ -169,6 +170,10 @@ const confirmSettlement = async (settlementId, actor) => {
     throw new ApiError(409, COD_SETTLEMENT_MESSAGES.STATUS_CHANGED);
   }
 
+  await codSettlementNotificationService.notifySettlementConfirmed({
+    settlement: updatedSettlement,
+  });
+
   return updatedSettlement;
 };
 
@@ -277,6 +282,12 @@ const completeSettlement = async (
     }
 
     await session.commitTransaction();
+
+    await codSettlementNotificationService.notifySettlementCompleted({
+      settlement: updatedSettlement,
+      notes,
+    });
+
     return updatedSettlement;
   } catch (error) {
     await session.abortTransaction();
@@ -330,6 +341,12 @@ const cancelSettlement = async (settlementId, reason, actor) => {
 
     await orderService.releaseCodSettlement([settlementOrderId], session);
     await session.commitTransaction();
+
+    await codSettlementNotificationService.notifySettlementCancelled({
+      settlement: updatedSettlement,
+      notes: reason || "",
+    });
+
     return updatedSettlement;
   } catch (error) {
     await session.abortTransaction();

@@ -27,6 +27,7 @@ const mocks = vi.hoisted(() => ({
   assignVehicleToWarehouse: vi.fn(),
   getUserById: vi.fn(),
   getRouteById: vi.fn(),
+  notifyTripReassigned: vi.fn(),
 }));
 
 vi.mock("mongoose", async (importOriginal) => {
@@ -58,6 +59,12 @@ vi.mock("../../../src/modules/trip/trip.repository.js", () => ({
 vi.mock("../../../src/modules/trip/tripAuditLog.repository.js", () => ({
   default: {
     create: mocks.createAuditLog,
+  },
+}));
+
+vi.mock("../../../src/modules/trip/tripNotification.service.js", () => ({
+  default: {
+    notifyTripReassigned: mocks.notifyTripReassigned,
   },
 }));
 

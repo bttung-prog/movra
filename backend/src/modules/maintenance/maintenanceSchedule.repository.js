@@ -37,11 +37,45 @@ const findUpcoming = (targetDate, vehicleIds = null) => {
   return MaintenanceSchedule.find({
     isActive: true,
     deletedAt: null,
-    nextDueDate: { $lte: targetDate },
+    $or: [
+      { nextDueDate: { $ne: null, $lte: targetDate } },
+      { nextDueKm: { $ne: null } },
+    ],
     ...(vehicleIds ? { vehicleId: { $in: vehicleIds } } : {}),
   })
-    .populate("vehicleId", "plateNumber brand model")
+    .populate(
+      "vehicleId",
+      "plateNumber brand model currentOdometer warehouseId status",
+    )
     .sort({ nextDueDate: 1 })
+    .lean()
+    .then((schedules) =>
+      schedules.filter((schedule) => {
+        const dueDate = schedule.nextDueDate
+          ? new Date(schedule.nextDueDate)
+          : null;
+        if (dueDate && dueDate <= targetDate) return true;
+
+        const currentOdometer = schedule.vehicleId?.currentOdometer;
+        return (
+          schedule.nextDueKm != null &&
+          currentOdometer != null &&
+          Number(schedule.nextDueKm) - Number(currentOdometer) <= 500
+        );
+      }),
+    );
+};
+
+const findReminderCandidates = (targetDate) => {
+  return MaintenanceSchedule.find({
+    isActive: true,
+    deletedAt: null,
+    $or: [
+      { nextDueDate: { $ne: null, $lte: targetDate } },
+      { nextDueKm: { $ne: null } },
+    ],
+  })
+    .populate("vehicleId", "plateNumber currentOdometer warehouseId status")
     .lean();
 };
 
@@ -77,6 +111,7 @@ export default {
   findByVehicleId,
   countByVehicleId,
   findUpcoming,
+  findReminderCandidates,
   updateById,
   deleteById,
   restoreById,

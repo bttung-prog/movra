@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   getUserById: vi.fn(),
   calculateFee: vi.fn(),
   createNotification: vi.fn(),
+  createManyNotifications: vi.fn(),
   recordTransaction: vi.fn(),
   getWarehouseById: vi.fn(),
   getNearestWarehouse: vi.fn(),
@@ -93,7 +94,10 @@ vi.mock("../../../src/modules/pricing/pricing.service.js", () => ({
 }));
 
 vi.mock("../../../src/modules/notification/notification.service.js", () => ({
-  default: { create: mocks.createNotification },
+  default: {
+    create: mocks.createNotification,
+    createMany: mocks.createManyNotifications,
+  },
 }));
 
 vi.mock(
@@ -215,6 +219,7 @@ beforeEach(() => {
   });
   mocks.createTrackingLog.mockResolvedValue({ _id: "tracking-1" });
   mocks.createNotification.mockResolvedValue(undefined);
+  mocks.createManyNotifications.mockResolvedValue(undefined);
   mocks.generateCode.mockReturnValue("ORD-0001");
   mocks.findLoadsByTripId.mockResolvedValue([]);
   mocks.updateMany.mockResolvedValue({ modifiedCount: 1 });
@@ -1116,18 +1121,18 @@ describe("orderService.markAsDelivered", () => {
       user: { role: ROLES.ADMIN },
     });
 
-    expect(mocks.createNotification).toHaveBeenCalledWith(
-      expect.objectContaining({
-        userId: "user-1",
-        type: "ORDER_UPDATE",
-      }),
-    );
-    expect(mocks.createNotification).toHaveBeenCalledWith(
-      expect.objectContaining({
-        userId: "user-1",
-        type: "FEEDBACK_REQUEST",
-        data: expect.objectContaining({ orderId: "order-1" }),
-      }),
+    expect(mocks.createManyNotifications).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          userId: "user-1",
+          type: "ORDER_UPDATE",
+        }),
+        expect.objectContaining({
+          userId: "user-1",
+          type: "FEEDBACK_REQUEST",
+          data: expect.objectContaining({ orderId: "order-1" }),
+        }),
+      ]),
     );
   });
 

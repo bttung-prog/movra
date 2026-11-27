@@ -16,6 +16,9 @@ const mocks = vi.hoisted(() => ({
   updateCustomerById: vi.fn(),
   recordTransaction: vi.fn(),
   generateCode: vi.fn(),
+  notifySettlementConfirmed: vi.fn(),
+  notifySettlementCompleted: vi.fn(),
+  notifySettlementCancelled: vi.fn(),
 }));
 
 vi.mock(
@@ -29,6 +32,17 @@ vi.mock(
       findByCode: mocks.findByCode,
       findByOrderId: mocks.findByOrderId,
       updateById: mocks.updateById,
+    },
+  }),
+);
+
+vi.mock(
+  "../../../src/modules/codSettlement/codSettlementNotification.service.js",
+  () => ({
+    default: {
+      notifySettlementConfirmed: mocks.notifySettlementConfirmed,
+      notifySettlementCompleted: mocks.notifySettlementCompleted,
+      notifySettlementCancelled: mocks.notifySettlementCancelled,
     },
   }),
 );

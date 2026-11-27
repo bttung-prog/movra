@@ -53,6 +53,19 @@ const countExpiredInsurance = ({ date }) => {
   return Vehicle.countDocuments({ insuranceExpiryDate: { $lt: date } });
 };
 
+const findExpiryCandidates = (targetDate) => {
+  return Vehicle.find({
+    status: { $ne: "retired" },
+    $or: [
+      { registrationExpiryDate: { $ne: null, $lte: targetDate } },
+      { insuranceExpiryDate: { $ne: null, $lte: targetDate } },
+    ],
+  })
+    .populate("vehicleTypeId", "name")
+    .sort({ registrationExpiryDate: 1, insuranceExpiryDate: 1 })
+    .lean();
+};
+
 const updateById = (vehicleId, updateData, session = null) => {
   return Vehicle.findByIdAndUpdate(vehicleId, updateData, {
     new: true,
@@ -106,6 +119,7 @@ export default {
   countExpiredRegistration,
   findExpiredInsurance,
   countExpiredInsurance,
+  findExpiryCandidates,
   updateById,
   setWarehouseIdIfUnassigned,
   countByStatus,

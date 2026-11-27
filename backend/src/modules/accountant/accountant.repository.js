@@ -37,6 +37,13 @@ const findByCode = (accountantCode) => {
     .lean();
 };
 
+const findActiveUserIds = () => {
+  return Accountant.find({ status: "active" })
+    .select("userId")
+    .lean()
+    .then((accountants) => accountants.map((accountant) => accountant.userId));
+};
+
 const updateById = (accountantId, updateData, session = null) => {
   return Accountant.findByIdAndUpdate(accountantId, updateData, {
     new: true,
@@ -54,5 +61,6 @@ export default {
   findById,
   findByUserId,
   findByCode,
+  findActiveUserIds,
   updateById,
 };

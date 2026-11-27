@@ -21,6 +21,7 @@ import tripRepository from "./trip.repository.js";
 import tripAuditLogRepository from "./tripAuditLog.repository.js";
 import tripAccess from "./trip.access.js";
 import tripAudit from "./trip.audit.js";
+import tripNotificationService from "./tripNotification.service.js";
 
 const validateTrip = (trip, requireNotDeleted = true) => {
   if (!trip) {
@@ -164,7 +165,7 @@ const create = async ({
   const session = await mongoose.startSession();
 
   try {
-    return await session.withTransaction(async () => {
+    const trip = await session.withTransaction(async () => {
       await lockTripScheduleResources({ vehicleId, driverId }, session);
       await checkTripOverlap({
         vehicleId,
@@ -206,6 +207,15 @@ const create = async ({
       );
       return trip;
     });
+
+    await tripNotificationService.notifyTripAssigned({
+      trip,
+      driver,
+      actor: user,
+      orderCount: 0,
+    });
+
+    return trip;
   } finally {
     session.endSession();
   }

@@ -10,6 +10,9 @@ const mocks = vi.hoisted(() => ({
   adjustWalletBalance: vi.fn(),
   createWalletTopUp: vi.fn(),
   generateCode: vi.fn(),
+  startSession: vi.fn(),
+  notifyTopUpPending: vi.fn(),
+  notifyWalletAdjusted: vi.fn(),
 }));
 
 vi.mock(
@@ -36,6 +39,24 @@ vi.mock("../../../src/modules/payment/payment.service.js", () => ({
   default: { createWalletTopUp: mocks.createWalletTopUp },
 }));
 
+vi.mock(
+  "../../../src/modules/walletTransaction/walletNotification.service.js",
+  () => ({
+    default: {
+      notifyTopUpPending: mocks.notifyTopUpPending,
+      notifyWalletAdjusted: mocks.notifyWalletAdjusted,
+    },
+  }),
+);
+
+vi.mock("mongoose", async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    default: { ...actual.default, startSession: mocks.startSession },
+  };
+});
+
 vi.mock("../../../src/utils/generateCode.js", () => ({
   generateCode: mocks.generateCode,
 }));
@@ -46,6 +67,12 @@ import walletTransactionService from "../../../src/modules/walletTransaction/wal
 
 const customerId = "customer-1";
 const transactionId = "transaction-1";
+const session = {
+  startTransaction: vi.fn(),
+  commitTransaction: vi.fn().mockResolvedValue(undefined),
+  abortTransaction: vi.fn().mockResolvedValue(undefined),
+  endSession: vi.fn(),
+};
 const transaction = {
   _id: transactionId,
   customerId,
@@ -61,6 +88,9 @@ beforeEach(() => {
   mocks.countAll.mockResolvedValue(21);
   mocks.findById.mockResolvedValue(transaction);
   mocks.findByCode.mockResolvedValue(transaction);
+  mocks.startSession.mockResolvedValue(session);
+  mocks.notifyTopUpPending.mockResolvedValue(2);
+  mocks.notifyWalletAdjusted.mockResolvedValue(1);
 });
 
 describe("walletTransactionService.recordTransaction", () => {
@@ -120,6 +150,55 @@ describe("walletTransactionService.topUp", () => {
     });
     expect(mocks.createWalletTopUp).not.toHaveBeenCalled();
   });
+
+  it("creates a pending top-up and notifies the customer and accountants", async () => {
+    const customer = {
+      _id: customerId,
+      userId: { _id: "customer-user-1" },
+      walletBalance: 500000,
+    };
+    const payment = {
+      _id: "payment-1",
+      paymentCode: "PAY-0001",
+      paymentAmount: 100000,
+      paymentStatus: "pending",
+      purpose: "wallet_top_up",
+    };
+    const actor = {
+      role: ROLES.CUSTOMER,
+      customerId,
+      userId: "customer-user-1",
+    };
+    mocks.getCustomerById.mockResolvedValue(customer);
+    mocks.createWalletTopUp.mockResolvedValue(payment);
+
+    const result = await walletTransactionService.topUp(
+      {
+        amount: 100000,
+        paymentMethod: "bank",
+        transactionReference: "  REF-1  ",
+      },
+      actor,
+    );
+
+    expect(mocks.getCustomerById).toHaveBeenCalledWith(customerId, session);
+    expect(mocks.createWalletTopUp).toHaveBeenCalledWith(
+      expect.objectContaining({
+        customerId,
+        paymentAmount: 100000,
+        transactionReference: "REF-1",
+        paymentMethod: "bank",
+      }),
+      session,
+    );
+    expect(mocks.notifyTopUpPending).toHaveBeenCalledWith({
+      payment,
+      customer,
+      actor,
+    });
+    expect(result).toEqual({ payment, credited: false });
+    expect(session.commitTransaction).toHaveBeenCalled();
+  });
 });
 
 describe("walletTransactionService.adjustWallet", () => {
@@ -134,6 +213,49 @@ describe("walletTransactionService.adjustWallet", () => {
       message: WALLET_TRANSACTION_MESSAGES.ADMIN_ONLY_ADJUSTMENT,
     });
     expect(mocks.getCustomerById).not.toHaveBeenCalled();
+  });
+
+  it("adjusts the balance and notifies the customer", async () => {
+    const customer = {
+      _id: customerId,
+      userId: { _id: "customer-user-1" },
+      walletBalance: 100000,
+    };
+    const updatedCustomer = {
+      ...customer,
+      walletBalance: 125000,
+    };
+    mocks.getCustomerById.mockResolvedValue(customer);
+    mocks.adjustWalletBalance.mockResolvedValue(updatedCustomer);
+
+    const result = await walletTransactionService.adjustWallet(
+      {
+        customerId,
+        amount: 25000,
+        direction: "credit",
+        reason: "Correction",
+      },
+      { role: ROLES.ACCOUNTANT, userId: "accountant-1" },
+    );
+
+    expect(mocks.adjustWalletBalance).toHaveBeenCalledWith(
+      customerId,
+      25000,
+      session,
+    );
+    expect(mocks.notifyWalletAdjusted).toHaveBeenCalledWith({
+      customer: updatedCustomer,
+      walletTransaction: transaction,
+      direction: "credit",
+      amount: 25000,
+      balanceBefore: 100000,
+      balanceAfter: 125000,
+    });
+    expect(result).toEqual({
+      walletTransaction: transaction,
+      newBalance: 125000,
+    });
+    expect(session.commitTransaction).toHaveBeenCalled();
   });
 });
 

@@ -37,13 +37,40 @@ const createMany = async (items = [], session = null) => {
       message: item.message,
       type: item.type || "ORDER_UPDATE",
       data: item.data || {},
+      ...(item.dedupeKey ? { dedupeKey: item.dedupeKey } : {}),
     }));
 
   if (docs.length === 0) {
     return [];
   }
 
-  return notificationRepository.insertMany(docs, session);
+  const dedupeDocs = docs.filter((item) => item.dedupeKey);
+  let finalDocs = docs;
+
+  if (dedupeDocs.length > 0) {
+    const existingKeys = await notificationRepository.findExistingDedupeKeys({
+      userIds: [...new Set(dedupeDocs.map((item) => String(item.userId)))],
+      dedupeKeys: [...new Set(dedupeDocs.map((item) => item.dedupeKey))],
+      session,
+    });
+    const existed = new Set(
+      (existingKeys || []).map(
+        (item) => `${String(item.userId)}:${item.dedupeKey}`,
+      ),
+    );
+
+    finalDocs = docs.filter(
+      (item) =>
+        !item.dedupeKey ||
+        !existed.has(`${String(item.userId)}:${item.dedupeKey}`),
+    );
+  }
+
+  if (finalDocs.length === 0) {
+    return [];
+  }
+
+  return notificationRepository.insertMany(finalDocs, session);
 };
 
 const getMyNotifications = async ({

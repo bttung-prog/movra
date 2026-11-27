@@ -1,3 +1,5 @@
+import { USER_STATUSES } from "../../constants/userStatuses.js";
+
 import User from "./user.js";
 
 const create = ({ email, password, phone, fullName, role }, session) => {
@@ -79,6 +81,13 @@ const countSearch = (keyword, filter = {}) => {
   return User.countDocuments({ ...filter, ...buildSearchFilter(keyword) });
 };
 
+const findActiveUserIdsByRole = (role) => {
+  return User.find({ role, status: USER_STATUSES.ACTIVE })
+    .select("_id")
+    .lean()
+    .then((users) => users.map((user) => user._id));
+};
+
 const updateById = (userId, updateData, session = null) => {
   return User.findByIdAndUpdate(userId, updateData, {
     new: true,
@@ -100,5 +109,6 @@ export default {
   search,
   searchPaginated,
   countSearch,
+  findActiveUserIdsByRole,
   updateById,
 };

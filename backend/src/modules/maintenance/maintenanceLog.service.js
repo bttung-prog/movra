@@ -14,66 +14,13 @@ import { getReferenceIdString } from "../../utils/actor.util.js";
 
 import vehicleService from "../vehicle/vehicle.service.js";
 import tripService from "../trip/trip.service.js";
-import dispatcherService from "../dispatcher/dispatcher.service.js";
-import notificationService from "../notification/notification.service.js";
+import logger from "../../configs/logger.js";
+
+import maintenanceNotificationService from "./maintenanceNotification.service.js";
 
 import maintenanceAccess from "./maintenance.access.js";
 import maintenanceScheduleService from "./maintenanceSchedule.service.js";
 import maintenanceLogRepository from "./maintenanceLog.repository.js";
-
-const notifyDispatchersVehicleMaintenance = async ({
-  vehicle,
-  activeTrips = [],
-  action = "ENTER_MAINTENANCE",
-  session = null,
-}) => {
-  const warehouseId = vehicle.warehouseId?._id || vehicle.warehouseId;
-  if (!warehouseId) return;
-
-  const dispatchers =
-    await dispatcherService.getActiveByWarehouseId(warehouseId);
-  if (!dispatchers || dispatchers.length === 0) return;
-
-  const plannedTrips = (activeTrips || []).filter(
-    (t) => t.status === TRIP_STATUSES.PLANNED,
-  );
-  const tripCodes = plannedTrips.map((t) => t.tripCode).join(", ");
-
-  let title = "Thông báo bảo dưỡng phương tiện";
-  let message = `Phương tiện ${vehicle.plateNumber} đã được đưa vào bảo dưỡng.`;
-
-  if (action === "ENTER_MAINTENANCE") {
-    if (plannedTrips.length > 0) {
-      title = "Cảnh báo: Phương tiện vào bảo dưỡng có chuyến đã lên lịch";
-      message = `Phương tiện ${vehicle.plateNumber} đã được đưa vào bảo dưỡng. Phương tiện này đang được gán cho các chuyến xe đã lên kế hoạch (${tripCodes}). Vui lòng điều phối phương tiện thay thế.`;
-    }
-  } else if (action === "EXIT_MAINTENANCE") {
-    title = "Phương tiện hoàn tất bảo dưỡng";
-    message = `Phương tiện ${vehicle.plateNumber} đã hoàn tất bảo dưỡng và sẵn sàng hoạt động.`;
-  }
-
-  const notifications = dispatchers
-    .map((disp) => {
-      const userId = getReferenceIdString(disp.userId);
-      if (!userId) return null;
-
-      return {
-        userId,
-        title,
-        message,
-        type: "SYSTEM",
-        data: {
-          vehicleId: vehicle._id,
-          tripId: plannedTrips[0]?._id || null,
-        },
-      };
-    })
-    .filter(Boolean);
-
-  if (notifications.length === 0) return;
-
-  await notificationService.createMany(notifications, session);
-};
 
 const handleMaintenanceInProgress = async (targetVehicleId, session) => {
   const vehicle = await vehicleService.getById(targetVehicleId);
@@ -99,12 +46,7 @@ const handleMaintenanceInProgress = async (targetVehicleId, session) => {
     session,
   );
 
-  await notifyDispatchersVehicleMaintenance({
-    vehicle,
-    activeTrips,
-    action: "ENTER_MAINTENANCE",
-    session,
-  });
+  return { vehicle, activeTrips };
 };
 
 const handleMaintenanceCompletion = async ({
@@ -159,13 +101,6 @@ const syncVehicleStatusFromLatestLog = async (targetVehicleId, session) => {
       : VEHICLE_STATUSES.AVAILABLE;
   if (vehicle.status !== targetStatus) {
     await vehicleService.changeStatus(targetVehicleId, targetStatus, session);
-    if (targetStatus === VEHICLE_STATUSES.AVAILABLE) {
-      await notifyDispatchersVehicleMaintenance({
-        vehicle,
-        action: "EXIT_MAINTENANCE",
-        session,
-      });
-    }
   }
 };
 
@@ -297,6 +232,55 @@ const getTotalCostByVehicle = async ({
   return { vehicleId, totalCost: result[0]?.totalCost || 0 };
 };
 
+const notifyCommittedMaintenanceEvent = async ({
+  status,
+  targetVehicleId,
+  newLog,
+  inProgressContext,
+  user,
+}) => {
+  try {
+    if (status === MAINTENANCE_STATUSES.IN_PROGRESS) {
+      const context = inProgressContext || {
+        vehicle: await vehicleService.getById(targetVehicleId),
+        activeTrips: [],
+      };
+      await maintenanceNotificationService.notifyMaintenanceStarted({
+        vehicle: context.vehicle,
+        activeTrips: context.activeTrips,
+        actor: user,
+      });
+      return;
+    }
+
+    if (
+      status !== MAINTENANCE_STATUSES.COMPLETED &&
+      status !== MAINTENANCE_STATUSES.CANCELLED
+    ) {
+      return;
+    }
+
+    const vehicle = await vehicleService.getById(targetVehicleId);
+    if (status === MAINTENANCE_STATUSES.COMPLETED) {
+      await maintenanceNotificationService.notifyMaintenanceCompleted({
+        vehicle,
+        log: newLog,
+        actor: user,
+      });
+    } else {
+      await maintenanceNotificationService.notifyMaintenanceExited({
+        vehicle,
+        log: newLog,
+        actor: user,
+      });
+    }
+  } catch (error) {
+    logger.error(`[MAINTENANCE_NOTIFICATION] ${error.message}`, {
+      stack: error.stack,
+    });
+  }
+};
+
 const createEvent = async (logId, eventData, user = null) => {
   const { status, cost, odometerReading } = eventData;
   const log = await getById(logId, user);
@@ -306,6 +290,8 @@ const createEvent = async (logId, eventData, user = null) => {
 
   const session = await mongoose.startSession();
   session.startTransaction();
+
+  let inProgressContext = null;
 
   try {
     const latestLog = await maintenanceLogRepository.findLatestByVehicle(
@@ -334,7 +320,10 @@ const createEvent = async (logId, eventData, user = null) => {
       status === MAINTENANCE_STATUSES.IN_PROGRESS &&
       log.status !== MAINTENANCE_STATUSES.IN_PROGRESS
     ) {
-      await handleMaintenanceInProgress(targetVehicleId, session);
+      inProgressContext = await handleMaintenanceInProgress(
+        targetVehicleId,
+        session,
+      );
     }
 
     const newLog = await maintenanceLogRepository.create(payload, session);
@@ -354,6 +343,13 @@ const createEvent = async (logId, eventData, user = null) => {
     }
 
     await session.commitTransaction();
+    await notifyCommittedMaintenanceEvent({
+      status,
+      targetVehicleId,
+      newLog,
+      inProgressContext,
+      user,
+    });
     return newLog;
   } catch (error) {
     await session.abortTransaction();

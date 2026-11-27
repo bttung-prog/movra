@@ -19,6 +19,7 @@ import tripAssignmentRepository from "./tripAssignment.repository.js";
 import tripAuditLogRepository from "./tripAuditLog.repository.js";
 import tripAccess from "./trip.access.js";
 import tripAudit from "./trip.audit.js";
+import tripNotificationService from "./tripNotification.service.js";
 
 const ensureTripAccess = async (
   tripId,
@@ -124,9 +125,11 @@ const reassign = async (
   };
 
   const tripUpdatePayload = {};
+  let newDriver = null;
 
   if (newDriverId) {
     const driver = await driverService.getById(newDriverId);
+    newDriver = driver;
     checkWarehouseAccess(driver.warehouseId, user);
     const tripWarehouseId =
       trip.warehouseId ||
@@ -191,7 +194,7 @@ const reassign = async (
   const session = await mongoose.startSession();
 
   try {
-    return await session.withTransaction(async () => {
+    const result = await session.withTransaction(async () => {
       const currentTrip = await ensureTripAccess(tripId, true, user, session);
       const changedDuringReassignment =
         !tripAudit.sameReference(currentTrip.vehicleId, trip.vehicleId) ||
@@ -257,6 +260,17 @@ const reassign = async (
         assignment: assignmentLog,
       };
     });
+
+    await tripNotificationService.notifyTripReassigned({
+      trip: result.trip,
+      oldDriver: trip.driverId,
+      newDriver: newDriver || result.trip.driverId,
+      actor: user,
+      orderCount: result.trip.totalOrder || 0,
+      vehicleChanged: Boolean(newVehicleId),
+    });
+
+    return result;
   } finally {
     session.endSession();
   }

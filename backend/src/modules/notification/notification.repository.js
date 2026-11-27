@@ -37,6 +37,27 @@ const markAsRead = (id) => {
   ).lean();
 };
 
+const findExistingDedupeKeys = ({
+  userIds = [],
+  dedupeKeys = [],
+  session = null,
+} = {}) => {
+  if (!userIds.length || !dedupeKeys.length) {
+    return Promise.resolve([]);
+  }
+
+  return Notification.find(
+    {
+      userId: { $in: userIds },
+      dedupeKey: { $in: dedupeKeys },
+    },
+    null,
+    { session },
+  )
+    .select("userId dedupeKey")
+    .lean();
+};
+
 const markAllAsRead = (userId) => {
   return Notification.updateMany(
     { userId, isRead: false },
@@ -50,6 +71,7 @@ export default {
   findById,
   findAll,
   countAll,
+  findExistingDedupeKeys,
   markAsRead,
   markAllAsRead,
 };

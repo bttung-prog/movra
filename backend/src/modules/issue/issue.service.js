@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 
 import { ROLES } from "../../constants/roles.js";
 import { TRIP_TYPES } from "../../constants/tripTypes.js";
+import { ORDER_STATUSES } from "../../constants/orderStatuses.js";
 import { ISSUE_STATUSES } from "../../constants/issueStatuses.js";
 import {
   INVENTORY_STATUSES,
@@ -24,6 +25,8 @@ import { escapeRegex } from "../../utils/regexUtils.js";
 import tripService from "../trip/trip.service.js";
 import orderService from "../order/order.service.js";
 import orderTrackingLogService from "../order/orderTrackingLog.service.js";
+import orderNotificationService from "../order/orderNotification.service.js";
+import warehouseNotificationService from "../warehouse/warehouseNotification.service.js";
 import goodsCategoryService from "../goodsCategory/goodsCategory.service.js";
 import warehouseService from "../warehouse/warehouse.service.js";
 import userService from "../user/user.service.js";
@@ -74,7 +77,7 @@ const create = async (
     throw new ApiError(400, ISSUE_MESSAGES.ORDER_ASSIGNED_DIFFERENT_TRIP);
   }
 
-  await warehouseService.getById(warehouseId, true, true);
+  const warehouse = await warehouseService.getById(warehouseId, true, true);
 
   if (goodsCategoryId) {
     await goodsCategoryService.getById(goodsCategoryId);
@@ -161,7 +164,9 @@ const create = async (
     await inventoryService.markAsIssuedByOrderId(orderId, warehouseId, session);
 
     const targetStatus =
-      trip.type === TRIP_TYPES.TRANSFER ? "transporting" : "out_for_delivery";
+      trip.type === TRIP_TYPES.TRANSFER
+        ? ORDER_STATUSES.TRANSPORTING
+        : ORDER_STATUSES.OUT_FOR_DELIVERY;
 
     await orderTrackingLogService.create({
       orderId,
@@ -173,6 +178,25 @@ const create = async (
     });
 
     await session.commitTransaction();
+
+    await orderNotificationService.notifyOrderStatusChanged(
+      order,
+      order.status,
+      targetStatus,
+      currentUser,
+      {
+        notes: `Hàng xuất kho theo phiếu ${issueCode}`,
+        eventKey: newIssue?._id ? String(newIssue._id) : null,
+      },
+    );
+
+    await warehouseNotificationService.notifyIssueCreated({
+      issue: newIssue,
+      order,
+      warehouse,
+      actor: currentUser,
+    });
+
     return await issueRepository.findById(newIssue._id);
   } catch (error) {
     if (session.inTransaction()) {
@@ -513,6 +537,14 @@ const cancel = async (issueId, { note } = {}, currentUser = null) => {
     });
 
     await session.commitTransaction();
+
+    await warehouseNotificationService.notifyIssueCancelled({
+      issue: updated,
+      order: latestOrder,
+      warehouse,
+      actor: currentUser,
+    });
+
     return updated;
   } catch (error) {
     if (session.inTransaction()) {

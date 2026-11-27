@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   create: vi.fn(),
   insertMany: vi.fn(),
+  findExistingDedupeKeys: vi.fn(),
   findAll: vi.fn(),
   countAll: vi.fn(),
   findById: vi.fn(),
@@ -14,6 +15,7 @@ vi.mock("../../../src/modules/notification/notification.repository.js", () => ({
   default: {
     create: mocks.create,
     insertMany: mocks.insertMany,
+    findExistingDedupeKeys: mocks.findExistingDedupeKeys,
     findAll: mocks.findAll,
     countAll: mocks.countAll,
     findById: mocks.findById,
@@ -40,6 +42,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.create.mockResolvedValue(notification);
   mocks.insertMany.mockResolvedValue([]);
+  mocks.findExistingDedupeKeys.mockResolvedValue([]);
   mocks.findAll.mockResolvedValue([notification]);
   mocks.countAll.mockResolvedValue(12);
   mocks.findById.mockResolvedValue(notification);
@@ -265,6 +268,51 @@ describe("notificationService.createMany", () => {
       null,
     );
     expect(result).toEqual(docs);
+  });
+
+  it("skips notifications whose dedupeKey already exists", async () => {
+    const existingKey = "maintenance:schedule-1:due_7d:user-1";
+    const newKey = "maintenance:schedule-1:due_7d:user-2";
+    mocks.findExistingDedupeKeys.mockResolvedValue([
+      { userId, dedupeKey: existingKey },
+    ]);
+    mocks.insertMany.mockResolvedValue([
+      {
+        userId: "user-2",
+        title: "Lịch bảo dưỡng sắp đến hạn",
+        message: "Sắp đến hạn",
+        type: "MAINTENANCE",
+        data: {},
+        dedupeKey: newKey,
+      },
+    ]);
+
+    const result = await notificationService.createMany([
+      {
+        userId,
+        title: "Lịch bảo dưỡng sắp đến hạn",
+        message: "Sắp đến hạn",
+        type: "MAINTENANCE",
+        dedupeKey: existingKey,
+      },
+      {
+        userId: "user-2",
+        title: "Lịch bảo dưỡng sắp đến hạn",
+        message: "Sắp đến hạn",
+        type: "MAINTENANCE",
+        dedupeKey: newKey,
+      },
+    ]);
+
+    expect(mocks.findExistingDedupeKeys).toHaveBeenCalledWith({
+      userIds: [userId, "user-2"],
+      dedupeKeys: [existingKey, newKey],
+      session: null,
+    });
+    expect(mocks.insertMany).toHaveBeenCalledTimes(1);
+    expect(mocks.insertMany.mock.calls[0][0]).toHaveLength(1);
+    expect(mocks.insertMany.mock.calls[0][0][0].userId).toBe("user-2");
+    expect(result).toHaveLength(1);
   });
 
   it("does not hit the repository when there is nothing valid to insert", async () => {

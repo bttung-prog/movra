@@ -1,5 +1,7 @@
 import mongoose from "mongoose";
 
+import logger from "../../configs/logger.js";
+
 import { PAYMENT_STATUSES } from "../../constants/paymentStatuses.js";
 import {
   PAYMENT_METHODS,
@@ -31,6 +33,9 @@ import customerService from "../customer/customer.service.js";
 import walletTransactionService from "../walletTransaction/walletTransaction.service.js";
 
 import paymentRepository from "./payment.repository.js";
+import paymentNotificationService from "./paymentNotification.service.js";
+import invoiceNotificationService from "../invoice/invoiceNotification.service.js";
+import walletNotificationService from "../walletTransaction/walletNotification.service.js";
 
 const assertCustomerOwnsResource = (resourceCustomerId, actor) => {
   if (actor?.role !== ROLES.CUSTOMER) {
@@ -265,6 +270,35 @@ const syncCompletedPaymentEffects = async ({
   }
 };
 
+const notifyInvoicePaymentState = async ({
+  invoiceId,
+  actor = null,
+  paymentId = null,
+}) => {
+  if (!invoiceId) return false;
+
+  const invoice = await invoiceService.getById(invoiceId);
+  if (invoice.status === INVOICE_STATUSES.PAID) {
+    await invoiceNotificationService.notifyInvoicePaid({
+      invoice,
+      actor,
+      paymentId,
+    });
+    return true;
+  }
+
+  if (invoice.status === INVOICE_STATUSES.PARTIALLY_PAID) {
+    await invoiceNotificationService.notifyInvoicePartiallyPaid({
+      invoice,
+      actor,
+      paymentId,
+    });
+    return true;
+  }
+
+  return false;
+};
+
 const create = async (payload, actor) => {
   const {
     invoiceId,
@@ -470,6 +504,37 @@ const create = async (payload, actor) => {
     }
 
     await session.commitTransaction();
+
+    try {
+      const notificationPayment =
+        (await paymentRepository.findById(newPayment._id)) || newPayment;
+
+      if (initialStatus === PAYMENT_STATUSES.PENDING) {
+        await paymentNotificationService.notifyPaymentPending({
+          payment: notificationPayment,
+          actor,
+          includeAccountants: actor?.role === ROLES.CUSTOMER,
+        });
+      } else {
+        const invoiceNotified = await notifyInvoicePaymentState({
+          invoiceId: linkedInvoiceId,
+          actor,
+          paymentId: newPayment._id,
+        });
+
+        if (!invoiceNotified) {
+          await paymentNotificationService.notifyPaymentCompleted({
+            payment: notificationPayment,
+          });
+        }
+      }
+    } catch (error) {
+      logger.error("Failed to create payment notification", {
+        paymentId: newPayment._id,
+        error: error.message,
+      });
+    }
+
     return newPayment;
   } catch (error) {
     await session.abortTransaction();
@@ -626,7 +691,14 @@ const createDriverRemittance = async (payload, driverUser, actor = null) => {
     notes: notes || `Tài xế nộp tiền COD/cước theo chuyến ${tripId || ""}`,
   };
 
-  return paymentRepository.create(paymentData);
+  const payment = await paymentRepository.create(paymentData);
+
+  await paymentNotificationService.notifyDriverRemittanceCreated({
+    payment,
+    actor: driverUser,
+  });
+
+  return payment;
 };
 
 const verify = async (paymentId, payload, verifierUser) => {
@@ -677,6 +749,20 @@ const verify = async (paymentId, payload, verifierUser) => {
         }
 
         await session.commitTransaction();
+
+        if (payment.purpose === PAYMENT_PURPOSES.WALLET_TOP_UP) {
+          await walletNotificationService.notifyTopUpRejected({
+            payment: updatedPayment,
+            customer: payment.customerId || null,
+            notes,
+          });
+        } else {
+          await paymentNotificationService.notifyPaymentRejected({
+            payment: updatedPayment,
+            notes,
+          });
+        }
+
         return updatedPayment;
       } catch (error) {
         await session.abortTransaction();
@@ -701,11 +787,27 @@ const verify = async (paymentId, payload, verifierUser) => {
     if (!updatedPayment) {
       throw new ApiError(409, PAYMENT_MESSAGES.ALREADY_VERIFIED);
     }
+
+    if (payment.purpose === PAYMENT_PURPOSES.WALLET_TOP_UP) {
+      await walletNotificationService.notifyTopUpRejected({
+        payment: updatedPayment,
+        customer: payment.customerId || null,
+        notes,
+      });
+    } else {
+      await paymentNotificationService.notifyPaymentRejected({
+        payment: updatedPayment,
+        notes,
+      });
+    }
+
     return updatedPayment;
   }
 
   const session = await mongoose.startSession();
   session.startTransaction();
+
+  let walletTopUpVerification = null;
 
   try {
     const updatedPayment = await paymentRepository.updateById(
@@ -737,7 +839,7 @@ const verify = async (paymentId, payload, verifierUser) => {
         session,
       );
 
-      await walletTransactionService.recordTransaction(
+      const walletTransaction = await walletTransactionService.recordTransaction(
         {
           customerId,
           type: WALLET_TRANSACTION_TYPES.TOP_UP,
@@ -752,6 +854,13 @@ const verify = async (paymentId, payload, verifierUser) => {
         },
         session,
       );
+
+      walletTopUpVerification = {
+        customer,
+        walletTransaction,
+        balanceBefore,
+        balanceAfter,
+      };
     } else if (payment.payerType !== PAYER_TYPES.DRIVER) {
       await syncCompletedPaymentEffects({
         invoiceId: payment.invoiceId?._id || payment.invoiceId,
@@ -849,6 +958,30 @@ const verify = async (paymentId, payload, verifierUser) => {
     }
 
     await session.commitTransaction();
+
+    if (walletTopUpVerification) {
+      await walletNotificationService.notifyTopUpCompleted({
+        payment: updatedPayment,
+        customer: walletTopUpVerification.customer,
+        walletTransaction: walletTopUpVerification.walletTransaction,
+        balanceBefore: walletTopUpVerification.balanceBefore,
+        balanceAfter: walletTopUpVerification.balanceAfter,
+      });
+    } else if (payment.purpose !== PAYMENT_PURPOSES.WALLET_TOP_UP) {
+      const invoiceNotified = await notifyInvoicePaymentState({
+        invoiceId: payment.invoiceId?._id || payment.invoiceId,
+        actor: verifierUser,
+        paymentId: payment._id,
+      });
+
+      if (!invoiceNotified) {
+        await paymentNotificationService.notifyPaymentVerified({
+          payment: updatedPayment,
+          notes,
+        });
+      }
+    }
+
     return updatedPayment;
   } catch (error) {
     await session.abortTransaction();
@@ -860,6 +993,8 @@ const verify = async (paymentId, payload, verifierUser) => {
 
 const refund = async (paymentId, payload, actor) => {
   const { reason, refundAmount } = payload;
+
+  let walletTopUpRefundContext = null;
 
   const existingPayment = await paymentRepository.findById(paymentId);
   if (!existingPayment) {
@@ -1055,7 +1190,7 @@ const refund = async (paymentId, payload, actor) => {
       }
       const balanceAfter = Number(debitedCustomer.walletBalance || 0);
 
-      await walletTransactionService.recordTransaction(
+      const walletTransaction = await walletTransactionService.recordTransaction(
         {
           transactionCode: generateCode("WTRX"),
           customerId,
@@ -1071,6 +1206,13 @@ const refund = async (paymentId, payload, actor) => {
         },
         session,
       );
+
+      walletTopUpRefundContext = {
+        customer,
+        walletTransaction,
+        balanceBefore,
+        balanceAfter,
+      };
     } else if (customerId && !isWalletTopUp) {
       const customer = await customerService.getById(customerId, session);
 
@@ -1153,6 +1295,25 @@ const refund = async (paymentId, payload, actor) => {
     }
 
     await session.commitTransaction();
+
+    if (walletTopUpRefundContext) {
+      await walletNotificationService.notifyTopUpRefunded({
+        payment: updatedPayment,
+        customer: walletTopUpRefundContext.customer,
+        walletTransaction: walletTopUpRefundContext.walletTransaction,
+        amount: effectiveRefundAmount,
+        balanceBefore: walletTopUpRefundContext.balanceBefore,
+        balanceAfter: walletTopUpRefundContext.balanceAfter,
+        notes: reason || "",
+      });
+    } else if (payment.purpose !== PAYMENT_PURPOSES.WALLET_TOP_UP) {
+      await paymentNotificationService.notifyRefundCompleted({
+        payment: updatedPayment,
+        refundAmount: effectiveRefundAmount,
+        notes: reason || "",
+      });
+    }
+
     return updatedPayment;
   } catch (error) {
     await session.abortTransaction();

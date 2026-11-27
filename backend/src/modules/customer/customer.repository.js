@@ -42,6 +42,22 @@ const findByUserId = (userId, session = null) => {
     .lean();
 };
 
+const findByIds = (customerIds = [], session = null) => {
+  if (!Array.isArray(customerIds) || customerIds.length === 0) {
+    return Promise.resolve([]);
+  }
+
+  const query = Customer.find({ _id: { $in: customerIds } })
+    .populate("userId", "email phone fullName")
+    .lean();
+
+  if (session) {
+    query.session(session);
+  }
+
+  return query;
+};
+
 const updateById = (
   customerId,
   updateData,
@@ -62,6 +78,7 @@ export default {
   findAll,
   countAll,
   findById,
+  findByIds,
   findByUserId,
   updateById,
 };

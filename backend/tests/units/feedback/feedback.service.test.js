@@ -17,6 +17,8 @@ const mocks = vi.hoisted(() => ({
   tripGetById: vi.fn(),
   tripGetIdsByWarehouseId: vi.fn(),
   driverUpdateById: vi.fn(),
+  notifyFeedbackCreated: vi.fn(),
+  notifyFeedbackReplied: vi.fn(),
 }));
 
 vi.mock("mongoose", async (importOriginal) => {
@@ -60,6 +62,16 @@ vi.mock("../../../src/modules/trip/trip.service.js", () => ({
 vi.mock("../../../src/modules/driver/driver.service.js", () => ({
   default: { updateById: mocks.driverUpdateById },
 }));
+
+vi.mock(
+  "../../../src/modules/feedback/feedbackNotification.service.js",
+  () => ({
+    default: {
+      notifyFeedbackCreated: mocks.notifyFeedbackCreated,
+      notifyFeedbackReplied: mocks.notifyFeedbackReplied,
+    },
+  }),
+);
 
 import { FEEDBACK_MESSAGES } from "../../../src/constants/messages.js";
 import { ROLES } from "../../../src/constants/roles.js";
@@ -246,10 +258,19 @@ describe("feedbackService.createFeedback", () => {
 });
 
 describe("feedbackService.replyFeedback", () => {
-  it("allows a driver to reply only to their own feedback", async () => {
-    const actor = { role: ROLES.DRIVER, driverId };
-    const feedback = { _id: feedbackId, driverId, status: "visible" };
+  it("allows an admin to reply to feedback", async () => {
+    const actor = { role: ROLES.ADMIN, userId: "admin-1" };
+    const feedback = {
+      _id: feedbackId,
+      driverId,
+      status: "visible",
+      customerId,
+    };
     mocks.findByIdFeedback.mockResolvedValue(feedback);
+    mocks.updateByIdFeedback.mockResolvedValue({
+      ...feedback,
+      driverResponse: "Thanks for the feedback",
+    });
 
     await expect(
       feedbackService.replyFeedback(
@@ -264,15 +285,10 @@ describe("feedbackService.replyFeedback", () => {
     expect(mocks.updateByIdFeedback).toHaveBeenCalledWith(feedbackId, {
       driverResponse: "Thanks for the feedback",
     });
+    expect(mocks.notifyFeedbackReplied).toHaveBeenCalled();
   });
 
-  it("denies driver replies to a different driver's feedback", async () => {
-    mocks.findByIdFeedback.mockResolvedValue({
-      _id: feedbackId,
-      status: "visible",
-      driverId: "507f1f77bcf86cd799439099",
-    });
-
+  it("denies replies from non-admin users", async () => {
     await expect(
       feedbackService.replyFeedback(feedbackId, "Response", {
         role: ROLES.DRIVER,
@@ -282,6 +298,7 @@ describe("feedbackService.replyFeedback", () => {
       statusCode: 403,
       message: FEEDBACK_MESSAGES.REPLY_ACCESS_DENIED,
     });
+    expect(mocks.findByIdFeedback).not.toHaveBeenCalled();
   });
 });
 

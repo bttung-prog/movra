@@ -1,5 +1,7 @@
 import mongoose from "mongoose";
 
+import { FAILURE_REASON_TYPES } from "../../constants/failureReasonTypes.js";
+
 const failureReasonSchema = new mongoose.Schema(
   {
     orderId: {
@@ -16,13 +18,7 @@ const failureReasonSchema = new mongoose.Schema(
 
     failureReasonType: {
       type: String,
-      enum: [
-        "customer_rejected",
-        "damaged",
-        "wrong_address",
-        "payment_failed",
-        "other",
-      ],
+      enum: Object.values(FAILURE_REASON_TYPES),
       required: true,
       trim: true,
     },

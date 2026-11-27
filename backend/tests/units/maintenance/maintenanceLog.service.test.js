@@ -20,6 +20,9 @@ const mocks = vi.hoisted(() => ({
   dispatcherGetActiveByWarehouseId: vi.fn(),
   notificationCreate: vi.fn(),
   notificationCreateMany: vi.fn(),
+  maintenanceNotifyStarted: vi.fn(),
+  maintenanceNotifyCompleted: vi.fn(),
+  maintenanceNotifyExited: vi.fn(),
 }));
 
 vi.mock("mongoose", async (importOriginal) => {
@@ -89,6 +92,17 @@ vi.mock("../../../src/modules/notification/notification.service.js", () => ({
     createMany: mocks.notificationCreateMany,
   },
 }));
+
+vi.mock(
+  "../../../src/modules/maintenance/maintenanceNotification.service.js",
+  () => ({
+    default: {
+      notifyMaintenanceStarted: mocks.maintenanceNotifyStarted,
+      notifyMaintenanceCompleted: mocks.maintenanceNotifyCompleted,
+      notifyMaintenanceExited: mocks.maintenanceNotifyExited,
+    },
+  }),
+);
 
 import { ApiError } from "../../../src/utils/ApiError.js";
 import {
@@ -173,6 +187,9 @@ beforeEach(() => {
   ]);
   mocks.notificationCreate.mockResolvedValue({ _id: "notif-1" });
   mocks.notificationCreateMany.mockResolvedValue([{ _id: "notif-1" }]);
+  mocks.maintenanceNotifyStarted.mockResolvedValue(1);
+  mocks.maintenanceNotifyCompleted.mockResolvedValue(2);
+  mocks.maintenanceNotifyExited.mockResolvedValue(1);
 });
 
 describe("maintenanceLogService.create", () => {
@@ -368,17 +385,11 @@ describe("maintenanceLogService.createEvent", () => {
       "maintenance",
       session,
     );
-    expect(mocks.notificationCreateMany).toHaveBeenCalledWith(
-      [
-        expect.objectContaining({
-          userId: "user-disp-1",
-          title: expect.stringContaining("Cảnh báo"),
-          message: expect.stringContaining("TRIP-PLANNED-1"),
-          type: "SYSTEM",
-        }),
-      ],
-      session,
-    );
+    expect(mocks.maintenanceNotifyStarted).toHaveBeenCalledWith({
+      vehicle: expect.objectContaining({ _id: vehicleId }),
+      activeTrips: [expect.objectContaining({ tripCode: "TRIP-PLANNED-1" })],
+      actor: null,
+    });
     expect(mocks.notificationCreate).not.toHaveBeenCalled();
     expect(session.commitTransaction).toHaveBeenCalled();
     expect(result.status).toBe(MAINTENANCE_STATUSES.IN_PROGRESS);
@@ -399,13 +410,9 @@ describe("maintenanceLogService.createEvent", () => {
       status: MAINTENANCE_STATUSES.IN_PROGRESS,
     });
 
-    expect(mocks.notificationCreateMany).toHaveBeenCalledTimes(1);
-    expect(mocks.notificationCreateMany).toHaveBeenCalledWith(
-      [
-        expect.objectContaining({ userId: "user-disp-1" }),
-        expect.objectContaining({ userId: "user-disp-2" }),
-      ],
-      session,
+    expect(mocks.maintenanceNotifyStarted).toHaveBeenCalledTimes(1);
+    expect(mocks.maintenanceNotifyStarted).toHaveBeenCalledWith(
+      expect.objectContaining({ activeTrips: [] }),
     );
     expect(mocks.notificationCreate).not.toHaveBeenCalled();
   });
@@ -461,16 +468,13 @@ describe("maintenanceLogService.createEvent", () => {
       "available",
       session,
     );
-    expect(mocks.notificationCreateMany).toHaveBeenCalledWith(
-      [
-        expect.objectContaining({
-          userId: "user-disp-1",
-          title: "Phương tiện hoàn tất bảo dưỡng",
-          type: "SYSTEM",
-        }),
-      ],
-      session,
-    );
+    expect(mocks.maintenanceNotifyCompleted).toHaveBeenCalledWith({
+      vehicle: expect.objectContaining({ _id: vehicleId }),
+      log: expect.objectContaining({
+        status: MAINTENANCE_STATUSES.COMPLETED,
+      }),
+      actor: null,
+    });
     expect(mocks.notificationCreate).not.toHaveBeenCalled();
     expect(session.commitTransaction).toHaveBeenCalled();
   });

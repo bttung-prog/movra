@@ -288,15 +288,26 @@ const updateById = (orderId, updateData, session = null, conditions = {}) => {
     .lean();
 };
 
-const recordFailureAttempt = (orderId, notes, session = null) => {
+const recordFailureAttempt = (
+  orderId,
+  notes,
+  session = null,
+  allowReturned = true,
+) => {
   const nextAttempts = {
     $add: [{ $ifNull: ["$deliveryAttempts", 0] }, 1],
   };
   const updates = {
     deliveryAttempts: nextAttempts,
-    status: {
-      $cond: [{ $gte: [nextAttempts, 3] }, "returned", "failed"],
-    },
+    status: allowReturned
+      ? {
+          $cond: [
+            { $gte: [nextAttempts, 3] },
+            ORDER_STATUSES.RETURNED,
+            ORDER_STATUSES.FAILED,
+          ],
+        }
+      : ORDER_STATUSES.FAILED,
   };
 
   if (notes) {

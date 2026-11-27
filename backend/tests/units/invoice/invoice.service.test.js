@@ -23,6 +23,10 @@ const mocks = vi.hoisted(() => ({
   markOverdueInvoices: vi.fn(),
   createNotification: vi.fn(),
   createManyNotifications: vi.fn(),
+  notifyInvoiceIssued: vi.fn(),
+  notifyInvoiceCancelled: vi.fn(),
+  notifyInvoicePartiallyPaid: vi.fn(),
+  notifyInvoicePaid: vi.fn(),
 }));
 
 vi.mock("../../../src/modules/invoice/invoice.repository.js", () => ({
@@ -49,6 +53,15 @@ vi.mock("../../../src/modules/notification/notification.service.js", () => ({
   default: {
     create: mocks.createNotification,
     createMany: mocks.createManyNotifications,
+  },
+}));
+
+vi.mock("../../../src/modules/invoice/invoiceNotification.service.js", () => ({
+  default: {
+    notifyInvoiceIssued: mocks.notifyInvoiceIssued,
+    notifyInvoiceCancelled: mocks.notifyInvoiceCancelled,
+    notifyInvoicePartiallyPaid: mocks.notifyInvoicePartiallyPaid,
+    notifyInvoicePaid: mocks.notifyInvoicePaid,
   },
 }));
 
@@ -760,12 +773,13 @@ describe("invoiceService issue, update and cancel", () => {
       expect(mocks.createManyNotifications).toHaveBeenCalledWith([
         expect.objectContaining({
           userId: "user-cust-1",
-          type: "PAYMENT",
+          type: "INVOICE",
           title: "Hóa đơn quá hạn thanh toán",
           data: expect.objectContaining({
             invoiceId: candidate._id,
             invoiceCode: candidate.invoiceCode,
             orderIds: candidate.orderIds,
+            event: "INVOICE_OVERDUE",
           }),
         }),
       ]);

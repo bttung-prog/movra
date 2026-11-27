@@ -19,7 +19,7 @@ feedbackRouter.post(
 
 feedbackRouter.post(
   "/:id/reply",
-  authorize(ROLES.ADMIN, ROLES.DRIVER),
+  authorize(ROLES.ADMIN),
   validate(feedbackValidator.paramIdSchema, "params"),
   validate(feedbackValidator.driverResponseSchema),
   feedbackController.reply,

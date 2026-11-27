@@ -23,6 +23,8 @@ import { escapeRegex } from "../../utils/regexUtils.js";
 
 import orderService from "../order/order.service.js";
 import orderTrackingLogService from "../order/orderTrackingLog.service.js";
+import orderNotificationService from "../order/orderNotification.service.js";
+import warehouseNotificationService from "../warehouse/warehouseNotification.service.js";
 import goodsCategoryService from "../goodsCategory/goodsCategory.service.js";
 import warehouseService from "../warehouse/warehouse.service.js";
 import userService from "../user/user.service.js";
@@ -37,6 +39,9 @@ const validateReceipt = (receipt) => {
   }
 };
 
+/**
+ * @param {string} warehouseId - ID of the receiving warehouse.
+ */
 const create = async (
   {
     orderId,
@@ -217,6 +222,22 @@ const create = async (
 
     if (isInternalSession) {
       await dbSession.commitTransaction();
+
+      await Promise.allSettled([
+        orderNotificationService.notifyWarehouseHandoff({
+          order,
+          fromWarehouseId: previousWarehouseId,
+          toWarehouseId: warehouseId,
+          receiptId: newReceipt._id,
+          actor: currentUser,
+        }),
+        warehouseNotificationService.notifyReceiptCreated({
+          receipt: newReceipt,
+          order,
+          warehouse,
+          actor: currentUser,
+        }),
+      ]);
     }
     return await receiptRepository.findById(newReceipt._id);
   } catch (error) {
@@ -456,6 +477,14 @@ const cancel = async (receiptId, { note } = {}, currentUser = null) => {
     });
 
     await session.commitTransaction();
+
+    await warehouseNotificationService.notifyReceiptCancelled({
+      receipt: updated,
+      order: null,
+      warehouse,
+      actor: currentUser,
+    });
+
     return updated;
   } catch (error) {
     if (session.inTransaction()) {
@@ -494,6 +523,9 @@ const updateById = async (receiptId, updateData, currentUser = null) => {
   const receiptWarehouseId = existingReceipt.warehouseId?._id?.toString();
 
   const rawOrderId = existingReceipt.orderId?._id?.toString();
+  const warehouse = allowedUpdates.condition
+    ? await warehouseService.getById(receiptWarehouseId, false)
+    : null;
 
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -528,6 +560,22 @@ const updateById = async (receiptId, updateData, currentUser = null) => {
     }
 
     await session.commitTransaction();
+
+    if (
+      allowedUpdates.condition &&
+      updated?.condition !== existingReceipt.condition
+    ) {
+      await warehouseNotificationService.notifyReceiptConditionUpdated({
+        receipt: updated,
+        order: null,
+        warehouse,
+        previousCondition: existingReceipt.condition,
+        condition: updated.condition,
+        notes: updated.note || "",
+        actor: currentUser,
+      });
+    }
+
     return updated;
   } catch (error) {
     if (session.inTransaction()) {

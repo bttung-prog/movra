@@ -22,6 +22,7 @@ import vehicleService from "../vehicle/vehicle.service.js";
 import vehicleUsageLogService from "../vehicle/vehicleUsageLog.service.js";
 import userService from "../user/user.service.js";
 import orderAssignmentService from "../order/orderAssignment.service.js";
+import orderNotificationService from "../order/orderNotification.service.js";
 
 import tripRepository from "./trip.repository.js";
 import tripTrackingLogRepository from "./tripTrackingLog.repository.js";
@@ -93,7 +94,7 @@ const handleTripCompletion = async ({
     );
   }
 
-  await orderAssignmentService.handleOrdersOnTripCompletion(
+  const orderResult = await orderAssignmentService.handleOrdersOnTripCompletion(
     trip,
     session,
     user,
@@ -137,7 +138,11 @@ const handleTripCompletion = async ({
     );
   }
 
-  return { status: TRIP_STATUSES.COMPLETED, actualEnd };
+  return {
+    status: TRIP_STATUSES.COMPLETED,
+    actualEnd,
+    orderStatusChanges: orderResult?.statusChanges || [],
+  };
 };
 
 const handleTripCancellation = async ({
@@ -151,12 +156,15 @@ const handleTripCancellation = async ({
   const resolvedTrip =
     trip || (await tripRepository.findById(resolvedTripId, session));
 
+  let orderStatusChanges = [];
   if (resolvedTrip) {
-    await orderAssignmentService.handleOrdersOnTripCancellation(
-      resolvedTrip,
-      session,
-      user,
-    );
+    const orderResult =
+      await orderAssignmentService.handleOrdersOnTripCancellation(
+        resolvedTrip,
+        session,
+        user,
+      );
+    orderStatusChanges = orderResult?.statusChanges || [];
   }
 
   const existingUsageLogs = await vehicleUsageLogService.getByTripId({
@@ -190,7 +198,10 @@ const handleTripCancellation = async ({
     );
   }
 
-  return { status: TRIP_STATUSES.CANCELLED };
+  return {
+    status: TRIP_STATUSES.CANCELLED,
+    orderStatusChanges,
+  };
 };
 
 const addTrackingLog = async (
@@ -259,6 +270,7 @@ const addTrackingLog = async (
   }
 
   let tripStatusUpdates = {};
+  let orderStatusChanges = [];
 
   const targetVehicleId = trip.vehicleId?._id || trip.vehicleId;
   const targetDriverId = trip.driverId?._id || trip.driverId;
@@ -292,21 +304,33 @@ const addTrackingLog = async (
         });
       }
     } else if (status === TRACKING_STATUSES.COMPLETED) {
-      tripStatusUpdates = await handleTripCompletion({
+      const completionResult = await handleTripCompletion({
         trip,
         targetVehicleId,
         odometerReading,
         session,
         user,
       });
+      const {
+        orderStatusChanges: completionOrderStatusChanges = [],
+        ...completionStatusUpdates
+      } = completionResult;
+      tripStatusUpdates = completionStatusUpdates;
+      orderStatusChanges = completionOrderStatusChanges;
     } else if (status === TRACKING_STATUSES.CANCELLED) {
-      tripStatusUpdates = await handleTripCancellation({
+      const cancellationResult = await handleTripCancellation({
         trip,
         tripId,
         targetVehicleId,
         session,
         user,
       });
+      const {
+        orderStatusChanges: cancellationOrderStatusChanges = [],
+        ...cancellationStatusUpdates
+      } = cancellationResult;
+      tripStatusUpdates = cancellationStatusUpdates;
+      orderStatusChanges = cancellationOrderStatusChanges;
     }
 
     if (Object.keys(tripStatusUpdates).length > 0) {
@@ -328,6 +352,16 @@ const addTrackingLog = async (
     }
 
     await session.commitTransaction();
+
+    if (orderStatusChanges.length > 0) {
+      await orderNotificationService.notifyOrderStatusChangedBatch({
+        changes: orderStatusChanges,
+        actor: user,
+        notes: `Chuyến xe ${trip.tripCode || tripId} đã kết thúc`,
+        summaryTrip: status === TRACKING_STATUSES.COMPLETED ? trip : null,
+      });
+    }
+
     return trackingLog;
   } catch (error) {
     await session.abortTransaction();
