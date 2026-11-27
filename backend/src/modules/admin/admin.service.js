@@ -7,6 +7,7 @@ import { hashPassword } from "../../utils/password.js";
 
 import authService from "../auth/auth.service.js";
 import userService from "../user/user.service.js";
+import accountNotificationService from "../user/accountNotification.service.js";
 
 const createUser = async (data) => {
   return authService.createUser(data);
@@ -41,7 +42,20 @@ const changeRoleUser = async (targetUserId, roleData = {}, currentAdminId) => {
     throw new ApiError(400, ADMIN_MESSAGES.CANNOT_DEMOTE_SELF);
   }
 
-  return userService.updateRole(targetUserId, role, payload);
+  const existingUser = await userService.getById(targetUserId);
+  const updatedUser = await userService.updateRole(targetUserId, role, payload);
+
+  const nextRole = updatedUser?.role || role;
+  if (existingUser.role !== nextRole) {
+    await accountNotificationService.notifyRoleChanged({
+      user: updatedUser,
+      userId: targetUserId,
+      previousRole: existingUser.role,
+      role: nextRole,
+    });
+  }
+
+  return updatedUser;
 };
 
 const changeStatusUser = async (targetUserId, status, currentAdminId) => {

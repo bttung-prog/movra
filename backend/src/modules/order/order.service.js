@@ -46,6 +46,7 @@ import warehouseService from "../warehouse/warehouse.service.js";
 import orderRepository from "./order.repository.js";
 import orderTrackingLogRepository from "./orderTrackingLog.repository.js";
 import orderAccess from "./order.access.js";
+import orderNotificationService from "./orderNotification.service.js";
 
 const getIdsByWarehouseId = async (warehouseId) => {
   return orderRepository.findIdsByWarehouseId(warehouseId);
@@ -535,11 +536,41 @@ const updateById = async ({
     throw new ApiError(409, ORDER_MESSAGES.CANNOT_MODIFY_SETTLED_FINANCIALS);
   }
 
+  if (
+    !session &&
+    updatedOrder &&
+    updateData.status &&
+    updateData.status !== existingOrder.status
+  ) {
+    const notificationReason =
+      typeof updateData.notes === "string" ? updateData.notes : "";
+
+    await orderNotificationService.notifyOrderStatusChanged(
+      updatedOrder,
+      existingOrder.status,
+      updateData.status,
+      user,
+      {
+        notes: notificationReason,
+      },
+    );
+  }
+
   return updatedOrder;
 };
 
-const recordFailureAttempt = ({ orderId, notes, session = null }) => {
-  return orderRepository.recordFailureAttempt(orderId, notes, session);
+const recordFailureAttempt = ({
+  orderId,
+  notes,
+  session = null,
+  allowReturned = true,
+}) => {
+  return orderRepository.recordFailureAttempt(
+    orderId,
+    notes,
+    session,
+    allowReturned,
+  );
 };
 
 const markAsDelivered = async ({
@@ -679,28 +710,29 @@ const markAsDelivered = async ({
 
     if (customerUserId) {
       try {
-        await notificationService.create({
-          userId: customerUserId,
-          title: "Giao hàng thành công",
-          message: `Đơn hàng #${order.orderCode} đã được giao thành công. Người nhận: ${recipientReceivedName || order.recipientName}`,
-          type: "ORDER_UPDATE",
-          data: {
-            orderId: order._id,
-            orderCode: order.orderCode,
+        await notificationService.createMany([
+          {
+            userId: customerUserId,
+            title: "Giao hàng thành công",
+            message: `Đơn hàng #${order.orderCode} đã được giao thành công. Người nhận: ${recipientReceivedName || order.recipientName}`,
+            type: "ORDER_UPDATE",
+            data: {
+              orderId: order._id,
+              orderCode: order.orderCode,
+            },
           },
-        });
-
-        await notificationService.create({
-          userId: customerUserId,
-          title: "Đánh giá dịch vụ giao hàng",
-          message: `Đơn hàng #${order.orderCode} đã hoàn tất. Bạn có hài lòng với chuyến giao hàng này không? Vui lòng gửi đánh giá để giúp chúng tôi nâng cao chất lượng dịch vụ!`,
-          type: "FEEDBACK_REQUEST",
-          data: {
-            orderId: order._id,
-            orderCode: order.orderCode,
-            tripId: assignedTripId,
+          {
+            userId: customerUserId,
+            title: "Đánh giá dịch vụ giao hàng",
+            message: `Đơn hàng #${order.orderCode} đã hoàn tất. Bạn có hài lòng với chuyến giao hàng này không? Vui lòng gửi đánh giá để giúp chúng tôi nâng cao chất lượng dịch vụ!`,
+            type: "FEEDBACK_REQUEST",
+            data: {
+              orderId: order._id,
+              orderCode: order.orderCode,
+              tripId: assignedTripId,
+            },
           },
-        });
+        ]);
       } catch (error) {
         logger.error("Failed to create delivery notification", {
           orderId: order._id,
@@ -837,6 +869,17 @@ const cancelOrder = async ({ orderId, reason, cancelledBy, user = null }) => {
     }
 
     await session.commitTransaction();
+
+    await orderNotificationService.notifyOrderStatusChanged(
+      updatedOrder,
+      order.status,
+      ORDER_STATUSES.CANCELLED,
+      user,
+      {
+        notes: reason || "",
+        eventKey: trackingLog?._id ? String(trackingLog._id) : null,
+      },
+    );
 
     return {
       order: updatedOrder,

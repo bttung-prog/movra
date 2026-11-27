@@ -2,11 +2,14 @@ import mongoose from "mongoose";
 
 import { ROLES } from "../../constants/roles.js";
 import { FAILURE_REASON_MESSAGES } from "../../constants/messages.js";
+import { ORDER_STATUSES } from "../../constants/orderStatuses.js";
+import { TRIP_TYPES } from "../../constants/tripTypes.js";
 
 import { ApiError } from "../../utils/ApiError.js";
 
 import orderService from "../order/order.service.js";
 import orderTrackingLogService from "../order/orderTrackingLog.service.js";
+import orderNotificationService from "../order/orderNotification.service.js";
 import tripService from "../trip/trip.service.js";
 import userService from "../user/user.service.js";
 
@@ -106,6 +109,10 @@ const create = async ({
 
   const session = await mongoose.startSession();
   let failureLogId;
+  let notificationOrder = null;
+  let previousOrderStatus = null;
+  let failedOrderStatus = null;
+  let deliveryAttempt = null;
 
   try {
     await session.withTransaction(async () => {
@@ -116,7 +123,11 @@ const create = async ({
         session,
       );
       if (
-        ["delivered", "returned", "cancelled"].includes(currentOrder.status)
+        [
+          ORDER_STATUSES.DELIVERED,
+          ORDER_STATUSES.RETURNED,
+          ORDER_STATUSES.CANCELLED,
+        ].includes(currentOrder.status)
       ) {
         throw new ApiError(
           400,
@@ -130,6 +141,9 @@ const create = async ({
       if (!currentOrderTripId || currentOrderTripId !== tripId.toString()) {
         throw new ApiError(400, FAILURE_REASON_MESSAGES.ORDER_NOT_IN_TRIP);
       }
+
+      previousOrderStatus = currentOrder.status;
+      notificationOrder = currentOrder;
 
       const failureLog = await failureReasonRepository.create(
         {
@@ -150,6 +164,7 @@ const create = async ({
         notes: failureReasonDescription,
         session,
         user,
+        allowReturned: trip.type !== TRIP_TYPES.PICKUP,
       });
       if (!updatedOrder) {
         throw new ApiError(
@@ -157,6 +172,9 @@ const create = async ({
           FAILURE_REASON_MESSAGES.CONCURRENT_UPDATE_ERROR,
         );
       }
+
+      failedOrderStatus = updatedOrder.status;
+      deliveryAttempt = updatedOrder.deliveryAttempts;
 
       await orderTrackingLogService.create({
         orderId,
@@ -173,6 +191,20 @@ const create = async ({
 
       failureLogId = failureLog._id;
     });
+
+    if (notificationOrder && previousOrderStatus && failedOrderStatus) {
+      await orderNotificationService.notifyOrderStatusChanged(
+        notificationOrder,
+        previousOrderStatus,
+        failedOrderStatus,
+        user,
+        {
+          notes: failureReasonDescription,
+          eventKey: failureLogId ? String(failureLogId) : null,
+          attempt: deliveryAttempt,
+        },
+      );
+    }
 
     return await failureReasonRepository.findById(failureLogId);
   } finally {

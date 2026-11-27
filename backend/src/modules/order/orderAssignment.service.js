@@ -17,6 +17,7 @@ import { ApiError } from "../../utils/ApiError.js";
 import { getActorUserId } from "../../utils/actor.util.js";
 
 import tripService from "../trip/trip.service.js";
+import tripNotificationService from "../trip/tripNotification.service.js";
 
 import orderRepository from "./order.repository.js";
 import orderTrackingLogRepository from "./orderTrackingLog.repository.js";
@@ -399,6 +400,14 @@ const assignOrdersToTrip = async ({ tripId, orderIds = [] }, user = null) => {
     session.endSession();
   }
 
+  await tripNotificationService.notifyTripOrdersUpdated({
+    trip,
+    driver: trip.driverId,
+    actor: user,
+    orderCount: orderIds.length,
+    action: "assigned",
+  });
+
   return { assignedCount: orderIds.length, tripId };
 };
 
@@ -558,6 +567,28 @@ const unassignOrdersFromTrip = async ({ orderIds = [] }, user = null) => {
     session.endSession();
   }
 
+  const orderCountsByTrip = new Map();
+  for (const order of orders) {
+    const sourceTripId = order.tripId?._id || order.tripId;
+    if (!sourceTripId) continue;
+
+    const key = String(sourceTripId);
+    orderCountsByTrip.set(key, (orderCountsByTrip.get(key) || 0) + 1);
+  }
+
+  for (const [tripId, orderCount] of orderCountsByTrip.entries()) {
+    const sourceTrip = tripsById.get(tripId);
+    if (!sourceTrip) continue;
+
+    await tripNotificationService.notifyTripOrdersUpdated({
+      trip: sourceTrip,
+      driver: sourceTrip.driverId,
+      actor: user,
+      orderCount,
+      action: "unassigned",
+    });
+  }
+
   return { unassignedCount: orders.length };
 };
 
@@ -605,7 +636,14 @@ const handleOrdersOnTripCompletion = async (
       })),
       session,
     );
-    return;
+
+    return {
+      statusChanges: failedOrders.map((order) => ({
+        order,
+        oldStatus: order.status,
+        newStatus: ORDER_STATUSES.CREATED,
+      })),
+    };
   }
 
   const failedOrders = await orderRepository.findRawByFilter(
@@ -661,6 +699,17 @@ const handleOrdersOnTripCompletion = async (
     }),
     session,
   );
+
+  return {
+    statusChanges: failedOrders.map((order) => ({
+      order,
+      oldStatus: order.status,
+      newStatus:
+        order.status === ORDER_STATUSES.RETURNED
+          ? ORDER_STATUSES.RETURNED
+          : ORDER_STATUSES.STORED,
+    })),
+  };
 };
 
 const handleOrdersOnTripCancellation = async (
@@ -701,6 +750,14 @@ const handleOrdersOnTripCancellation = async (
     })),
     session,
   );
+
+  return {
+    statusChanges: orders.map((order) => ({
+      order,
+      oldStatus: order.status,
+      newStatus: nextStatus,
+    })),
+  };
 };
 
 export default {

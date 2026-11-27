@@ -13,6 +13,7 @@ import customerService from "../customer/customer.service.js";
 import paymentService from "../payment/payment.service.js";
 
 import walletTransactionRepository from "./walletTransaction.repository.js";
+import walletNotificationService from "./walletNotification.service.js";
 
 const recordTransaction = async (data, session = null) => {
   const transactionCode = data.transactionCode || generateCode("WTRX");
@@ -52,7 +53,7 @@ const topUp = async (payload, actor) => {
   session.startTransaction();
 
   try {
-    await customerService.getById(customerId, session);
+    const customer = await customerService.getById(customerId, session);
 
     const paymentCode = generateCode("PAY");
     const paymentData = {
@@ -73,6 +74,12 @@ const topUp = async (payload, actor) => {
     );
 
     await session.commitTransaction();
+
+    await walletNotificationService.notifyTopUpPending({
+      payment,
+      customer,
+      actor,
+    });
 
     return { payment, credited: false };
   } catch (error) {
@@ -130,6 +137,16 @@ const adjustWallet = async (payload, actor) => {
     );
 
     await session.commitTransaction();
+
+    await walletNotificationService.notifyWalletAdjusted({
+      customer: updatedCustomer,
+      walletTransaction,
+      direction,
+      amount,
+      balanceBefore,
+      balanceAfter,
+    });
+
     return { walletTransaction, newBalance: balanceAfter };
   } catch (error) {
     await session.abortTransaction();

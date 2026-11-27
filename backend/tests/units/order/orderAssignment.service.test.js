@@ -33,6 +33,7 @@ const mocks = vi.hoisted(() => ({
   syncTotalOrders: vi.fn(),
   assertDriverAssignedToTrip: vi.fn(),
   assertOrderWarehouseAccess: vi.fn(),
+  notifyTripOrdersUpdated: vi.fn(),
 }));
 
 vi.mock("mongoose", async (importOriginal) => {
@@ -79,6 +80,12 @@ vi.mock("../../../src/modules/trip/trip.service.js", () => ({
     assertTripAccess: mocks.assertTripAccess,
     syncTotalOrder: mocks.syncTotalOrder,
     syncTotalOrders: mocks.syncTotalOrders,
+  },
+}));
+
+vi.mock("../../../src/modules/trip/tripNotification.service.js", () => ({
+  default: {
+    notifyTripOrdersUpdated: mocks.notifyTripOrdersUpdated,
   },
 }));
 

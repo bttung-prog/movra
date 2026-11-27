@@ -40,6 +40,7 @@ const mocks = vi.hoisted(() => ({
   countAuditLogsByTripId: vi.fn(),
   getTripIdsByWarehouseId: vi.fn(),
   generateCode: vi.fn(),
+  notifyTripAssigned: vi.fn(),
 }));
 
 vi.mock("mongoose", async (importOriginal) => {
@@ -122,6 +123,12 @@ vi.mock("../../../src/modules/trip/tripAuditLog.repository.js", () => ({
     insertMany: mocks.insertManyAuditLogs,
     findByTripId: mocks.findAuditLogsByTripId,
     countByTripId: mocks.countAuditLogsByTripId,
+  },
+}));
+
+vi.mock("../../../src/modules/trip/tripNotification.service.js", () => ({
+  default: {
+    notifyTripAssigned: mocks.notifyTripAssigned,
   },
 }));
 

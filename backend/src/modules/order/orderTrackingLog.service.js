@@ -16,6 +16,7 @@ import tripService from "../trip/trip.service.js";
 import orderRepository from "./order.repository.js";
 import orderTrackingLogRepository from "./orderTrackingLog.repository.js";
 import orderAccess from "./order.access.js";
+import orderNotificationService from "./orderNotification.service.js";
 
 const ensureOrderAccess = async (
   orderId,
@@ -46,6 +47,7 @@ const create = async ({
   user = null,
   allowPickupConfirmation = false,
   clearTrip = false,
+  notificationEvent = null,
 }) => {
   const order = await ensureOrderAccess(orderId, true, user, session);
   const assignedTripId = order.tripId?._id || order.tripId;
@@ -146,6 +148,21 @@ const create = async ({
 
     if (isInternalSession) {
       await dbSession.commitTransaction();
+
+      await orderNotificationService.notifyOrderStatusChanged(
+        updatedOrder,
+        order.status,
+        status,
+        user,
+        {
+          event: notificationEvent,
+          notes,
+          eventKey:
+            status === ORDER_STATUSES.FAILED || notificationEvent
+              ? String(trackingLog._id)
+              : null,
+        },
+      );
     }
 
     return trackingLog;
@@ -208,6 +225,8 @@ const confirmPickup = async ({
     expectedStatus: order.status,
     session,
     allowPickupConfirmation: outcome === ORDER_STATUSES.PICKED_UP,
+    notificationEvent:
+      outcome === ORDER_STATUSES.FAILED ? "PICKUP_FAILED" : null,
   });
 };
 

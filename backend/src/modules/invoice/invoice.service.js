@@ -15,6 +15,7 @@ import customerService from "../customer/customer.service.js";
 import notificationService from "../notification/notification.service.js";
 
 import invoiceRepository from "./invoice.repository.js";
+import invoiceNotificationService from "./invoiceNotification.service.js";
 
 const calculateDueDate = (paymentTerms) => {
   const date = new Date();
@@ -259,7 +260,6 @@ const getAll = async ({
   page = 1,
   limit = 10,
   sort = { createdAt: -1 },
-  actor = null,
 } = {}) => {
   const pageNumber = Math.max(1, parseInt(page, 10) || 1);
   const limitNumber = Math.max(1, parseInt(limit, 10) || 10);
@@ -356,6 +356,12 @@ const issueInvoice = async (invoiceId, issuedBy = null, session = null) => {
 
   if (!updatedInvoice) {
     throw new ApiError(409, INVOICE_MESSAGES.STATE_CHANGED);
+  }
+
+  if (!session) {
+    await invoiceNotificationService.notifyInvoiceIssued({
+      invoice: updatedInvoice,
+    });
   }
 
   return updatedInvoice;
@@ -527,6 +533,16 @@ const cancelInvoice = async (invoiceId, reason) => {
   if (!updatedInvoice) {
     throw new ApiError(409, INVOICE_MESSAGES.STATE_CHANGED);
   }
+
+  if (
+    [INVOICE_STATUSES.ISSUED, INVOICE_STATUSES.OVERDUE].includes(invoice.status)
+  ) {
+    await invoiceNotificationService.notifyInvoiceCancelled({
+      invoice: updatedInvoice,
+      notes: reason || "",
+    });
+  }
+
   return updatedInvoice;
 };
 
@@ -631,12 +647,19 @@ const processOverdueInvoices = async (cutoffDate = new Date()) => {
         userId: targetUserId,
         title: "Hóa đơn quá hạn thanh toán",
         message: `Hóa đơn ${invoice.invoiceCode} đã quá hạn thanh toán vào ngày ${formattedDueDate}. Vui lòng thanh toán số tiền còn lại (${formattedAmount} VND).`,
-        type: "PAYMENT",
+        type: "INVOICE",
         data: {
           invoiceId: invoice._id,
           invoiceCode: invoice.invoiceCode,
           orderId: orderIds[0] || null,
           orderIds,
+          status: invoice.status,
+          totalAmount: Number(invoice.totalAmount || 0),
+          paidAmount: Number(invoice.paidAmount || 0),
+          remainingAmount: Number(invoice.remainingAmount || 0),
+          dueDate: invoice.dueDate || null,
+          event: "INVOICE_OVERDUE",
+          eventKey: `invoice:${invoice._id}:INVOICE_OVERDUE`,
         },
       },
     ];

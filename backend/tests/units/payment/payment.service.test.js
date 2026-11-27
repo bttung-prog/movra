@@ -46,6 +46,17 @@ const mocks = vi.hoisted(() => ({
   debitWallet: vi.fn(),
   recordTransaction: vi.fn(),
   generateCode: vi.fn(),
+  notifyPaymentPending: vi.fn(),
+  notifyPaymentCompleted: vi.fn(),
+  notifyPaymentVerified: vi.fn(),
+  notifyPaymentRejected: vi.fn(),
+  notifyRefundCompleted: vi.fn(),
+  notifyDriverRemittanceCreated: vi.fn(),
+  notifyTopUpCompleted: vi.fn(),
+  notifyTopUpRejected: vi.fn(),
+  notifyTopUpRefunded: vi.fn(),
+  notifyInvoicePaid: vi.fn(),
+  notifyInvoicePartiallyPaid: vi.fn(),
 }));
 
 vi.mock("mongoose", async (importOriginal) => {
@@ -68,6 +79,35 @@ vi.mock("../../../src/modules/payment/payment.repository.js", () => ({
     findTopUpByReference: mocks.findTopUpByReference,
     findPendingRemittanceByOrderIds: mocks.findPendingRemittanceByOrderIds,
     getStats: mocks.getStats,
+  },
+}));
+
+vi.mock("../../../src/modules/payment/paymentNotification.service.js", () => ({
+  default: {
+    notifyPaymentPending: mocks.notifyPaymentPending,
+    notifyPaymentCompleted: mocks.notifyPaymentCompleted,
+    notifyPaymentVerified: mocks.notifyPaymentVerified,
+    notifyPaymentRejected: mocks.notifyPaymentRejected,
+    notifyRefundCompleted: mocks.notifyRefundCompleted,
+    notifyDriverRemittanceCreated: mocks.notifyDriverRemittanceCreated,
+  },
+}));
+
+vi.mock(
+  "../../../src/modules/walletTransaction/walletNotification.service.js",
+  () => ({
+    default: {
+      notifyTopUpCompleted: mocks.notifyTopUpCompleted,
+      notifyTopUpRejected: mocks.notifyTopUpRejected,
+      notifyTopUpRefunded: mocks.notifyTopUpRefunded,
+    },
+  }),
+);
+
+vi.mock("../../../src/modules/invoice/invoiceNotification.service.js", () => ({
+  default: {
+    notifyInvoicePaid: mocks.notifyInvoicePaid,
+    notifyInvoicePartiallyPaid: mocks.notifyInvoicePartiallyPaid,
   },
 }));
 
@@ -124,6 +164,7 @@ import {
   PAYER_TYPES,
 } from "../../../src/constants/paymentMethods.js";
 import { PAYMENT_STATUSES } from "../../../src/constants/paymentStatuses.js";
+import { PAYMENT_PURPOSES } from "../../../src/constants/paymentPurposes.js";
 import {
   INVOICE_MESSAGES,
   ORDER_MESSAGES,
@@ -172,6 +213,12 @@ beforeEach(() => {
   mocks.findById.mockResolvedValue(null);
   mocks.updateById.mockResolvedValue(null);
   mocks.findPendingRemittanceByOrderIds.mockResolvedValue(null);
+  mocks.recordTransaction.mockResolvedValue({
+    _id: "wallet-transaction-1",
+    transactionCode: "WTRX-0001",
+    direction: "credit",
+    amount: 1000,
+  });
 });
 
 afterEach(() => {
@@ -410,6 +457,11 @@ describe("paymentService.create", () => {
     expect(mocks.updateOrderById).not.toHaveBeenCalled();
     expect(mocks.updateCustomerById).not.toHaveBeenCalled();
     expect(transaction.commitTransaction).toHaveBeenCalled();
+    expect(mocks.notifyPaymentPending).toHaveBeenCalledWith(
+      expect.objectContaining({
+        includeAccountants: true,
+      }),
+    );
   });
 
   it("issues a draft invoice and reserves its balance for a pending bank payment", async () => {
@@ -644,6 +696,79 @@ describe("paymentService.verify", () => {
     expect(transaction.abortTransaction).toHaveBeenCalled();
   });
 
+  it("notifies the customer when a wallet top-up is verified", async () => {
+    const customer = {
+      _id: customerId,
+      userId: { _id: "customer-user-1" },
+      walletBalance: 5000,
+    };
+    mocks.findById.mockResolvedValue({
+      _id: paymentId,
+      customerId: customer,
+      paymentStatus: PAYMENT_STATUSES.PENDING,
+      paymentAmount: 1000,
+      paymentMethod: PAYMENT_METHODS.BANK,
+      payerType: PAYER_TYPES.CUSTOMER,
+      purpose: PAYMENT_PURPOSES.WALLET_TOP_UP,
+    });
+    mocks.getCustomerById.mockResolvedValue(customer);
+    mocks.updateById.mockResolvedValue({
+      _id: paymentId,
+      paymentStatus: PAYMENT_STATUSES.COMPLETED,
+      paymentCode: "PAY-0001",
+      customerId: customer,
+    });
+
+    await paymentService.verify(
+      paymentId,
+      { status: PAYMENT_STATUSES.COMPLETED },
+      { userId: "admin-1", role: ROLES.ADMIN },
+    );
+
+    expect(mocks.getCustomerById).toHaveBeenCalledWith(customerId, transaction);
+    expect(mocks.updateCustomerById).toHaveBeenCalledWith(
+      customerId,
+      { $inc: { walletBalance: 1000 } },
+      transaction,
+    );
+    expect(mocks.notifyTopUpCompleted).toHaveBeenCalledWith(
+      expect.objectContaining({
+        customer,
+        balanceBefore: 5000,
+        balanceAfter: 6000,
+        walletTransaction: expect.objectContaining({ _id: "wallet-transaction-1" }),
+      }),
+    );
+    expect(mocks.notifyPaymentVerified).not.toHaveBeenCalled();
+  });
+
+  it("notifies the customer when a wallet top-up is rejected", async () => {
+    mocks.findById.mockResolvedValue({
+      _id: paymentId,
+      paymentStatus: PAYMENT_STATUSES.PENDING,
+      purpose: PAYMENT_PURPOSES.WALLET_TOP_UP,
+      notes: "Wallet top-up",
+    });
+    mocks.updateById.mockResolvedValue({
+      _id: paymentId,
+      paymentStatus: PAYMENT_STATUSES.FAILED,
+    });
+
+    await paymentService.verify(
+      paymentId,
+      { status: PAYMENT_STATUSES.FAILED, notes: "Invalid reference" },
+      { userId: "admin-1", role: ROLES.ADMIN },
+    );
+
+    expect(mocks.notifyTopUpRejected).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payment: expect.objectContaining({ _id: paymentId }),
+        notes: "Invalid reference",
+      }),
+    );
+    expect(mocks.notifyPaymentRejected).not.toHaveBeenCalled();
+  });
+
   it("marks a pending payment failed without opening a transaction", async () => {
     mocks.findById.mockResolvedValue({
       _id: paymentId,
@@ -673,6 +798,12 @@ describe("paymentService.verify", () => {
       { paymentStatus: PAYMENT_STATUSES.PENDING },
     );
     expect(mocks.findById).toHaveBeenCalledWith(paymentId);
+    expect(mocks.notifyPaymentRejected).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payment: expect.objectContaining({ _id: paymentId }),
+        notes: "Invalid reference",
+      }),
+    );
   });
 
   it("releases a reserved invoice amount when a pending payment is rejected", async () => {
@@ -1085,6 +1216,12 @@ describe("paymentService.createDriverRemittance", () => {
   it("rejects remittance when paymentAmount does not match total expected COD", async () => {
     mocks.findOrdersForRemittance.mockResolvedValue([deliveredCodOrder]);
     mocks.findPendingRemittanceByOrderIds.mockResolvedValue(null);
+  mocks.recordTransaction.mockResolvedValue({
+    _id: "wallet-transaction-1",
+    transactionCode: "WTRX-0001",
+    direction: "credit",
+    amount: 1000,
+  });
 
     await expect(
       paymentService.createDriverRemittance(
@@ -1131,6 +1268,12 @@ describe("paymentService.createDriverRemittance", () => {
   it("creates a pending remittance when no pending remittance exists", async () => {
     mocks.findOrdersForRemittance.mockResolvedValue([deliveredCodOrder]);
     mocks.findPendingRemittanceByOrderIds.mockResolvedValue(null);
+  mocks.recordTransaction.mockResolvedValue({
+    _id: "wallet-transaction-1",
+    transactionCode: "WTRX-0001",
+    direction: "credit",
+    amount: 1000,
+  });
 
     const result = await paymentService.createDriverRemittance(
       {
@@ -1156,6 +1299,11 @@ describe("paymentService.createDriverRemittance", () => {
       paymentStatus: PAYMENT_STATUSES.PENDING,
       paymentAmount: 5000,
     });
+    expect(mocks.notifyDriverRemittanceCreated).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payment: result,
+      }),
+    );
   });
 });
 
@@ -1201,6 +1349,11 @@ describe("paymentService.refund", () => {
       transaction,
       { totalSpent: { $gte: 4000 } },
     );
+    expect(mocks.notifyRefundCompleted).toHaveBeenCalledWith(
+      expect.objectContaining({
+        refundAmount: 4000,
+      }),
+    );
   });
 
   it("does not reverse spending when refunding an order that was not delivered", async () => {
@@ -1226,6 +1379,63 @@ describe("paymentService.refund", () => {
     );
 
     expect(mocks.updateCustomerById).not.toHaveBeenCalled();
+  });
+
+  it("notifies the customer when a wallet top-up is refunded", async () => {
+    const customer = {
+      _id: customerId,
+      userId: { _id: "customer-user-1" },
+      walletBalance: 5000,
+    };
+    const walletPayment = {
+      ...basePayment,
+      orderId: null,
+      invoiceId: null,
+      purpose: PAYMENT_PURPOSES.WALLET_TOP_UP,
+      customerId: customer,
+      paymentMethod: PAYMENT_METHODS.BANK,
+    };
+    const updatedPayment = {
+      ...walletPayment,
+      paymentStatus: PAYMENT_STATUSES.REFUNDED,
+    };
+    const walletTransaction = {
+      _id: "wallet-transaction-2",
+      transactionCode: "WTRX-0002",
+      direction: "debit",
+    };
+    mocks.findById.mockResolvedValue(walletPayment);
+    mocks.updateById.mockResolvedValue(updatedPayment);
+    mocks.getCustomerById.mockResolvedValue(customer);
+    mocks.debitWallet.mockResolvedValue({
+      ...customer,
+      walletBalance: 4000,
+    });
+    mocks.recordTransaction.mockResolvedValue(walletTransaction);
+
+    await paymentService.refund(
+      paymentId,
+      { reason: "Top-up reversed", refundAmount: 1000 },
+      { role: ROLES.ACCOUNTANT, userId: "user-9" },
+    );
+
+    expect(mocks.debitWallet).toHaveBeenCalledWith(
+      customerId,
+      1000,
+      transaction,
+    );
+    expect(mocks.notifyTopUpRefunded).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payment: updatedPayment,
+        customer,
+        walletTransaction,
+        amount: 1000,
+        balanceBefore: 5000,
+        balanceAfter: 4000,
+        notes: "Top-up reversed",
+      }),
+    );
+    expect(mocks.notifyRefundCompleted).not.toHaveBeenCalled();
   });
 });
 

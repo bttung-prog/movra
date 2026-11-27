@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   createAuthUser: vi.fn(),
   revokeRefreshTokenByUserId: vi.fn(),
   hashPassword: vi.fn(),
+  notifyRoleChanged: vi.fn(),
 }));
 
 vi.mock("../../../src/modules/auth/auth.service.js", () => ({
@@ -28,6 +29,10 @@ vi.mock("../../../src/modules/user/user.service.js", () => ({
   },
 }));
 
+vi.mock("../../../src/modules/user/accountNotification.service.js", () => ({
+  default: { notifyRoleChanged: mocks.notifyRoleChanged },
+}));
+
 vi.mock("../../../src/utils/password.js", () => ({
   hashPassword: mocks.hashPassword,
 }));
@@ -39,7 +44,8 @@ import adminService from "../../../src/modules/admin/admin.service.js";
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.getById.mockResolvedValue({ _id: "user-1" });
+  mocks.getById.mockResolvedValue({ _id: "user-1", role: ROLES.ADMIN });
+  mocks.notifyRoleChanged.mockResolvedValue(1);
   mocks.hashPassword.mockResolvedValue("hashed-password");
   mocks.updatePasswordHash.mockResolvedValue({ _id: "user-1" });
 });
@@ -114,6 +120,29 @@ describe("adminService.changeRoleUser", () => {
 
     expect(mocks.updateRole).toHaveBeenCalledWith("admin-1", ROLES.ADMIN, {
       dispatcherData: roleData.dispatcherData,
+    });
+    expect(mocks.notifyRoleChanged).not.toHaveBeenCalled();
+  });
+
+  it("notifies the target user when the role actually changes", async () => {
+    const updatedUser = { _id: "user-1", role: ROLES.DRIVER };
+    mocks.getById.mockResolvedValueOnce({
+      _id: "user-1",
+      role: ROLES.CUSTOMER,
+    });
+    mocks.updateRole.mockResolvedValue(updatedUser);
+
+    await adminService.changeRoleUser(
+      "user-1",
+      { role: ROLES.DRIVER },
+      "admin-1",
+    );
+
+    expect(mocks.notifyRoleChanged).toHaveBeenCalledWith({
+      user: updatedUser,
+      userId: "user-1",
+      previousRole: ROLES.CUSTOMER,
+      role: ROLES.DRIVER,
     });
   });
 });

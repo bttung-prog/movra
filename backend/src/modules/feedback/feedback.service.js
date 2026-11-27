@@ -4,12 +4,14 @@ import { ROLES } from "../../constants/roles.js";
 import { FEEDBACK_MESSAGES } from "../../constants/messages.js";
 
 import { ApiError } from "../../utils/ApiError.js";
+import logger from "../../configs/logger.js";
 
 import orderService from "../order/order.service.js";
 import tripService from "../trip/trip.service.js";
 import driverService from "../driver/driver.service.js";
 
 import feedbackRepository from "./feedback.repository.js";
+import feedbackNotificationService from "./feedbackNotification.service.js";
 
 const createFeedback = async (payload, actor) => {
   const { orderId, rating, tags = [], comment = "" } = payload;
@@ -55,7 +57,7 @@ const createFeedback = async (payload, actor) => {
 
   const session = await mongoose.startSession();
   try {
-    return await session.withTransaction(async () => {
+    const newFeedback = await session.withTransaction(async () => {
       const existingFeedback = await feedbackRepository.findByOrderId(
         orderId,
         {},
@@ -65,7 +67,7 @@ const createFeedback = async (payload, actor) => {
         throw new ApiError(400, FEEDBACK_MESSAGES.ALREADY_EXISTS);
       }
 
-      const newFeedback = await feedbackRepository.create(
+      const createdFeedback = await feedbackRepository.create(
         feedbackData,
         session,
       );
@@ -87,37 +89,49 @@ const createFeedback = async (payload, actor) => {
         );
       }
 
-      return newFeedback;
+      return createdFeedback;
     });
+
+    try {
+      const notificationFeedback =
+        (await feedbackRepository.findById(newFeedback._id)) || newFeedback;
+      await feedbackNotificationService.notifyFeedbackCreated({
+        feedback: notificationFeedback,
+        actor,
+      });
+    } catch (error) {
+      logger.error("Failed to create feedback notification", {
+        feedbackId: newFeedback._id,
+        error: error.message,
+      });
+    }
+
+    return newFeedback;
   } finally {
     session.endSession();
   }
 };
 
 const replyFeedback = async (feedbackId, responseText, actor) => {
-  const visibilityFilter =
-    actor.role === ROLES.ADMIN ? {} : { status: "visible" };
-  const feedback = await feedbackRepository.findById(
-    feedbackId,
-    null,
-    visibilityFilter,
-  );
+  if (actor?.role !== ROLES.ADMIN) {
+    throw new ApiError(403, FEEDBACK_MESSAGES.REPLY_ACCESS_DENIED);
+  }
+
+  const feedback = await feedbackRepository.findById(feedbackId, null, {});
   if (!feedback) {
     throw new ApiError(404, FEEDBACK_MESSAGES.NOT_FOUND);
   }
 
-  if (actor.role === ROLES.DRIVER) {
-    const feedbackDriverId = (
-      feedback.driverId?._id || feedback.driverId
-    )?.toString();
-    if (!actor.driverId || feedbackDriverId !== actor.driverId.toString()) {
-      throw new ApiError(403, FEEDBACK_MESSAGES.REPLY_ACCESS_DENIED);
-    }
-  }
-
-  return feedbackRepository.updateById(feedbackId, {
+  const updatedFeedback = await feedbackRepository.updateById(feedbackId, {
     driverResponse: responseText,
   });
+
+  await feedbackNotificationService.notifyFeedbackReplied({
+    feedback: updatedFeedback,
+    actor,
+  });
+
+  return updatedFeedback;
 };
 
 const getAll = async ({
