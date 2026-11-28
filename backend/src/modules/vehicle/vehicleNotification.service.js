@@ -23,17 +23,12 @@ const getEvent = (documentType, phase) => {
     : VEHICLE_NOTIFICATION_EVENTS.VEHICLE_REGISTRATION_EXPIRING;
 };
 
-const getRecipientUserIds = ({ warehouse, adminUserIds = [] }) => {
-  const recipientIds = new Set(
-    (adminUserIds || []).map((userId) => normalizeId(userId)).filter(Boolean),
-  );
-
-  const managerUserId = normalizeId(warehouse?.managerId);
-  if (managerUserId) {
-    recipientIds.add(managerUserId);
-  }
-
-  return [...recipientIds];
+const getRecipientUserIds = (adminUserIds = []) => {
+  return [
+    ...new Set(
+      (adminUserIds || []).map((userId) => normalizeId(userId)).filter(Boolean),
+    ),
+  ];
 };
 
 const getDedupeKey = ({ vehicle, documentType, phase, expiryDate, userId }) => {
@@ -46,7 +41,6 @@ const getDedupeKey = ({ vehicle, documentType, phase, expiryDate, userId }) => {
 
 const notifyVehicleDocumentExpiry = async ({
   vehicle,
-  warehouse = null,
   documentType,
   expiryDate,
   phase,
@@ -59,7 +53,7 @@ const notifyVehicleDocumentExpiry = async ({
   const template = VEHICLE_NOTIFICATION_TEMPLATES[event];
   if (!template) return 0;
 
-  const userIds = getRecipientUserIds({ warehouse, adminUserIds });
+  const userIds = getRecipientUserIds(adminUserIds);
   if (userIds.length === 0) return 0;
 
   const notifications = userIds.map((userId) => {

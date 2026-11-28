@@ -152,7 +152,6 @@ beforeEach(() => {
   });
   mocks.getWarehouseById.mockResolvedValue({
     _id: warehouseId,
-    managerId: "manager-1",
   });
   mocks.getInventoryByWarehouseAndOrder.mockResolvedValue({
     _id: "inventory-1",

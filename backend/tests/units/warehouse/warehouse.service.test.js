@@ -8,7 +8,6 @@ const mocks = vi.hoisted(() => ({
   findActive: vi.fn(),
   findByName: vi.fn(),
   updateById: vi.fn(),
-  getUserById: vi.fn(),
   countInventory: vi.fn(),
   countActiveDispatchers: vi.fn(),
   countActiveDrivers: vi.fn(),
@@ -25,10 +24,6 @@ vi.mock("../../../src/modules/warehouse/warehouse.repository.js", () => ({
     findByName: mocks.findByName,
     updateById: mocks.updateById,
   },
-}));
-
-vi.mock("../../../src/modules/user/user.service.js", () => ({
-  default: { getById: mocks.getUserById },
 }));
 
 vi.mock("../../../src/modules/inventory/inventory.service.js", () => ({
@@ -49,17 +44,14 @@ vi.mock("../../../src/modules/staff/staff.service.js", () => ({
 
 import { WAREHOUSE_MESSAGES } from "../../../src/constants/messages.js";
 import { ROLES } from "../../../src/constants/roles.js";
-import { USER_STATUSES } from "../../../src/constants/userStatuses.js";
 import { WAREHOUSE_STATUSES } from "../../../src/constants/warehouseStatuses.js";
 import warehouseService from "../../../src/modules/warehouse/warehouse.service.js";
 
 const warehouseId = "warehouse-1";
-const managerId = "manager-1";
 const warehouse = {
   _id: warehouseId,
   warehouseName: "Central",
   warehouseAddress: "1 Main Street",
-  managerId: null,
   status: WAREHOUSE_STATUSES.ACTIVE,
   deletedAt: null,
 };
@@ -75,11 +67,6 @@ beforeEach(() => {
   mocks.findAll.mockResolvedValue([warehouse]);
   mocks.countAll.mockResolvedValue(21);
   mocks.updateById.mockResolvedValue(warehouse);
-  mocks.getUserById.mockResolvedValue({
-    _id: managerId,
-    role: ROLES.WAREHOUSE_STAFF,
-    status: USER_STATUSES.ACTIVE,
-  });
   mocks.countInventory.mockResolvedValue(0);
   mocks.countActiveDispatchers.mockResolvedValue(0);
   mocks.countActiveDrivers.mockResolvedValue(0);
@@ -87,27 +74,24 @@ beforeEach(() => {
 });
 
 describe("warehouseService.create", () => {
-  it("trims warehouse fields, applies defaults, and validates a manager", async () => {
+  it("trims warehouse fields and applies defaults", async () => {
     await warehouseService.create({
       warehouseName: "  Central ",
       warehouseAddress: "  1 Main Street ",
       latitude: 10.78,
       longitude: 106.69,
-      managerId,
     });
 
-    expect(mocks.getUserById).toHaveBeenCalledWith(managerId);
     expect(mocks.create).toHaveBeenCalledWith({
       warehouseName: "Central",
       warehouseAddress: "1 Main Street",
       latitude: 10.78,
       longitude: 106.69,
-      managerId,
       status: WAREHOUSE_STATUSES.ACTIVE,
     });
   });
 
-  it("rejects duplicate names and invalid manager users", async () => {
+  it("rejects duplicate names", async () => {
     mocks.findByName.mockResolvedValueOnce(warehouse);
     await expect(
       warehouseService.create({
@@ -119,20 +103,6 @@ describe("warehouseService.create", () => {
       message: WAREHOUSE_MESSAGES.ALREADY_EXISTS,
     });
 
-    mocks.getUserById.mockResolvedValueOnce({
-      status: USER_STATUSES.INACTIVE,
-      role: ROLES.WAREHOUSE_STAFF,
-    });
-    await expect(
-      warehouseService.create({
-        warehouseName: "Other",
-        warehouseAddress: "Address",
-        managerId,
-      }),
-    ).rejects.toMatchObject({
-      statusCode: 400,
-      message: WAREHOUSE_MESSAGES.MANAGER_NOT_ACTIVE,
-    });
     expect(mocks.create).not.toHaveBeenCalled();
   });
 });

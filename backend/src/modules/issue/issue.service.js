@@ -436,17 +436,11 @@ const cancel = async (issueId, { note } = {}, currentUser = null) => {
       ? existingIssue.issuedBy._id.toString()
       : existingIssue.issuedBy?.toString();
 
-    const managerId = warehouse.managerId?._id
-      ? warehouse.managerId._id.toString()
-      : warehouse.managerId?.toString();
-
     const isStaffWarehouse =
       currentUser.warehouseId &&
       currentUser.warehouseId.toString() === issueWarehouseId;
 
-    const isAuthorized =
-      isStaffWarehouse &&
-      (currentUserId === issuedBy || currentUserId === managerId);
+    const isAuthorized = isStaffWarehouse && currentUserId === issuedBy;
 
     if (!isAuthorized) {
       throw new ApiError(403, ISSUE_MESSAGES.CANCEL_NOT_AUTHORIZED);

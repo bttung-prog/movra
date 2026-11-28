@@ -2,11 +2,6 @@ import { escapeRegex } from "../../utils/regexUtils.js";
 
 import Warehouse from "./warehouse.js";
 
-const POPULATE_MANAGER = {
-  path: "managerId",
-  select: "fullName email phone",
-};
-
 const create = (warehouseData) => Warehouse.create(warehouseData);
 
 const findAll = ({
@@ -15,12 +10,7 @@ const findAll = ({
   limit = 10,
   sort = { createdAt: -1 },
 }) => {
-  return Warehouse.find(filter)
-    .sort(sort)
-    .skip(skip)
-    .limit(limit)
-    .populate(POPULATE_MANAGER)
-    .lean();
+  return Warehouse.find(filter).sort(sort).skip(skip).limit(limit).lean();
 };
 
 const countAll = ({ filter = { deletedAt: null } }) => {
@@ -28,7 +18,7 @@ const countAll = ({ filter = { deletedAt: null } }) => {
 };
 
 const findById = (warehouseId) => {
-  return Warehouse.findById(warehouseId).populate(POPULATE_MANAGER).lean();
+  return Warehouse.findById(warehouseId).lean();
 };
 
 const findActive = () => {
@@ -48,9 +38,7 @@ const updateById = (warehouseId, updateData) => {
   return Warehouse.findByIdAndUpdate(warehouseId, updateData, {
     new: true,
     runValidators: true,
-  })
-    .populate(POPULATE_MANAGER)
-    .lean();
+  }).lean();
 };
 
 export default {

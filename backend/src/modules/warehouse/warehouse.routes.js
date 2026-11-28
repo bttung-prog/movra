@@ -32,14 +32,6 @@ warehouseRouter.get(
 );
 
 warehouseRouter.patch(
-  "/:warehouseId/manager",
-  authorize(ROLES.ADMIN),
-  validate(warehouseValidator.paramSchema, "params"),
-  validate(warehouseValidator.updateManagerSchema),
-  warehouseController.updateManager,
-);
-
-warehouseRouter.patch(
   "/:warehouseId/status",
   authorize(ROLES.ADMIN),
   validate(warehouseValidator.paramSchema, "params"),

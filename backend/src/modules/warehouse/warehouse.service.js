@@ -1,6 +1,5 @@
 import { ROLES } from "../../constants/roles.js";
 import { WAREHOUSE_STATUSES } from "../../constants/warehouseStatuses.js";
-import { USER_STATUSES } from "../../constants/userStatuses.js";
 import { INVENTORY_STATUSES } from "../../constants/inventoryStatuses.js";
 import { WAREHOUSE_MESSAGES } from "../../constants/messages.js";
 
@@ -9,7 +8,6 @@ import { escapeRegex } from "../../utils/regexUtils.js";
 import { checkWarehouseAccess } from "../../utils/checkWarehouseAccess.js";
 import { calculateHaversineDistanceKm } from "../../utils/distance.util.js";
 
-import userService from "../user/user.service.js";
 import inventoryService from "../inventory/inventory.service.js";
 import dispatcherService from "../dispatcher/dispatcher.service.js";
 import driverService from "../driver/driver.service.js";
@@ -33,23 +31,6 @@ const validateWarehouse = (
   if (requireActive && warehouse.status !== WAREHOUSE_STATUSES.ACTIVE) {
     throw new ApiError(400, WAREHOUSE_MESSAGES.NOT_ACTIVE);
   }
-};
-
-const validateManagerUser = async (managerId) => {
-  if (!managerId) return null;
-
-  const user = await userService.getById(managerId);
-
-  if (user.status !== USER_STATUSES.ACTIVE) {
-    throw new ApiError(400, WAREHOUSE_MESSAGES.MANAGER_NOT_ACTIVE);
-  }
-
-  const allowedRoles = [ROLES.ADMIN, ROLES.WAREHOUSE_STAFF];
-  if (!allowedRoles.includes(user.role)) {
-    throw new ApiError(400, WAREHOUSE_MESSAGES.MANAGER_ROLE_INVALID(user.role));
-  }
-
-  return user;
 };
 
 const ensureNoActivePersonnel = async (warehouseId) => {
@@ -101,7 +82,6 @@ const create = async ({
   warehouseAddress,
   latitude,
   longitude,
-  managerId = null,
   status = WAREHOUSE_STATUSES.ACTIVE,
 }) => {
   const existingWarehouse = await warehouseRepository.findByName(warehouseName);
@@ -110,16 +90,11 @@ const create = async ({
     throw new ApiError(409, WAREHOUSE_MESSAGES.ALREADY_EXISTS);
   }
 
-  if (managerId) {
-    await validateManagerUser(managerId);
-  }
-
   return warehouseRepository.create({
     warehouseName: warehouseName.trim(),
     warehouseAddress: warehouseAddress.trim(),
     latitude,
     longitude,
-    managerId: managerId || null,
     status,
   });
 };
@@ -226,14 +201,6 @@ const updateById = async (warehouseId, updateData) => {
     payload.warehouseAddress = payload.warehouseAddress.trim();
   }
 
-  if (payload.managerId !== undefined) {
-    if (payload.managerId) {
-      await validateManagerUser(payload.managerId);
-    } else {
-      payload.managerId = null;
-    }
-  }
-
   if (
     payload.warehouseName &&
     payload.warehouseName.toLowerCase() !==
@@ -249,18 +216,6 @@ const updateById = async (warehouseId, updateData) => {
   }
 
   return warehouseRepository.updateById(warehouseId, payload);
-};
-
-const updateManager = async (warehouseId, userId) => {
-  await getById(warehouseId, true, false);
-
-  if (userId) {
-    await validateManagerUser(userId);
-  }
-
-  return warehouseRepository.updateById(warehouseId, {
-    managerId: userId || null,
-  });
 };
 
 const changeStatus = async (warehouseId, status) => {
@@ -318,7 +273,6 @@ export default {
   getById,
   getNearestActiveWarehouse,
   updateById,
-  updateManager,
   changeStatus,
   softDelete,
   restore,

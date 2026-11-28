@@ -16,9 +16,6 @@ const createSchema = Joi.object({
   }),
   latitude: Joi.number().min(-90).max(90),
   longitude: Joi.number().min(-180).max(180),
-  managerId: Joi.string().pattern(objectIdPattern).allow(null).messages({
-    "string.pattern.base": "Manager ID must be a valid MongoDB ObjectId",
-  }),
   status: Joi.string().valid(...validStatuses),
 }).and("latitude", "longitude");
 
@@ -27,24 +24,10 @@ const updateSchema = Joi.object({
   warehouseAddress: Joi.string().trim(),
   latitude: Joi.number().min(-90).max(90),
   longitude: Joi.number().min(-180).max(180),
-  managerId: Joi.string().pattern(objectIdPattern).allow(null).messages({
-    "string.pattern.base": "Manager ID must be a valid MongoDB ObjectId",
-  }),
   status: Joi.string().valid(...validStatuses),
 })
   .and("latitude", "longitude")
   .min(1);
-
-const updateManagerSchema = Joi.object({
-  managerId: Joi.string()
-    .pattern(objectIdPattern)
-    .allow(null)
-    .required()
-    .messages({
-      "any.required": "Manager ID is required",
-      "string.pattern.base": "Manager ID must be a valid MongoDB ObjectId",
-    }),
-});
 
 const changeStatusSchema = Joi.object({
   status: Joi.string()
@@ -85,7 +68,6 @@ const querySchema = Joi.object({
 export default {
   createSchema,
   updateSchema,
-  updateManagerSchema,
   changeStatusSchema,
   paramSchema,
   querySchema,

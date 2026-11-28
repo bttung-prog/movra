@@ -23,10 +23,6 @@ const vehicle = {
   warehouseId: "warehouse-1",
   status: "available",
 };
-const warehouse = {
-  _id: "warehouse-1",
-  managerId: { _id: "manager-1" },
-};
 const expiryDate = new Date("2030-05-10T00:00:00.000Z");
 
 beforeEach(() => {
@@ -35,10 +31,9 @@ beforeEach(() => {
 });
 
 describe("vehicleNotificationService", () => {
-  it("notifies admins and warehouse manager about an expiring registration", async () => {
+  it("notifies admins about an expiring registration", async () => {
     await vehicleNotificationService.notifyVehicleDocumentExpiry({
       vehicle,
-      warehouse,
       documentType: "registration",
       expiryDate,
       phase: "30d",
@@ -47,7 +42,7 @@ describe("vehicleNotificationService", () => {
     });
 
     const notifications = mocks.createManyNotifications.mock.calls[0][0];
-    expect(notifications).toHaveLength(2);
+    expect(notifications).toHaveLength(1);
     expect(notifications).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -64,7 +59,6 @@ describe("vehicleNotificationService", () => {
             phase: "30d",
           }),
         }),
-        expect.objectContaining({ userId: "manager-1" }),
       ]),
     );
     expect(notifications[0].dedupeKey).toContain(
@@ -75,7 +69,6 @@ describe("vehicleNotificationService", () => {
   it("uses an expired event and skips retired vehicles", async () => {
     await vehicleNotificationService.notifyVehicleDocumentExpiry({
       vehicle,
-      warehouse,
       documentType: "insurance",
       expiryDate,
       phase: "expired",
@@ -83,7 +76,6 @@ describe("vehicleNotificationService", () => {
     });
     await vehicleNotificationService.notifyVehicleDocumentExpiry({
       vehicle: { ...vehicle, status: "retired" },
-      warehouse,
       documentType: "registration",
       expiryDate,
       phase: "expired",
@@ -109,7 +101,6 @@ describe("vehicleNotificationService", () => {
     await expect(
       vehicleNotificationService.notifyVehicleDocumentExpiry({
         vehicle,
-        warehouse,
         documentType: "registration",
         expiryDate,
         phase: "7d",

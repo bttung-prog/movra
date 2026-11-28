@@ -111,7 +111,6 @@ export const WAREHOUSE_MESSAGES = {
   GET_ALL_SUCCESS: "Lấy danh sách kho thành công",
   GET_ONE_SUCCESS: "Lấy thông tin kho thành công",
   UPDATE_SUCCESS: "Cập nhật kho thành công",
-  UPDATE_MANAGER_SUCCESS: "Cập nhật quản lý kho thành công",
   CHANGE_STATUS_SUCCESS: "Thay đổi trạng thái kho thành công",
   DELETE_SUCCESS: "Xóa kho thành công",
   RESTORE_SUCCESS: "Khôi phục kho thành công",
@@ -123,10 +122,6 @@ export const WAREHOUSE_MESSAGES = {
   NO_ACTIVE_WAREHOUSES: "Không có kho đang hoạt động để nhận đơn",
   COORDINATES_NOT_CONFIGURED:
     "Cần cấu hình tọa độ cho tất cả kho đang hoạt động trước khi tự động phân kho",
-  MANAGER_NOT_FOUND: "Không tìm thấy người quản lý kho",
-  MANAGER_NOT_ACTIVE: "Tài khoản quản lý kho đang không hoạt động",
-  MANAGER_ROLE_INVALID: (role) =>
-    `Quản lý phải có vai trò 'admin' hoặc 'warehouse_staff'. Vai trò hiện tại là '${role}'`,
   ALREADY_EXISTS: "Kho đã tồn tại",
   NAME_EXISTS: "Tên kho đã tồn tại",
   INVALID_STATUS: "Trạng thái kho không hợp lệ",
