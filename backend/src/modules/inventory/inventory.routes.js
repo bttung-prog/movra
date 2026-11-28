@@ -12,14 +12,14 @@ const inventoryRouter = express.Router();
 
 inventoryRouter.get(
   "/",
-  authorize(ROLES.ADMIN, ROLES.DISPATCHER, ROLES.WAREHOUSE_STAFF),
+  authorize(ROLES.ADMIN, ROLES.WAREHOUSE_STAFF),
   validate(inventoryValidator.querySchema, "query"),
   inventoryController.getAll,
 );
 
 inventoryRouter.get(
   "/order/:orderId",
-  authorize(ROLES.ADMIN, ROLES.DISPATCHER, ROLES.WAREHOUSE_STAFF),
+  authorize(ROLES.ADMIN, ROLES.WAREHOUSE_STAFF),
   validate(inventoryValidator.orderIdParamSchema, "params"),
   inventoryController.getByOrderId,
 );
@@ -42,13 +42,13 @@ inventoryRouter.patch(
 
 inventoryRouter.get(
   "/summary",
-  authorize(ROLES.ADMIN, ROLES.DISPATCHER, ROLES.WAREHOUSE_STAFF),
+  authorize(ROLES.ADMIN, ROLES.WAREHOUSE_STAFF),
   inventoryController.getSummary,
 );
 
 inventoryRouter.get(
   "/:inventoryId",
-  authorize(ROLES.ADMIN, ROLES.DISPATCHER, ROLES.WAREHOUSE_STAFF),
+  authorize(ROLES.ADMIN, ROLES.WAREHOUSE_STAFF),
   validate(inventoryValidator.inventoryIdParamSchema, "params"),
   inventoryController.getById,
 );

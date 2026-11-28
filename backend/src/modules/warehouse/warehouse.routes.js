@@ -19,14 +19,14 @@ warehouseRouter.post(
 
 warehouseRouter.get(
   "/",
-  authorize(ROLES.ADMIN, ROLES.DISPATCHER, ROLES.WAREHOUSE_STAFF),
+  authorize(ROLES.ADMIN, ROLES.WAREHOUSE_STAFF),
   validate(warehouseValidator.querySchema, "query"),
   warehouseController.getAll,
 );
 
 warehouseRouter.get(
   "/:warehouseId",
-  authorize(ROLES.ADMIN, ROLES.DISPATCHER, ROLES.WAREHOUSE_STAFF),
+  authorize(ROLES.ADMIN, ROLES.WAREHOUSE_STAFF),
   validate(warehouseValidator.paramSchema, "params"),
   warehouseController.getById,
 );

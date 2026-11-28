@@ -168,15 +168,25 @@ describe("warehouseService.getAll", () => {
     });
   });
 
-  it("restricts dispatcher and warehouse staff queries to their warehouse", async () => {
-    for (const role of [ROLES.DISPATCHER, ROLES.WAREHOUSE_STAFF]) {
-      await warehouseService.getAll({}, { role, warehouseId });
-      expect(mocks.findAll).toHaveBeenLastCalledWith(
-        expect.objectContaining({
-          filter: { deletedAt: null, _id: warehouseId },
-        }),
-      );
-    }
+  it("restricts warehouse staff queries to their warehouse", async () => {
+    await warehouseService.getAll(
+      {},
+      { role: ROLES.WAREHOUSE_STAFF, warehouseId },
+    );
+    expect(mocks.findAll).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        filter: { deletedAt: null, _id: warehouseId },
+      }),
+    );
+  });
+
+  it("does not scope dispatcher queries because dispatchers do not access warehouses", async () => {
+    await warehouseService.getAll({}, { role: ROLES.DISPATCHER, warehouseId });
+    expect(mocks.findAll).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        filter: { deletedAt: null },
+      }),
+    );
   });
 });
 

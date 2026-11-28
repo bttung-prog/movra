@@ -19,28 +19,28 @@ issueRouter.post(
 
 issueRouter.get(
   "/",
-  authorize(ROLES.ADMIN, ROLES.DISPATCHER, ROLES.WAREHOUSE_STAFF),
+  authorize(ROLES.ADMIN, ROLES.WAREHOUSE_STAFF),
   validate(issueValidator.queryIssueSchema, "query"),
   issueController.getAll,
 );
 
 issueRouter.get(
   "/code/:issueCode",
-  authorize(ROLES.ADMIN, ROLES.DISPATCHER, ROLES.WAREHOUSE_STAFF),
+  authorize(ROLES.ADMIN, ROLES.WAREHOUSE_STAFF),
   validate(issueValidator.paramIssueCodeSchema, "params"),
   issueController.getByCode,
 );
 
 issueRouter.get(
   "/order/:orderId",
-  authorize(ROLES.ADMIN, ROLES.DISPATCHER, ROLES.WAREHOUSE_STAFF),
+  authorize(ROLES.ADMIN, ROLES.WAREHOUSE_STAFF),
   validate(issueValidator.paramOrderIdSchema, "params"),
   issueController.getByOrderId,
 );
 
 issueRouter.get(
   "/trip/:tripId",
-  authorize(ROLES.ADMIN, ROLES.DISPATCHER, ROLES.WAREHOUSE_STAFF, ROLES.DRIVER),
+  authorize(ROLES.ADMIN, ROLES.WAREHOUSE_STAFF, ROLES.DRIVER),
   validate(issueValidator.paramTripIdSchema, "params"),
   validate(issueValidator.queryTripIssueSchema, "query"),
   issueController.getByTripId,
@@ -48,7 +48,7 @@ issueRouter.get(
 
 issueRouter.get(
   "/:issueId",
-  authorize(ROLES.ADMIN, ROLES.DISPATCHER, ROLES.WAREHOUSE_STAFF),
+  authorize(ROLES.ADMIN, ROLES.WAREHOUSE_STAFF),
   validate(issueValidator.paramIssueIdSchema, "params"),
   issueController.getById,
 );
