@@ -24,7 +24,6 @@ import warehouseNotificationService from "../../../src/modules/warehouse/warehou
 const warehouse = {
   _id: "warehouse-1",
   warehouseName: "Kho trung tâm",
-  managerId: { _id: "manager-1" },
 };
 const issue = {
   _id: "issue-1",
@@ -58,7 +57,7 @@ beforeEach(() => {
 });
 
 describe("warehouseNotificationService", () => {
-  it("notifies dispatcher and warehouse manager about a new issue", async () => {
+  it("notifies the warehouse dispatcher about a new issue", async () => {
     await warehouseNotificationService.notifyIssueCreated({
       issue,
       order,
@@ -67,7 +66,7 @@ describe("warehouseNotificationService", () => {
 
     expect(mocks.findActiveDispatchers).toHaveBeenCalledWith("warehouse-1");
     const notifications = mocks.createManyNotifications.mock.calls[0][0];
-    expect(notifications).toHaveLength(2);
+    expect(notifications).toHaveLength(1);
     expect(notifications).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -80,7 +79,6 @@ describe("warehouseNotificationService", () => {
             orderCode: "ORD-0001",
           }),
         }),
-        expect.objectContaining({ userId: "manager-1", type: "WAREHOUSE" }),
       ]),
     );
   });
@@ -137,9 +135,7 @@ describe("warehouseNotificationService", () => {
       actor: { userId: "dispatcher-user-1" },
     });
 
-    const notifications = mocks.createManyNotifications.mock.calls[0][0];
-    expect(notifications).toHaveLength(1);
-    expect(notifications[0].userId).toBe("manager-1");
+    expect(mocks.createManyNotifications).not.toHaveBeenCalled();
   });
 
   it("swallows notification persistence failures", async () => {

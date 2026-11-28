@@ -396,15 +396,11 @@ const cancel = async (receiptId, { note } = {}, currentUser = null) => {
 
     const createdBy = existingReceipt.receivedBy?._id?.toString();
 
-    const managerId = warehouse.managerId?._id?.toString();
-
     const isStaffWarehouse =
       currentUser.warehouseId &&
       currentUser.warehouseId.toString() === receiptWarehouseId;
 
-    const isAuthorized =
-      isStaffWarehouse &&
-      (currentUserId === createdBy || currentUserId === managerId);
+    const isAuthorized = isStaffWarehouse && currentUserId === createdBy;
 
     if (!isAuthorized) {
       throw new ApiError(403, RECEIPT_MESSAGES.CANCEL_NOT_AUTHORIZED);

@@ -64,23 +64,6 @@ const updateById = async (req, res, next) => {
   }
 };
 
-const updateManager = async (req, res, next) => {
-  try {
-    const warehouse = await warehouseService.updateManager(
-      req.params.warehouseId,
-      req.body.managerId,
-    );
-
-    return ApiResponse.success(
-      res,
-      warehouse,
-      WAREHOUSE_MESSAGES.UPDATE_MANAGER_SUCCESS,
-    );
-  } catch (error) {
-    next(error);
-  }
-};
-
 const changeStatus = async (req, res, next) => {
   try {
     const warehouse = await warehouseService.changeStatus(
@@ -131,7 +114,6 @@ export default {
   getAll,
   getById,
   updateById,
-  updateManager,
   changeStatus,
   softDelete,
   restore,

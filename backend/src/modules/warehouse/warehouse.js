@@ -26,11 +26,6 @@ const warehouseSchema = new mongoose.Schema(
       max: 180,
     },
 
-    managerId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-    },
-
     status: {
       type: String,
       enum: Object.values(WAREHOUSE_STATUSES),

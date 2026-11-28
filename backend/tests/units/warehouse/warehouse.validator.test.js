@@ -4,7 +4,6 @@ import { WAREHOUSE_STATUSES } from "../../../src/constants/warehouseStatuses.js"
 import warehouseValidator from "../../../src/modules/warehouse/warehouse.validator.js";
 
 const warehouseId = "507f1f77bcf86cd799439011";
-const managerId = "507f1f77bcf86cd799439012";
 
 describe("warehouseValidator.createSchema", () => {
   it("accepts valid data and trims warehouse name and address", () => {
@@ -13,7 +12,6 @@ describe("warehouseValidator.createSchema", () => {
       warehouseAddress: "  123 Example Street ",
       latitude: 10.78,
       longitude: 106.69,
-      managerId,
       status: WAREHOUSE_STATUSES.ACTIVE,
     });
 
@@ -23,39 +21,14 @@ describe("warehouseValidator.createSchema", () => {
       warehouseAddress: "123 Example Street",
       latitude: 10.78,
       longitude: 106.69,
-      managerId,
       status: WAREHOUSE_STATUSES.ACTIVE,
     });
-  });
-
-  it("allows an omitted or null manager", () => {
-    expect(
-      warehouseValidator.createSchema.validate({
-        warehouseName: "Main",
-        warehouseAddress: "Address",
-      }).error,
-    ).toBeUndefined();
-    expect(
-      warehouseValidator.createSchema.validate({
-        warehouseName: "Main",
-        warehouseAddress: "Address",
-        managerId: null,
-      }).error,
-    ).toBeUndefined();
   });
 
   it.each([
     ["missing name", { warehouseAddress: "Address" }],
     ["blank name", { warehouseName: "  ", warehouseAddress: "Address" }],
     ["missing address", { warehouseName: "Main" }],
-    [
-      "invalid manager ID",
-      {
-        warehouseName: "Main",
-        warehouseAddress: "Address",
-        managerId: "manager-1",
-      },
-    ],
     [
       "unsupported status",
       { warehouseName: "Main", warehouseAddress: "Address", status: "closed" },
@@ -67,41 +40,19 @@ describe("warehouseValidator.createSchema", () => {
   });
 });
 
-describe("warehouseValidator update and manager schemas", () => {
+describe("warehouseValidator update schema", () => {
   it("requires at least one update field", () => {
     expect(
       warehouseValidator.updateSchema.validate({}).error?.details[0].type,
     ).toBe("object.min");
   });
 
-  it("accepts valid partial updates and nullable manager assignments", () => {
+  it("accepts valid partial updates", () => {
     expect(
       warehouseValidator.updateSchema.validate({
         warehouseName: "  Updated name ",
-        managerId: null,
       }).value,
-    ).toMatchObject({ warehouseName: "Updated name", managerId: null });
-    expect(
-      warehouseValidator.updateManagerSchema.validate({ managerId }).error,
-    ).toBeUndefined();
-    expect(
-      warehouseValidator.updateManagerSchema.validate({ managerId: null })
-        .error,
-    ).toBeUndefined();
-  });
-
-  it("rejects malformed manager IDs", () => {
-    expect(
-      warehouseValidator.updateSchema.validate({ managerId: "manager-1" })
-        .error,
-    ).toBeDefined();
-    expect(
-      warehouseValidator.updateManagerSchema.validate({ managerId: "bad-id" })
-        .error,
-    ).toBeDefined();
-    expect(
-      warehouseValidator.updateManagerSchema.validate({}).error,
-    ).toBeDefined();
+    ).toMatchObject({ warehouseName: "Updated name" });
   });
 
   it("requires coordinate pairs and validates their geographic range", () => {

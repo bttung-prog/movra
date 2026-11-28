@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   findExpiryCandidates: vi.fn(),
   findActiveAdmins: vi.fn(),
-  getWarehouseById: vi.fn(),
   notifyVehicleDocumentExpiry: vi.fn(),
   loggerError: vi.fn(),
 }));
@@ -14,10 +13,6 @@ vi.mock("../../../src/modules/vehicle/vehicle.repository.js", () => ({
 
 vi.mock("../../../src/modules/user/user.repository.js", () => ({
   default: { findActiveUserIdsByRole: mocks.findActiveAdmins },
-}));
-
-vi.mock("../../../src/modules/warehouse/warehouse.service.js", () => ({
-  default: { getById: mocks.getWarehouseById },
 }));
 
 vi.mock("../../../src/modules/vehicle/vehicleNotification.service.js", () => ({
@@ -45,10 +40,6 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.findExpiryCandidates.mockResolvedValue([]);
   mocks.findActiveAdmins.mockResolvedValue(["admin-1"]);
-  mocks.getWarehouseById.mockResolvedValue({
-    _id: "warehouse-1",
-    managerId: { _id: "manager-1" },
-  });
   mocks.notifyVehicleDocumentExpiry.mockResolvedValue(1);
 });
 
@@ -93,7 +84,7 @@ describe("vehicleExpiryService.buildVehicleExpiryPhases", () => {
 });
 
 describe("vehicleExpiryService.processVehicleExpiryReminders", () => {
-  it("sends each document phase with admins and manager", async () => {
+  it("sends each document phase to admins", async () => {
     mocks.findExpiryCandidates.mockResolvedValue([vehicle]);
 
     const result = await vehicleExpiryService.processVehicleExpiryReminders({
@@ -108,7 +99,6 @@ describe("vehicleExpiryService.processVehicleExpiryReminders", () => {
         documentType: "registration",
         phase: "30d",
         adminUserIds: ["admin-1"],
-        warehouse: expect.objectContaining({ managerId: expect.anything() }),
       }),
     );
     expect(result).toEqual({
@@ -132,7 +122,6 @@ describe("vehicleExpiryService.processVehicleExpiryReminders", () => {
     expect(mocks.notifyVehicleDocumentExpiry).toHaveBeenCalledWith(
       expect.objectContaining({
         vehicle: expect.objectContaining({ _id: "no-warehouse" }),
-        warehouse: null,
       }),
     );
     expect(result).toEqual({

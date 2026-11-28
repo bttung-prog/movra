@@ -478,7 +478,6 @@ describe("receiptService.cancel", () => {
   it("rejects warehouse staff who did not create the receipt or manage its warehouse", async () => {
     mocks.getWarehouseById.mockResolvedValue({
       _id: warehouseId,
-      managerId: "manager-1",
     });
     await expect(
       receiptService.cancel(

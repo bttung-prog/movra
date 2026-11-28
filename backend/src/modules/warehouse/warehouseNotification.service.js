@@ -50,11 +50,6 @@ const getRecipientUserIds = async ({ warehouse, actor = null }) => {
     });
   }
 
-  const managerUserId = normalizeId(warehouse?.managerId);
-  if (managerUserId) {
-    recipientIds.add(managerUserId);
-  }
-
   return [...recipientIds].filter((userId) => userId !== actorUserId);
 };
 
