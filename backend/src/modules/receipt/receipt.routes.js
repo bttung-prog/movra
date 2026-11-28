@@ -19,28 +19,28 @@ receiptRouter.post(
 
 receiptRouter.get(
   "/",
-  authorize(ROLES.ADMIN, ROLES.DISPATCHER, ROLES.WAREHOUSE_STAFF),
+  authorize(ROLES.ADMIN, ROLES.WAREHOUSE_STAFF),
   validate(receiptValidator.queryReceiptSchema, "query"),
   receiptController.getAll,
 );
 
 receiptRouter.get(
   "/code/:receiptCode",
-  authorize(ROLES.ADMIN, ROLES.DISPATCHER, ROLES.WAREHOUSE_STAFF),
+  authorize(ROLES.ADMIN, ROLES.WAREHOUSE_STAFF),
   validate(receiptValidator.paramReceiptCodeSchema, "params"),
   receiptController.getByCode,
 );
 
 receiptRouter.get(
   "/order/:orderId",
-  authorize(ROLES.ADMIN, ROLES.DISPATCHER, ROLES.WAREHOUSE_STAFF),
+  authorize(ROLES.ADMIN, ROLES.WAREHOUSE_STAFF),
   validate(receiptValidator.paramOrderIdSchema, "params"),
   receiptController.getByOrderId,
 );
 
 receiptRouter.get(
   "/:receiptId",
-  authorize(ROLES.ADMIN, ROLES.DISPATCHER, ROLES.WAREHOUSE_STAFF),
+  authorize(ROLES.ADMIN, ROLES.WAREHOUSE_STAFF),
   validate(receiptValidator.paramReceiptIdSchema, "params"),
   receiptController.getById,
 );

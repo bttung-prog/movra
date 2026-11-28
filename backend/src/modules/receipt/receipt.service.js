@@ -269,17 +269,11 @@ const getAll = async (query = {}, currentUser = null) => {
     };
   }
 
-  const isWarehouseScoped =
-    currentUser?.role === ROLES.WAREHOUSE_STAFF ||
-    currentUser?.role === ROLES.DISPATCHER;
+  const isWarehouseScoped = currentUser?.role === ROLES.WAREHOUSE_STAFF;
 
   if (isWarehouseScoped) {
     if (!currentUser.warehouseId) {
-      const msg =
-        currentUser.role === ROLES.DISPATCHER
-          ? WAREHOUSE_MESSAGES.DISPATCHER_NOT_ASSIGNED
-          : WAREHOUSE_MESSAGES.STAFF_NOT_ASSIGNED;
-      throw new ApiError(403, msg);
+      throw new ApiError(403, WAREHOUSE_MESSAGES.STAFF_NOT_ASSIGNED);
     }
     filter.warehouseId = currentUser.warehouseId;
   } else if (query.warehouseId) {
@@ -359,8 +353,7 @@ const getById = async (receiptId, currentUser = null) => {
 
 const getByOrderId = async (orderId, currentUser = null) => {
   const scopedWarehouseId =
-    currentUser?.role === ROLES.WAREHOUSE_STAFF ||
-    currentUser?.role === ROLES.DISPATCHER
+    currentUser?.role === ROLES.WAREHOUSE_STAFF
       ? currentUser.warehouseId
       : null;
 

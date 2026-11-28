@@ -94,17 +94,11 @@ const getAll = async (query = {}, currentUser = null) => {
 
   const filter = { deletedAt: null };
 
-  const isWarehouseScoped =
-    currentUser?.role === ROLES.WAREHOUSE_STAFF ||
-    currentUser?.role === ROLES.DISPATCHER;
+  const isWarehouseScoped = currentUser?.role === ROLES.WAREHOUSE_STAFF;
 
   if (isWarehouseScoped) {
     if (!currentUser.warehouseId) {
-      const message =
-        currentUser.role === ROLES.DISPATCHER
-          ? WAREHOUSE_MESSAGES.DISPATCHER_NOT_ASSIGNED
-          : WAREHOUSE_MESSAGES.STAFF_NOT_ASSIGNED;
-      throw new ApiError(403, message);
+      throw new ApiError(403, WAREHOUSE_MESSAGES.STAFF_NOT_ASSIGNED);
     }
     filter.warehouseId = currentUser.warehouseId;
   } else if (query.warehouseId) {
@@ -178,8 +172,7 @@ const getById = async (
 
 const getByOrderId = async (orderId, session = null, currentUser = null) => {
   const scopedWarehouseId =
-    currentUser?.role === ROLES.WAREHOUSE_STAFF ||
-    currentUser?.role === ROLES.DISPATCHER
+    currentUser?.role === ROLES.WAREHOUSE_STAFF
       ? currentUser.warehouseId
       : null;
 
@@ -404,18 +397,12 @@ const getSummary = async (session = null, currentUser = null) => {
   const stockFilter = { status: INVENTORY_STATUSES.IN_STOCK };
   const issuedFilter = { status: INVENTORY_STATUSES.ISSUED };
 
-  const isWarehouseScoped =
-    currentUser?.role === ROLES.WAREHOUSE_STAFF ||
-    currentUser?.role === ROLES.DISPATCHER;
+  const isWarehouseScoped = currentUser?.role === ROLES.WAREHOUSE_STAFF;
 
   let scopedWarehouseId = null;
   if (isWarehouseScoped) {
     if (!currentUser.warehouseId) {
-      const message =
-        currentUser.role === ROLES.DISPATCHER
-          ? WAREHOUSE_MESSAGES.DISPATCHER_NOT_ASSIGNED
-          : WAREHOUSE_MESSAGES.STAFF_NOT_ASSIGNED;
-      throw new ApiError(403, message);
+      throw new ApiError(403, WAREHOUSE_MESSAGES.STAFF_NOT_ASSIGNED);
     }
     scopedWarehouseId = currentUser.warehouseId;
     stockFilter.warehouseId = scopedWarehouseId;

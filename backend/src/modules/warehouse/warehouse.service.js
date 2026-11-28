@@ -111,7 +111,7 @@ const getAll = async (query = {}, user = null) => {
   }
 
   const queryFilter = { deletedAt: null, ...filter };
-  if (user?.role === ROLES.DISPATCHER || user?.role === ROLES.WAREHOUSE_STAFF) {
+  if (user?.role === ROLES.WAREHOUSE_STAFF) {
     queryFilter._id = user.warehouseId;
   }
 

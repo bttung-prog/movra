@@ -84,6 +84,8 @@ backend/
 - Logout revokes the refresh token and clears the authentication cookie.
 - Role-based authorization is implemented for `admin`, `dispatcher`, `driver`, `warehouse_staff`, and `customer`.
 - Warehouse-scoped roles require an active warehouse profile.
+- `dispatcher` is scoped to dispatch operations only: orders, trips, routes, drivers, vehicles, maintenance, COD settlements, feedback, and its own dashboard. Dispatchers are **not** granted access to warehouse operations (`/warehouses`, `/inventories`, `/receipts`, `/issues`, `/goods-categories`).
+- Warehouse operations are handled by `warehouse_staff` (scoped to their assigned warehouse) and `admin`.
 
 ## Database Design
 
@@ -195,6 +197,8 @@ Payments are recorded against the invoice. When an invoice links multiple orders
 | Warehouses and goods operations    | `/warehouses`, `/inventories`, `/receipts`, `/issues`, `/goods-categories`       |
 | Billing and settlement             | `/pricing`, `/payments`, `/invoices`, `/wallet-transactions`, `/cod-settlements` |
 | Reporting and support              | `/dashboard`, `/notifications`, `/feedbacks`, `/failure-reasons`                 |
+
+Warehouse and goods operations are restricted to `admin` and `warehouse_staff`. Dispatchers keep their existing order/trip notification flows but cannot read warehouse, inventory, receipt, or issue records.
 
 ## Error Handling
 
